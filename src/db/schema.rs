@@ -219,6 +219,15 @@ CREATE TABLE IF NOT EXISTS citation_relations (
 
 CREATE INDEX IF NOT EXISTS idx_citation_citing ON citation_relations(citing_id);
 CREATE INDEX IF NOT EXISTS idx_citation_cited ON citation_relations(cited_id);
+
+-- Per-document notes (one note per document)
+CREATE TABLE IF NOT EXISTS document_notes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL UNIQUE,
+    content     TEXT NOT NULL DEFAULT '',
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
 ";
 
 pub fn create_tables(conn: &Connection) -> Result<()> {

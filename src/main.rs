@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
     init_logging();
     info!("Libran 시작");
 
-    let config = AppConfig::default();
+    let config = AppConfig::load();
     info!("DB 경로: {:?}", config.db_path);
 
     let db_conn = db::open_database(&config.db_path)?;

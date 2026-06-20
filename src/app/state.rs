@@ -14,7 +14,7 @@ use crate::similarity::SimilarityConfig;
 use super::action::AppAction;
 use super::graph_state::GraphState;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PanelFocus {
     Left,
     Right,
@@ -78,6 +78,11 @@ pub struct AppState {
     pub bibtex_import_input: String,
 
     pub terminal_size: (u16, u16),
+
+    // ── Note editing ──
+    pub note_mode: bool,
+    pub note_input: String,
+    pub current_note: Option<String>,
 }
 
 impl AppState {
@@ -127,6 +132,9 @@ impl AppState {
             bibtex_import_mode: false,
             bibtex_import_input: String::new(),
             terminal_size: (80, 24),
+            note_mode: false,
+            note_input: String::new(),
+            current_note: None,
         }
     }
 
@@ -182,6 +190,12 @@ impl AppState {
     pub fn load_detail(&mut self) {
         if let Some(doc) = self.documents.get(self.list_cursor) {
             self.detail_doc = Some(doc.clone());
+            let doc_id = doc.id.unwrap_or(0);
+            if let Ok(conn) = self.db.lock() {
+                self.current_note = crate::db::notes::get(&conn, doc_id).ok().flatten();
+            } else {
+                self.current_note = None;
+            }
         }
     }
 

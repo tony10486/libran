@@ -171,6 +171,9 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     if state.edit_mode {
         return handle_edit_key(state, key);
     }
+    if state.note_mode {
+        return handle_note_key(state, key);
+    }
     if state.show_detail {
         return handle_detail_key(state, key);
     }
@@ -184,31 +187,9 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 return true;
             }
         }
-        KeyCode::Tab => {
-            if state.show_detail {
-                state.active_panel = match state.active_panel {
-                    PanelFocus::Right => PanelFocus::Detail,
-                    PanelFocus::Detail => PanelFocus::Right,
-                    PanelFocus::Left => PanelFocus::Right,
-                    PanelFocus::Graph => PanelFocus::Right,
-                };
-            } else if state.graph_state.is_some() {
-                state.active_panel = match state.active_panel {
-                    PanelFocus::Left => PanelFocus::Graph,
-                    PanelFocus::Graph => PanelFocus::Right,
-                    PanelFocus::Right => PanelFocus::Graph,
-                    PanelFocus::Detail => PanelFocus::Graph,
-                };
-            } else {
-                state.active_panel = match state.active_panel {
-                    PanelFocus::Left => PanelFocus::Right,
-                    PanelFocus::Right => PanelFocus::Left,
-                    PanelFocus::Detail => PanelFocus::Right,
-                    PanelFocus::Graph => PanelFocus::Right,
-                };
-            }
-            state.dirty = true;
-        }
+        KeyCode::Tab => cycle_panel(state, true),
+        KeyCode::Right => cycle_panel(state, true),
+        KeyCode::Left => cycle_panel(state, false),
         KeyCode::Char('j') | KeyCode::Down => move_cursor_down(state),
         KeyCode::Char('k') | KeyCode::Up => move_cursor_up(state),
         KeyCode::Char(' ') => toggle_select(state),
@@ -366,23 +347,87 @@ fn toggle_select(state: &mut AppState) {
         }
 }
 
+fn cycle_panel(state: &mut AppState, forward: bool) {
+    if state.show_detail {
+        let pair = (PanelFocus::Right, PanelFocus::Detail);
+        state.active_panel = cycle_pair(state.active_panel, pair, forward);
+    } else if state.graph_state.is_some() {
+        let pair = (PanelFocus::Right, PanelFocus::Graph);
+        state.active_panel = cycle_pair(state.active_panel, pair, forward);
+    } else {
+        let pair = (PanelFocus::Left, PanelFocus::Right);
+        state.active_panel = cycle_pair(state.active_panel, pair, forward);
+    }
+    state.dirty = true;
+}
+
+fn cycle_pair(current: PanelFocus, (a, b): (PanelFocus, PanelFocus), forward: bool) -> PanelFocus {
+    if current == a {
+        if forward { b } else { a }
+    } else if current == b {
+        if forward { b } else { a }
+    } else {
+        a
+    }
+}
+
 fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
     match key.code {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
+        KeyCode::Esc | KeyCode::Char('q') => {
             state.show_detail = false;
             state.detail_doc = None;
             state.active_panel = PanelFocus::Right;
             state.dirty = true;
         }
-        KeyCode::Tab => {
-            state.active_panel = match state.active_panel {
-                PanelFocus::Right => PanelFocus::Detail,
-                _ => PanelFocus::Right,
-            };
+        KeyCode::Enter => {
+            if state.active_panel == PanelFocus::Detail {
+                state.note_mode = true;
+                state.note_input = state.current_note.clone().unwrap_or_default();
+                state.dirty = true;
+            } else {
+                state.show_detail = false;
+                state.detail_doc = None;
+                state.active_panel = PanelFocus::Right;
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char('n') => {
+            state.note_mode = true;
+            state.note_input = state.current_note.clone().unwrap_or_default();
             state.dirty = true;
         }
+        KeyCode::Tab | KeyCode::Right => cycle_panel(state, true),
+        KeyCode::Left => cycle_panel(state, false),
         KeyCode::Char('j') | KeyCode::Down => move_cursor_down(state),
         KeyCode::Char('k') | KeyCode::Up => move_cursor_up(state),
+        _ => {}
+    }
+    false
+}
+
+fn handle_note_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
+            if let Ok(conn) = state.db.lock() {
+                let _ = crate::db::notes::set(&conn, doc_id, &state.note_input);
+                state.current_note = Some(state.note_input.clone());
+            }
+            state.note_mode = false;
+            state.set_status("노트 저장됨");
+        }
+        KeyCode::Enter => {
+            state.note_input.push('\n');
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.note_input.push(c);
+            state.dirty = true;
+        }
+        KeyCode::Backspace => {
+            state.note_input.pop();
+            state.dirty = true;
+        }
         _ => {}
     }
     false
@@ -1331,24 +1376,8 @@ fn handle_delete_document(state: &mut AppState, id: i64) {
 }
 
 fn handle_save_config(state: &mut AppState) {
-    let result = {
-        if let Ok(conn) = state.db.lock() {
-            let json = serde_json::to_string(&state.config);
-            match json {
-                Ok(json) => {
-                    conn.execute(
-                        "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('config', ?1, CURRENT_TIMESTAMP)",
-                        rusqlite::params![json],
-                    ).map(|_| ()).map_err(|e| anyhow::anyhow!(e))
-                }
-                Err(e) => Err(anyhow::anyhow!(e)),
-            }
-        } else {
-            Err(anyhow::anyhow!("DB 락 획득 실패"))
-        }
-    };
-    match result {
-        Ok(()) => state.set_status("설정 저장 완료"),
+    match state.config.save() {
+        Ok(()) => state.set_status("설정 저장 완료 (~/.libran/config.toml)"),
         Err(e) => state.set_status(&format!("설정 저장 실패: {}", e)),
     }
 }

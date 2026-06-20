@@ -867,3 +867,101 @@ fn test_choseong_does_not_cross_latin_gap() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn test_document_notes_crud() -> Result<()> {
+    let conn = setup_db()?;
+    let doc = Document {
+        id: None,
+        title: "노트 테스트용 문서".to_string(),
+        authors: None,
+        journal: None,
+        conference: None,
+        pub_year: None,
+        doi: None,
+        arxiv_id: None,
+        abstract_text: None,
+        keywords: None,
+        file_path: None,
+        file_hash: None,
+        citation_key: Some("NoteTest".to_string()),
+        source: None,
+    };
+    let id = db::documents::insert(&conn, &doc)?;
+
+    let note = db::notes::get(&conn, id)?;
+    assert!(note.is_none(), "new document should have no note");
+
+    db::notes::set(&conn, id, "중요한 논문 — 참고용")?;
+    let note = db::notes::get(&conn, id)?;
+    assert_eq!(note.as_deref(), Some("중요한 논문 — 참고용"));
+
+    db::notes::set(&conn, id, "수정된 노트")?;
+    let note = db::notes::get(&conn, id)?;
+    assert_eq!(note.as_deref(), Some("수정된 노트"), "set should overwrite");
+
+    db::notes::delete(&conn, id)?;
+    let note = db::notes::get(&conn, id)?;
+    assert!(note.is_none(), "delete should remove note");
+
+    Ok(())
+}
+
+#[test]
+fn test_document_notes_cascade_delete() -> Result<()> {
+    let conn = setup_db()?;
+    conn.execute("PRAGMA foreign_keys = ON", [])?;
+    let doc = Document {
+        id: None,
+        title: "삭제될 문서".to_string(),
+        authors: None,
+        journal: None,
+        conference: None,
+        pub_year: None,
+        doi: None,
+        arxiv_id: None,
+        abstract_text: None,
+        keywords: None,
+        file_path: None,
+        file_hash: None,
+        citation_key: Some("CascadeDel".to_string()),
+        source: None,
+    };
+    let id = db::documents::insert(&conn, &doc)?;
+    db::notes::set(&conn, id, "삭제될 노트")?;
+
+    db::documents::delete(&conn, id)?;
+    let note = db::notes::get(&conn, id)?;
+    assert!(note.is_none(), "note should be cascade-deleted with document");
+
+    Ok(())
+}
+
+#[test]
+fn test_document_notes_multiline() -> Result<()> {
+    let conn = setup_db()?;
+    let doc = Document {
+        id: None,
+        title: "여러 줄 노트".to_string(),
+        authors: None,
+        journal: None,
+        conference: None,
+        pub_year: None,
+        doi: None,
+        arxiv_id: None,
+        abstract_text: None,
+        keywords: None,
+        file_path: None,
+        file_hash: None,
+        citation_key: Some("MultiNote".to_string()),
+        source: None,
+    };
+    let id = db::documents::insert(&conn, &doc)?;
+
+    let content = "첫째 줄\n둘째 줄\n셋째 줄";
+    db::notes::set(&conn, id, content)?;
+    let note = db::notes::get(&conn, id)?;
+    assert_eq!(note.as_deref(), Some(content));
+
+    Ok(())
+}

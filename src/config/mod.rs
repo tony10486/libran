@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use crate::api::ApiMode;
@@ -6,6 +8,7 @@ use crate::citation::CitationKeyMode;
 use crate::storage::FileStoragePolicy;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub api_mode: ApiMode,
     pub user_email: Option<String>,
@@ -50,6 +53,92 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    pub fn path() -> PathBuf {
+        let home = directories::BaseDirs::new()
+            .map(|d| d.home_dir().to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        home.join(".libran").join("config.toml")
+    }
+
+    pub fn load() -> Self {
+        let path = Self::path();
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(cfg) = toml::from_str::<AppConfig>(&content) {
+                    return cfg;
+                }
+            }
+        }
+        let cfg = AppConfig::default();
+        if let Err(e) = cfg.save() {
+            eprintln!("기본 config.toml 생성 실패: {e}");
+        }
+        cfg
+    }
+
+    pub fn save(&self) -> io::Result<()> {
+        let path = Self::path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let toml_str = self.to_toml_with_comments();
+        fs::write(&path, toml_str)?;
+        Ok(())
+    }
+
+    fn to_toml_with_comments(&self) -> String {
+        let mut s = String::new();
+        s.push_str("# Libran 설정 파일\n");
+        s.push_str("# '#'로 시작하는 줄은 주석입니다. 값을 변경한 후 프로그램을 재시작하세요.\n\n");
+
+        s.push_str("# API 모드: fully_offline | identifier_only | auto_fallback | manual_search\n");
+        s.push_str("#   fully_offline:    모든 온라인 조회를 끕니다.\n");
+        s.push_str("#   identifier_only:  DOI/arXiv ID로만 조회합니다.\n");
+        s.push_str("#   auto_fallback:    Crossref/arXiv에 자동 조회 후 실패 시 오프라인으로 동작합니다.\n");
+        s.push_str("#   manual_search:    수동 검색 모드.\n");
+        s.push_str(&format!("api_mode = \"{}\"\n\n", api_mode_serde_name(&self.api_mode)));
+
+        s.push_str("# CrossRef polite 요청에 사용할 이메일 (선택). 비워두면 익명 요청을 보냅니다.\n");
+        match &self.user_email {
+            Some(e) => s.push_str(&format!("user_email = \"{}\"\n\n", e)),
+            None => s.push_str("user_email = \"\"\n\n"),
+        }
+
+        s.push_str("# 파일 저장 정책: copy_to_library | reference_only | copy_and_trash\n");
+        s.push_str("#   copy_to_library:  PDF를 library_path로 복사합니다.\n");
+        s.push_str("#   reference_only:   원본 위치에 링크만 걸어 둡니다.\n");
+        s.push_str("#   copy_and_trash:   복사 후 원본을 휴지통으로 보냅니다.\n");
+        s.push_str(&format!("file_storage_policy = \"{}\"\n\n", storage_policy_serde_name(&self.file_storage_policy)));
+
+        s.push_str("# PDF 라이브러리 경로 (절대 경로).\n");
+        s.push_str(&format!("library_path = \"{}\"\n\n", self.library_path.display()));
+
+        s.push_str("# 인용 키 생성 모드: author_year | author_year_title | author_year_hash | custom\n");
+        s.push_str(&format!("citation_key_mode = \"{}\"\n\n", citation_key_mode_serde_name(&self.citation_key_mode)));
+
+        s.push_str("# 인용 키 커스텀 템플릿 (citation_key_mode = \"custom\"일 때만 사용).\n");
+        match &self.citation_key_template {
+            Some(t) => s.push_str(&format!("citation_key_template = \"{}\"\n\n", t)),
+            None => s.push_str("citation_key_template = \"\"\n\n"),
+        }
+
+        s.push_str("# 주 분류 체계: udc | physh | msc | lcc\n");
+        s.push_str(&format!("primary_scheme = \"{}\"\n\n", self.primary_scheme));
+
+        s.push_str("# 활성화된 분류 체계 목록.\n");
+        let schemes: Vec<String> = self.enabled_schemes.iter()
+            .map(|s| format!("\"{}\"", s)).collect();
+        s.push_str(&format!("enabled_schemes = [{}]\n\n", schemes.join(", ")));
+
+        s.push_str("# 분류 라벨 언어: en | ko 등.\n");
+        s.push_str(&format!("label_language = \"{}\"\n\n", self.label_language));
+
+        s.push_str("# 데이터베이스 파일 경로 (절대 경로).\n");
+        s.push_str(&format!("db_path = \"{}\"\n", self.db_path.display()));
+
+        s
+    }
+
     pub fn to_citation_key_mode(&self) -> CitationKeyMode {
         match self.citation_key_mode {
             CitationKeyModeConfig::AuthorYear => CitationKeyMode::AuthorYear,
@@ -60,5 +149,31 @@ impl AppConfig {
                 CitationKeyMode::Custom(template)
             }
         }
+    }
+}
+
+fn api_mode_serde_name(m: &ApiMode) -> &'static str {
+    match m {
+        ApiMode::FullyOffline => "FullyOffline",
+        ApiMode::IdentifierOnly => "IdentifierOnly",
+        ApiMode::AutoFallback => "AutoFallback",
+        ApiMode::ManualSearch => "ManualSearch",
+    }
+}
+
+fn storage_policy_serde_name(p: &FileStoragePolicy) -> &'static str {
+    match p {
+        FileStoragePolicy::CopyToLibrary => "CopyToLibrary",
+        FileStoragePolicy::ReferenceOnly => "ReferenceOnly",
+        FileStoragePolicy::CopyAndTrash => "CopyAndTrash",
+    }
+}
+
+fn citation_key_mode_serde_name(m: &CitationKeyModeConfig) -> &'static str {
+    match m {
+        CitationKeyModeConfig::AuthorYear => "AuthorYear",
+        CitationKeyModeConfig::AuthorYearTitle => "AuthorYearTitle",
+        CitationKeyModeConfig::AuthorYearHash => "AuthorYearHash",
+        CitationKeyModeConfig::Custom => "Custom",
     }
 }

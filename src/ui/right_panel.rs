@@ -1,7 +1,7 @@
-use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::state::PanelFocus;
@@ -110,6 +110,14 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
         }
     };
 
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(8)])
+        .split(area);
+
+    let info_area = chunks[0];
+    let note_area = chunks[1];
+
     let mut lines: Vec<Line> = vec![
         Line::from(""),
         Line::from(vec![
@@ -151,7 +159,86 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 
     let para = Paragraph::new(lines).style(style).wrap(Wrap { trim: false });
-    frame.render_widget(para, area);
+    frame.render_widget(para, info_area);
+
+    render_note_section(frame, note_area, state, focused);
+}
+
+fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_focused: bool) {
+    let note_bg = Color::Black;
+    let note_border = Color::DarkGray;
+    let note_fg = Color::Gray;
+
+    if state.note_mode {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow))
+            .title(Span::styled(
+                " ✎ 노트 (편집 중) ",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(note_bg));
+
+        let hint = Line::from(vec![Span::styled(
+            " [Enter] 줄바꿈  [Esc] 저장  [Ctrl+D] 삭제",
+            Style::default().fg(Color::DarkGray),
+        )]);
+
+        let mut note_lines: Vec<Line> = state.note_input.lines()
+            .map(|l| Line::from(vec![
+                Span::raw(" "),
+                Span::styled(l.to_string(), Style::default().fg(Color::White).bg(note_bg)),
+            ]))
+            .collect();
+        if note_lines.is_empty() {
+            note_lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled(" ", Style::default().fg(Color::White).bg(note_bg)),
+            ]));
+        }
+        note_lines.push(Line::from(""));
+        note_lines.push(hint);
+
+        let para = Paragraph::new(note_lines).block(block).wrap(Wrap { trim: false });
+        frame.render_widget(para, area);
+    } else {
+        let content = state.current_note.as_deref().unwrap_or("");
+        let has_note = !content.is_empty();
+
+        let title = if has_note { " 📝 노트 " } else { " 📝 노트 (없음) " };
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(note_border))
+            .title(Span::styled(
+                title,
+                Style::default().fg(note_fg),
+            ))
+            .style(Style::default().bg(note_bg));
+
+        let mut note_lines: Vec<Line> = Vec::new();
+        if has_note {
+            for line in content.lines().take(4) {
+                note_lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(line.to_string(), Style::default().fg(note_fg).bg(note_bg)),
+                ]));
+            }
+        } else {
+            note_lines.push(Line::from(vec![
+                Span::raw(" "),
+                Span::styled("(노트 없음)", Style::default().fg(Color::DarkGray).bg(note_bg)),
+            ]));
+        }
+
+        let hint_text = if detail_focused { "  [n] 노트 작성/수정" } else { "" };
+        note_lines.push(Line::from(""));
+        note_lines.push(Line::from(vec![
+            Span::styled(hint_text, Style::default().fg(Color::DarkGray)),
+        ]));
+
+        let para = Paragraph::new(note_lines).block(block).wrap(Wrap { trim: false });
+        frame.render_widget(para, area);
+    }
 }
 
 fn field_line(label: &str, value: &str) -> Line<'static> {

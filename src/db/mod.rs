@@ -2,6 +2,7 @@ pub mod documents;
 pub mod facets;
 pub mod fts_query;
 pub mod migrations;
+pub mod notes;
 pub mod projects;
 pub mod schema;
 pub mod search;

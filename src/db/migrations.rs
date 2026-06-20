@@ -126,6 +126,19 @@ pub fn run(conn: &Connection) -> Result<()> {
         set_version(conn, 4)?;
     }
 
+    if version < 5 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS document_notes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL UNIQUE,
+                content     TEXT NOT NULL DEFAULT '',
+                updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+            );",
+        )?;
+        set_version(conn, 5)?;
+    }
+
     Ok(())
 }
 
