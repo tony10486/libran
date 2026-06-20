@@ -20,7 +20,7 @@ pub fn parse_dragged_path(input: &str) -> Option<PathBuf> {
         path_str = path_str[7..].to_string();
     }
 
-    path_str = path_str.replace("\\ ", " ");
+    path_str = unescape_shell_path(&path_str);
 
     path_str = url_decode(&path_str);
 
@@ -41,6 +41,23 @@ pub fn parse_dragged_path(input: &str) -> Option<PathBuf> {
     }
 
     None
+}
+
+fn unescape_shell_path(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\'
+            && let Some(&next) = chars.peek()
+            && !next.is_alphanumeric()
+        {
+            chars.next();
+            result.push(next);
+            continue;
+        }
+        result.push(c);
+    }
+    result
 }
 
 fn url_decode(s: &str) -> String {
@@ -119,5 +136,55 @@ mod tests {
     fn test_newline_stripped() {
         let result = parse_dragged_path("/tmp/test.pdf\n");
         assert!(result.is_none() || result.is_some());
+    }
+
+    #[test]
+    fn test_unescape_shell_path_unit() {
+        assert_eq!(super::unescape_shell_path("\\[bracket\\]"), "[bracket]");
+        assert_eq!(super::unescape_shell_path("\\(paren\\)"), "(paren)");
+        assert_eq!(super::unescape_shell_path("normal"), "normal");
+        assert_eq!(super::unescape_shell_path("\\n"), "\\n");
+    }
+
+    #[test]
+    fn test_shell_escaped_brackets_in_external_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("[중요].pdf");
+        std::fs::write(&file_path, b"%PDF-1.4 fake").unwrap();
+
+        let escaped = format!("{}/\\[중요\\].pdf", tmp.path().display());
+        let result = parse_dragged_path(&escaped);
+        assert!(
+            result.is_some(),
+            "이스케이프된 대괄호 경로가 파싱되어야 함: input={escaped}",
+        );
+        assert_eq!(result.unwrap(), file_path);
+    }
+
+    #[test]
+    fn test_shell_escaped_parens_and_ampersand() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("(a&b).pdf");
+        std::fs::write(&file_path, b"%PDF-1.4 fake").unwrap();
+
+        let escaped = format!("{}/\\(a\\&b\\).pdf", tmp.path().display());
+        let result = parse_dragged_path(&escaped);
+        assert!(result.is_some(), "이스케이프된 괄호/앰퍼샌드 경로가 파싱되어야 함");
+        assert_eq!(result.unwrap(), file_path);
+    }
+
+    #[test]
+    fn test_shell_escaped_quoted_external_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("[중요].pdf");
+        std::fs::write(&file_path, b"%PDF-1.4 fake").unwrap();
+
+        let escaped = format!("\"{}/\\[중요\\].pdf\"", tmp.path().display());
+        let result = parse_dragged_path(&escaped);
+        assert!(
+            result.is_some(),
+            "따옴표로 감싸진 이스케이프 경로가 파싱되어야 함: input={escaped}",
+        );
+        assert_eq!(result.unwrap(), file_path);
     }
 }

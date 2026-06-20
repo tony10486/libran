@@ -5,3 +5,9 @@
 *.pdf
 bugs.md
 /tmp
+cfg_*
+_fullcfg.txt
+*cfg.txt
+_dump_open.txt
+ses*
+token*

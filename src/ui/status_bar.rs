@@ -7,12 +7,27 @@ use crate::app::AppState;
 
 pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
     let online = state.api_mode.allows_api_calls();
+    let sort_active = state.is_similarity_sorted();
 
     let mut spans = vec![
         Span::raw(" "),
         Span::styled(&state.status_text, Style::default().fg(Color::Gray).bg(Color::Black)),
         Span::raw("  "),
         Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)),
+    ];
+
+    // Similarity sort indicator
+    if sort_active {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            "▣ 유사도 정렬",
+            Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD).bg(Color::Black),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)));
+    }
+
+    spans.extend(vec![
         Span::raw("  "),
         Span::styled("API:", Style::default().fg(Color::DarkGray).bg(Color::Black)),
         Span::raw(" "),
@@ -34,7 +49,7 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
                 .fg(if online { Color::Green } else { Color::DarkGray })
                 .bg(Color::Black),
         ),
-    ];
+    ]);
 
     if state.is_processing {
         spans.push(Span::raw("  "));
@@ -52,6 +67,7 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
     // Right-aligned shortcuts
     let right_keys = [("Tab", "패널"),
         ("j/k", "이동"),
+        ("s", "유사도"),
         ("/", "검색"),
         ("?", "도움말"),
         ("q", "종료")];

@@ -32,6 +32,8 @@ fn test_schema_creation() -> Result<()> {
         "documents_fts_data",
         "api_cache",
         "app_config",
+        "tags",
+        "citation_relations",
     ] {
         assert!(tables.contains(&expected.to_string()), "missing table: {}", expected);
     }
@@ -46,6 +48,7 @@ fn test_document_insert_and_retrieve() -> Result<()> {
         title: "Test Paper on Networks".to_string(),
         authors: Some("Smith, J.".to_string()),
         journal: Some("Nature".to_string()),
+        conference: None,
         pub_year: Some(2024),
         doi: Some("10.1000/test".to_string()),
         arxiv_id: None,
@@ -53,6 +56,7 @@ fn test_document_insert_and_retrieve() -> Result<()> {
         keywords: None,
         file_path: None,
         file_hash: None,
+
         citation_key: Some("Smith2024".to_string()),
         source: Some("pdf_extract".to_string()),
     };
@@ -76,6 +80,7 @@ fn test_doi_uniqueness() -> Result<()> {
         title: "Paper 1".to_string(),
         authors: None,
         journal: None,
+        conference: None,
         pub_year: None,
         doi: Some("10.1000/unique".to_string()),
         arxiv_id: None,
@@ -93,6 +98,7 @@ fn test_doi_uniqueness() -> Result<()> {
         title: "Paper 2".to_string(),
         authors: None,
         journal: None,
+        conference: None,
         pub_year: None,
         doi: Some("10.1000/unique".to_string()),
         arxiv_id: None,
@@ -118,6 +124,7 @@ fn test_project_document_mapping() -> Result<()> {
         title: "ML Paper".to_string(),
         authors: None,
         journal: None,
+        conference: None,
         pub_year: Some(2024),
         doi: Some("10.2000/ml".to_string()),
         arxiv_id: None,
@@ -146,6 +153,7 @@ fn test_fts_trigram_search() -> Result<()> {
         title: "미분방정식해석학의 기초".to_string(),
         authors: Some("김, 대영".to_string()),
         journal: None,
+        conference: None,
         pub_year: Some(2024),
         doi: None,
         arxiv_id: None,
@@ -171,6 +179,7 @@ fn test_citation_key_exists_check() -> Result<()> {
         title: "Test".to_string(),
         authors: None,
         journal: None,
+        conference: None,
         pub_year: Some(2024),
         doi: None,
         arxiv_id: None,
@@ -196,6 +205,7 @@ fn test_file_hash_dedup() -> Result<()> {
         title: "Paper".to_string(),
         authors: None,
         journal: None,
+        conference: None,
         pub_year: None,
         doi: Some("10.3000/hash".to_string()),
         arxiv_id: None,

@@ -6,6 +6,7 @@ pub mod config;
 pub mod db;
 pub mod export;
 pub mod pdf;
+pub mod similarity;
 pub mod storage;
 pub mod terminal;
 pub mod ui;

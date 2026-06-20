@@ -1,5 +1,7 @@
+pub mod authors;
 pub mod heuristic;
 pub mod identifiers;
+pub mod journal;
 pub mod metadata;
 pub mod text;
 
@@ -64,7 +66,17 @@ pub fn process_file(path: &Path) -> Result<RawMetadata> {
         }
 
         if metadata.authors.is_empty() {
-            metadata.authors = heuristic::guess_authors(&text);
+            metadata.authors = authors::guess_authors(&text);
+        }
+
+        if metadata.journal.is_none() || metadata.pub_year.is_none() {
+            let (journal, year) = journal::extract_journal_and_year(&text);
+            if metadata.journal.is_none() {
+                metadata.journal = journal;
+            }
+            if metadata.pub_year.is_none() {
+                metadata.pub_year = year;
+            }
         }
     }
 

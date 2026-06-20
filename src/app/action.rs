@@ -29,4 +29,30 @@ pub enum AppAction {
     SaveConfig,
     OperationFailed(String),
     SystemShutdown,
+    SortBySimilarity(i64),
+    ClearSimilaritySort,
+
+    StartCitationExtraction { doc_id: i64 },
+    CitationExtracted { doc_id: i64, edge_count: usize, unmatched_count: usize },
+    CitationExtractionFailed { doc_id: i64, reason: String },
+
+    StartManualCitationEntry { doc_id: i64 },
+    ManualCitationSaved { source_id: i64, target_id: i64 },
+    StartBibtexImport { doc_id: i64, path: String },
+    BibtexImported { doc_id: i64, entry_count: usize },
+
+    GenerateCitationGraph { doc_ids: Vec<i64> },
+    CitationGraphReady { graph_state: Box<crate::app::graph_state::GraphState>, cache_key: String, cache_hit: bool },
+    ToggleGraphRenderMode,
+    NavigateGraph { direction: GraphDirection },
+    SelectGraphNode { node_idx: usize },
+    ExitGraphView,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GraphDirection {
+    Up,
+    Down,
+    Left,
+    Right,
 }

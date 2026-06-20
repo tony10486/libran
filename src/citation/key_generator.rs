@@ -161,6 +161,7 @@ mod tests {
             title: title.to_string(),
             authors: Some(authors.to_string()),
             journal: None,
+            conference: None,
             pub_year: year,
             doi: None,
             arxiv_id: None,

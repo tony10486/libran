@@ -8,14 +8,18 @@ use crate::db::documents::Document;
 use crate::db::facets::FacetCount;
 use crate::db::projects::Project;
 use crate::db::DbConn;
+use crate::similarity::scoring::{DocumentScore, UdcTree};
+use crate::similarity::SimilarityConfig;
 
-use super::AppAction;
+use super::action::AppAction;
+use super::graph_state::GraphState;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PanelFocus {
     Left,
     Right,
     Detail,
+    Graph,
 }
 
 pub struct AppState {
@@ -58,11 +62,27 @@ pub struct AppState {
     pub api_mode: ApiMode,
     pub document_count: usize,
     pub dirty: bool,
+
+    // ── Similarity sort ──
+    pub similarity_ref_doc_id: Option<i64>,
+    pub similarity_ref_title: String,
+    pub similarity_scores: Vec<DocumentScore>,
+    pub similarity_config: SimilarityConfig,
+    pub udc_tree: UdcTree,
+
+    // ── Citation graph ──
+    pub graph_state: Option<GraphState>,
+    pub citation_entry_mode: bool,
+    pub citation_entry_cursor: usize,
+    pub bibtex_import_mode: bool,
+    pub bibtex_import_input: String,
 }
 
 impl AppState {
     pub fn new(db: DbConn, config: AppConfig, action_tx: mpsc::Sender<AppAction>) -> Self {
         let api_mode = config.api_mode.clone();
+        let similarity_config = SimilarityConfig::load();
+        let udc_tree = load_udc_tree_from_db(&db);
         AppState {
             db,
             config,
@@ -94,6 +114,16 @@ impl AppState {
             api_mode,
             document_count: 0,
             dirty: true,
+            similarity_ref_doc_id: None,
+            similarity_ref_title: String::new(),
+            similarity_scores: Vec::new(),
+            similarity_config,
+            udc_tree,
+            graph_state: None,
+            citation_entry_mode: false,
+            citation_entry_cursor: 0,
+            bibtex_import_mode: false,
+            bibtex_import_input: String::new(),
         }
     }
 
@@ -167,5 +197,42 @@ impl AppState {
         if let Ok(conn) = self.db.lock() {
             let _ = crate::classification::data_loader::load_all_schemes(&conn);
         }
+    }
+
+    pub fn reload_udc_tree(&mut self) {
+        self.udc_tree = load_udc_tree_from_db(&self.db);
+    }
+
+    pub fn is_similarity_sorted(&self) -> bool {
+        self.similarity_ref_doc_id.is_some()
+    }
+}
+
+/// Load the UDC tree from the classification_nodes table in the database.
+fn load_udc_tree_from_db(db: &DbConn) -> UdcTree {
+    if let Ok(conn) = db.lock() {
+        let mut stmt = match conn.prepare(
+            "SELECT cn.notation, COALESCE(p.notation, '')
+             FROM classification_nodes cn
+             LEFT JOIN classification_nodes p ON cn.parent_id = p.id
+             INNER JOIN classification_schemes cs ON cn.scheme_id = cs.id
+             WHERE cs.code = 'udc'",
+        ) {
+            Ok(stmt) => stmt,
+            Err(_) => return UdcTree::new(std::collections::HashMap::new()),
+        };
+        let mut parents = std::collections::HashMap::new();
+        if let Ok(rows) = stmt.query_map([], |row| {
+            let notation: String = row.get(0)?;
+            let parent: String = row.get(1)?;
+            Ok((notation, parent))
+        }) {
+            for row in rows.flatten() {
+                parents.insert(row.0, row.1);
+            }
+        }
+        UdcTree::new(parents)
+    } else {
+        UdcTree::new(std::collections::HashMap::new())
     }
 }

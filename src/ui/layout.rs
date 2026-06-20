@@ -5,8 +5,9 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::AppState;
+use crate::app::state::PanelFocus;
 
-use super::{left_panel, right_panel, status_bar};
+use super::{graph_panel, left_panel, right_panel, status_bar};
 
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
@@ -23,7 +24,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
     render_header(frame, chunks[0], state);
 
-    if state.show_detail {
+    if state.graph_state.is_some() && state.active_panel == PanelFocus::Graph {
+        graph_panel::render(frame, chunks[1], state);
+    } else if state.show_detail {
         let body = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(42), Constraint::Length(1), Constraint::Min(1)])

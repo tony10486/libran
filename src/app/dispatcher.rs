@@ -3,16 +3,24 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
 use crate::citation::generate_citation_key;
+use crate::citation::cache;
+use crate::citation::entry;
+use crate::citation::extract;
+use crate::citation::graph;
+use crate::citation::graph::CitationGraph;
+use crate::citation::match_refs;
 use crate::db::documents;
 use crate::export::{export, ExportFormat};
 use crate::pdf;
+use crate::similarity::scoring::{compute_scores, DocumentFeatures};
 use crate::storage::library;
 
-use super::action::AppAction;
+use super::action::{AppAction, GraphDirection};
+use super::graph_state::GraphState;
 use super::state::PanelFocus;
 use super::AppState;
 
-const EDIT_FIELDS: &[&str] = &["제목", "저자", "저널", "연도", "DOI", "arXiv", "초록", "키워드"];
+const EDIT_FIELDS: &[&str] = &["제목", "저자", "저널", "학회", "연도", "DOI", "arXiv", "초록", "키워드"];
 
 pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
     match action {
@@ -59,8 +67,59 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
         AppAction::DeleteDocument(id) => handle_delete_document(state, id),
         AppAction::SaveConfig => handle_save_config(state),
         AppAction::StartMetadataExtraction(path) => handle_drag(state, path),
+        AppAction::SortBySimilarity(ref_id) => handle_sort_by_similarity(state, ref_id),
+        AppAction::ClearSimilaritySort => handle_clear_similarity_sort(state),
         AppAction::OperationFailed(msg) => state.set_status(&format!("오류: {}", msg)),
         AppAction::Tick => {}
+
+        AppAction::StartCitationExtraction { doc_id } => handle_start_citation_extraction(state, doc_id),
+        AppAction::CitationExtracted { doc_id, edge_count, unmatched_count } => {
+            state.finish_processing(&format!("인용 추출 완료: {}건 매치, {}건 미매치 (doc {})", edge_count, unmatched_count, doc_id));
+        }
+        AppAction::CitationExtractionFailed { doc_id, reason } => {
+            state.finish_processing(&format!("인용 추출 실패 (doc {}): {}", doc_id, reason));
+        }
+
+        AppAction::StartManualCitationEntry { doc_id } => handle_start_manual_citation_entry(state, doc_id),
+        AppAction::ManualCitationSaved { source_id, target_id } => {
+            state.citation_entry_mode = false;
+            state.set_status(&format!("인용 관계 저장: {} → {}", source_id, target_id));
+            state.dirty = true;
+        }
+        AppAction::StartBibtexImport { doc_id, path } => handle_bibtex_import(state, doc_id, &path),
+        AppAction::BibtexImported { doc_id, entry_count } => {
+            state.bibtex_import_mode = false;
+            state.bibtex_import_input.clear();
+            state.set_status(&format!("BibTeX 가져오기 완료: {}건 (doc {})", entry_count, doc_id));
+            state.dirty = true;
+        }
+
+        AppAction::GenerateCitationGraph { doc_ids } => handle_generate_citation_graph(state, doc_ids),
+        AppAction::CitationGraphReady { graph_state: gs, cache_key: _, cache_hit } => {
+            let suffix = if cache_hit { "(캐시)" } else { "(새로 생성)" };
+            state.graph_state = Some(*gs);
+            state.active_panel = PanelFocus::Graph;
+            state.finish_processing(&format!("인용 그래프 준비 완료 {}", suffix));
+        }
+        AppAction::ToggleGraphRenderMode => {
+            if let Some(ref mut gs) = state.graph_state {
+                gs.cycle_render_mode();
+                state.dirty = true;
+            }
+        }
+        AppAction::NavigateGraph { direction } => handle_navigate_graph(state, direction),
+        AppAction::SelectGraphNode { node_idx } => {
+            if let Some(ref mut gs) = state.graph_state {
+                gs.focused_node = Some(node_idx);
+                state.dirty = true;
+            }
+        }
+        AppAction::ExitGraphView => {
+            state.graph_state = None;
+            state.active_panel = PanelFocus::Right;
+            state.set_status("준비됨");
+            state.dirty = true;
+        }
     }
     false
 }
@@ -76,6 +135,15 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         return false;
     }
 
+    if state.citation_entry_mode {
+        return handle_citation_entry_key(state, key);
+    }
+    if state.bibtex_import_mode {
+        return handle_bibtex_import_key(state, key);
+    }
+    if state.graph_state.is_some() {
+        return handle_graph_key(state, key);
+    }
     if state.search_mode {
         return handle_search_key(state, key);
     }
@@ -93,18 +161,35 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     }
 
     match key.code {
-        KeyCode::Char('q') | KeyCode::Esc => return true,
+        KeyCode::Char('q') => return true,
+        KeyCode::Esc => {
+            if state.is_similarity_sorted() {
+                let _ = state.action_tx.try_send(AppAction::ClearSimilaritySort);
+            } else {
+                return true;
+            }
+        }
         KeyCode::Tab => {
             if state.show_detail {
                 state.active_panel = match state.active_panel {
                     PanelFocus::Right => PanelFocus::Detail,
-                    _ => PanelFocus::Right,
+                    PanelFocus::Detail => PanelFocus::Right,
+                    PanelFocus::Left => PanelFocus::Right,
+                    PanelFocus::Graph => PanelFocus::Right,
+                };
+            } else if state.graph_state.is_some() {
+                state.active_panel = match state.active_panel {
+                    PanelFocus::Left => PanelFocus::Graph,
+                    PanelFocus::Graph => PanelFocus::Right,
+                    PanelFocus::Right => PanelFocus::Graph,
+                    PanelFocus::Detail => PanelFocus::Graph,
                 };
             } else {
                 state.active_panel = match state.active_panel {
                     PanelFocus::Left => PanelFocus::Right,
                     PanelFocus::Right => PanelFocus::Left,
                     PanelFocus::Detail => PanelFocus::Right,
+                    PanelFocus::Graph => PanelFocus::Right,
                 };
             }
             state.dirty = true;
@@ -141,6 +226,14 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 let _ = state.action_tx.try_send(AppAction::ExportRequested(ExportFormat::Bibtex));
             }
         }
+        KeyCode::Char('s') => {
+            if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor) {
+                    if let Some(id) = doc.id {
+                        let _ = state.action_tx.try_send(AppAction::SortBySimilarity(id));
+                    }
+                }
+        }
         KeyCode::Char('d') => {
             if state.active_panel == PanelFocus::Right
                 && let Some(doc) = state.documents.get(state.list_cursor)
@@ -158,6 +251,29 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                         state.edit_input = doc.title.clone();
                         state.set_status("편집: Tab으로 필드 이동, Enter로 저장");
                         state.dirty = true;
+                    }
+        }
+        KeyCode::Char('g') => {
+            if !state.selected_doc_ids.is_empty() {
+                let doc_ids: Vec<i64> = state.selected_doc_ids.iter().copied().collect();
+                let _ = state.action_tx.try_send(AppAction::GenerateCitationGraph { doc_ids });
+            } else if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor)
+                    && let Some(id) = doc.id {
+                        let _ = state.action_tx.try_send(AppAction::GenerateCitationGraph { doc_ids: vec![id] });
+                    }
+        }
+        KeyCode::Char('G') => {
+            if let Some(ref gs) = state.graph_state {
+                let doc_ids = gs.doc_ids.clone();
+                let _ = state.action_tx.try_send(AppAction::GenerateCitationGraph { doc_ids });
+            }
+        }
+        KeyCode::Char('C') => {
+            if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor)
+                    && let Some(id) = doc.id {
+                        let _ = state.action_tx.try_send(AppAction::StartManualCitationEntry { doc_id: id });
                     }
         }
         KeyCode::Enter => {
@@ -197,7 +313,7 @@ fn move_cursor_down(state: &mut AppState) {
                 state.dirty = true;
             }
         }
-        PanelFocus::Detail => {}
+        PanelFocus::Detail | PanelFocus::Graph => {}
     }
 }
 
@@ -218,7 +334,7 @@ fn move_cursor_up(state: &mut AppState) {
                 state.dirty = true;
             }
         }
-        PanelFocus::Detail => {}
+        PanelFocus::Detail | PanelFocus::Graph => {}
     }
 }
 
@@ -405,11 +521,12 @@ fn get_edit_field_value(doc: &documents::Document, field: usize) -> String {
         0 => doc.title.clone(),
         1 => doc.authors.clone().unwrap_or_default(),
         2 => doc.journal.clone().unwrap_or_default(),
-        3 => doc.pub_year.map(|y| y.to_string()).unwrap_or_default(),
-        4 => doc.doi.clone().unwrap_or_default(),
-        5 => doc.arxiv_id.clone().unwrap_or_default(),
-        6 => doc.abstract_text.clone().unwrap_or_default(),
-        7 => doc.keywords.clone().unwrap_or_default(),
+        3 => doc.conference.clone().unwrap_or_default(),
+        4 => doc.pub_year.map(|y| y.to_string()).unwrap_or_default(),
+        5 => doc.doi.clone().unwrap_or_default(),
+        6 => doc.arxiv_id.clone().unwrap_or_default(),
+        7 => doc.abstract_text.clone().unwrap_or_default(),
+        8 => doc.keywords.clone().unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -420,11 +537,12 @@ fn apply_edit_to_doc(doc: &mut documents::Document, field: usize, value: &str) {
         0 => doc.title = trimmed,
         1 => doc.authors = if trimmed.is_empty() { None } else { Some(trimmed) },
         2 => doc.journal = if trimmed.is_empty() { None } else { Some(trimmed) },
-        3 => doc.pub_year = trimmed.parse::<i64>().ok(),
-        4 => doc.doi = if trimmed.is_empty() { None } else { Some(trimmed) },
-        5 => doc.arxiv_id = if trimmed.is_empty() { None } else { Some(trimmed) },
-        6 => doc.abstract_text = if trimmed.is_empty() { None } else { Some(trimmed) },
-        7 => doc.keywords = if trimmed.is_empty() { None } else { Some(trimmed) },
+        3 => doc.conference = if trimmed.is_empty() { None } else { Some(trimmed) },
+        4 => doc.pub_year = trimmed.parse::<i64>().ok(),
+        5 => doc.doi = if trimmed.is_empty() { None } else { Some(trimmed) },
+        6 => doc.arxiv_id = if trimmed.is_empty() { None } else { Some(trimmed) },
+        7 => doc.abstract_text = if trimmed.is_empty() { None } else { Some(trimmed) },
+        8 => doc.keywords = if trimmed.is_empty() { None } else { Some(trimmed) },
         _ => {}
     }
 }
@@ -542,6 +660,7 @@ fn process_metadata_inner(
         arxiv_id: meta.arxiv_id.clone(),
         abstract_text: meta.abstract_text.clone(),
         keywords: None,
+        conference: None,
         file_path: None,
         file_hash: hash,
         citation_key: None,
@@ -1069,6 +1188,123 @@ fn handle_save_config(state: &mut AppState) {
     }
 }
 
+fn handle_sort_by_similarity(state: &mut AppState, ref_id: i64) {
+    state.start_processing("유사도 정렬 계산 중...");
+
+    // Clone Arc to break borrow chain — MutexGuard borrows the clone, not state
+    let db = state.db.clone();
+    let conn = match db.lock() {
+        Ok(c) => c,
+        Err(_) => {
+            state.finish_processing("DB 락 획득 실패");
+            return;
+        }
+    };
+
+    let all_docs = match documents::list_all(&conn) {
+        Ok(docs) => docs,
+        Err(e) => {
+            // Lock is still alive here, but it borrows `db` (local), not `state`
+            state.finish_processing(&format!("문헌 로드 실패: {e}"));
+            return;
+        }
+    };
+
+    let mut ref_title = String::new();
+    let mut features = Vec::with_capacity(all_docs.len());
+
+    for doc in &all_docs {
+        let id = match doc.id {
+            Some(id) => id,
+            None => continue,
+        };
+        if id == ref_id {
+            ref_title = doc.title.clone();
+        }
+        let udc_notations = get_udc_notations(&conn, id);
+        let tags = documents::get_tags(&conn, id).unwrap_or_default();
+        let cited_docs = documents::get_cited_docs(&conn, id).unwrap_or_default();
+        let cited_by_docs = documents::get_citing_docs(&conn, id).unwrap_or_default();
+        features.push(DocumentFeatures {
+            id,
+            udc_notations,
+            tags,
+            cited_docs,
+            cited_by_docs,
+            pub_year: doc.pub_year,
+            conference: doc.conference.clone(),
+        });
+    }
+
+    let doc_map: std::collections::HashMap<i64, crate::db::documents::Document> = all_docs
+        .into_iter()
+        .filter_map(|d| d.id.map(|id| (id, d)))
+        .collect();
+
+    // drop conn to release MutexGuard before computing scores
+    drop(conn);
+
+    let ref_features = match features.iter().find(|f| f.id == ref_id) {
+        Some(f) => f.clone(),
+        None => {
+            state.finish_processing("기준 문헌을 찾을 수 없음");
+            return;
+        }
+    };
+
+    let scores = compute_scores(&ref_features, &features, &state.udc_tree, &state.similarity_config);
+
+    let mut sorted_docs: Vec<crate::db::documents::Document> = scores
+        .iter()
+        .filter_map(|s| doc_map.get(&s.document_id).cloned())
+        .collect();
+
+    if let Some(ref_doc) = doc_map.get(&ref_id) {
+        sorted_docs.insert(0, ref_doc.clone());
+    }
+
+    let short_title = ref_title.chars().take(40).collect::<String>();
+    state.similarity_ref_doc_id = Some(ref_id);
+    state.similarity_ref_title = ref_title;
+    state.similarity_scores = scores;
+    state.documents = sorted_docs;
+    state.document_count = state.documents.len();
+    state.list_cursor = 0;
+    state.finish_processing(&format!("유사도 정렬 완료 (기준: {short_title})"));
+}
+
+fn handle_clear_similarity_sort(state: &mut AppState) {
+    state.similarity_ref_doc_id = None;
+    state.similarity_ref_title.clear();
+    state.similarity_scores.clear();
+    state.reload_documents();
+    state.set_status("기본 정렬로 복귀");
+}
+
+/// Get UDC notation strings for a document from the classification DB.
+fn get_udc_notations(conn: &rusqlite::Connection, document_id: i64) -> Vec<String> {
+    let mut stmt = match conn.prepare(
+        "SELECT cn.notation
+         FROM document_classifications dc
+         INNER JOIN classification_nodes cn ON dc.node_id = cn.id
+         INNER JOIN classification_schemes cs ON cn.scheme_id = cs.id
+         WHERE dc.document_id = ?1 AND cs.code = 'udc'",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let rows = match stmt.query_map(rusqlite::params![document_id], |row| row.get::<_, String>(0)) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut notations = Vec::new();
+    for row in rows.flatten() {
+        // Parse compound UDC codes and add individual components
+        notations.extend(crate::similarity::scoring::parse_udc_notation(&row));
+    }
+    notations
+}
+
 pub fn count_tree_nodes(state: &AppState) -> usize {
     let mut count = 2;
     count += state.projects.len().max(1);
@@ -1106,3 +1342,292 @@ pub const UDC_TOP_LEVEL_TUPLES: &[(&str, &str)] = &[
 ];
 
 pub const EDIT_FIELD_NAMES: &[&str] = EDIT_FIELDS;
+
+fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
+    state.start_processing(&format!("인용 추출 중 (doc {})...", doc_id));
+    let db = state.db.clone();
+    let tx = state.action_tx.clone();
+
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || -> std::result::Result<(usize, usize), String> {
+            let conn = db.lock().map_err(|e| e.to_string())?;
+
+            if documents::has_reference_extraction(&conn, doc_id).unwrap_or(false) {
+                return Ok((0, 0));
+            }
+
+            let file_path = documents::get_by_id(&conn, doc_id)
+                .map_err(|e| e.to_string())?
+                .and_then(|d| d.file_path)
+                .ok_or_else(|| "파일 경로 없음".to_string())?;
+
+            let text = crate::pdf::text::extract_text(std::path::Path::new(&file_path))
+                .map_err(|e| e.to_string())?;
+
+            let refs = extract::extract_references(&text);
+
+            if refs.is_empty() {
+                let _ = documents::save_reference_extraction(&conn, doc_id, &text, "heuristic_regex", 0);
+                return Ok((0, 0));
+            }
+
+            let section_text: String = refs.iter().map(|r| r.raw_text.as_str()).collect::<Vec<_>>().join("\n");
+            let _ = documents::save_reference_extraction(&conn, doc_id, &section_text, "heuristic_regex", 2);
+
+            let fuzzy_threshold = 0.85;
+            let mut edge_count = 0usize;
+            let mut unmatched_count = 0usize;
+
+            for r in &refs {
+                match match_refs::match_reference_to_doc(&conn, r, fuzzy_threshold) {
+                    Ok(Some(mr)) => {
+                        let _ = entry::add_extracted_citation(
+                            &conn,
+                            doc_id,
+                            mr.doc_id,
+                            &mr.match_status,
+                            mr.confidence,
+                            Some(&r.raw_text),
+                        );
+                        edge_count += 1;
+                    }
+                    Ok(None) => {
+                        unmatched_count += 1;
+                    }
+                    Err(_) => {
+                        unmatched_count += 1;
+                    }
+                }
+            }
+
+            Ok((edge_count, unmatched_count))
+        }).await;
+
+        match result {
+            Ok(Ok((edge_count, unmatched_count))) => {
+                let _ = tx.send(AppAction::CitationExtracted { doc_id, edge_count, unmatched_count }).await;
+            }
+            Ok(Err(reason)) => {
+                let _ = tx.send(AppAction::CitationExtractionFailed { doc_id, reason }).await;
+            }
+            Err(e) => {
+                let _ = tx.send(AppAction::CitationExtractionFailed { doc_id, reason: e.to_string() }).await;
+            }
+        }
+    });
+}
+
+fn handle_start_manual_citation_entry(state: &mut AppState, doc_id: i64) {
+    state.citation_entry_mode = true;
+    state.citation_entry_cursor = 0;
+    state.edit_doc_id = Some(doc_id);
+    state.set_status("인용 데이터 입력: Space로 선택, Enter로 저장");
+    state.dirty = true;
+}
+
+fn handle_citation_entry_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.citation_entry_mode = false;
+            state.edit_doc_id = None;
+            state.set_status("준비됨");
+            state.dirty = true;
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            if state.list_cursor + 1 < state.documents.len() {
+                state.list_cursor += 1;
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if state.list_cursor > 0 {
+                state.list_cursor -= 1;
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char(' ') => {
+            let source_id = state.edit_doc_id.unwrap_or(0);
+            if let Some(doc) = state.documents.get(state.list_cursor)
+                && let Some(target_id) = doc.id
+                    && source_id != target_id {
+                        let db = state.db.clone();
+                        if let Ok(conn) = db.lock() {
+                            let _ = entry::add_manual_citation(&conn, source_id, target_id);
+                            let _ = state.action_tx.try_send(AppAction::ManualCitationSaved {
+                                source_id,
+                                target_id,
+                            });
+                        }
+                    }
+        }
+        KeyCode::Char('B') => {
+            state.bibtex_import_mode = true;
+            state.bibtex_import_input.clear();
+            state.set_status("BibTeX 파일 경로 입력 후 Enter");
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            state.citation_entry_mode = false;
+            state.edit_doc_id = None;
+            state.set_status("인용 데이터 입력 완료");
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_bibtex_import_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.bibtex_import_mode = false;
+            state.bibtex_import_input.clear();
+            state.set_status("준비됨");
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            let path = state.bibtex_import_input.clone();
+            let doc_id = state.edit_doc_id.unwrap_or(0);
+            let _ = state.action_tx.try_send(AppAction::StartBibtexImport { doc_id, path });
+        }
+        KeyCode::Backspace => {
+            state.bibtex_import_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.bibtex_import_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_bibtex_import(state: &mut AppState, doc_id: i64, path: &str) {
+    state.start_processing("BibTeX 가져오기 중...");
+
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            state.finish_processing(&format!("BibTeX 파일 읽기 실패: {}", e));
+            return;
+        }
+    };
+
+    let bib_entries = entry::parse_bibtex(&content);
+
+    let edge_count = if let Ok(conn) = state.db.lock() {
+        let mut count = 0usize;
+        for bib_entry in &bib_entries {
+            if let Ok(Some(target_id)) = entry::match_bibtex_entry(&conn, bib_entry, 0.85) {
+                let _ = entry::add_bibtex_citation(&conn, doc_id, target_id);
+                count += 1;
+            }
+        }
+        count
+    } else {
+        0
+    };
+
+    let _ = state.action_tx.try_send(AppAction::BibtexImported {
+        doc_id,
+        entry_count: edge_count,
+    });
+}
+
+fn handle_generate_citation_graph(state: &mut AppState, doc_ids: Vec<i64>) {
+    state.start_processing("인용 그래프 생성 중...");
+
+    let db = state.db.clone();
+    let tx = state.action_tx.clone();
+    let doc_ids_clone = doc_ids.clone();
+
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || -> std::result::Result<(CitationGraph, bool), String> {
+            let conn = db.lock().map_err(|e| e.to_string())?;
+            let cache_key = cache::build_cache_key(&doc_ids);
+
+            let cache_hit = !cache::should_regenerate(&conn, &cache_key, &doc_ids)
+                .unwrap_or(true);
+
+            let graph = CitationGraph::build(&conn, &doc_ids)
+                .map_err(|e| e.to_string())?;
+
+            if !cache_hit {
+                let edge_version = cache::compute_edge_version(&conn, &doc_ids).unwrap_or(0);
+                let node_count = graph.node_count();
+                let render_mode = graph::RenderMode::for_node_count(node_count);
+                let graph_data = format!("{{\"nodes\":{},\"edges\":{}}}", node_count, graph.inner.edge_count());
+                let _ = cache::store_cache(&conn, &cache_key, &graph_data, edge_version, doc_ids.len() as i64, &render_mode);
+            }
+
+            Ok((graph, cache_hit))
+        }).await;
+
+        match result {
+            Ok(Ok((g, cache_hit))) => {
+                let cache_key = cache::build_cache_key(&doc_ids_clone);
+                let gs = GraphState::new(g, cache_hit);
+                let _ = tx.send(AppAction::CitationGraphReady {
+                    graph_state: Box::new(gs),
+                    cache_key,
+                    cache_hit,
+                }).await;
+            }
+            Ok(Err(reason)) => {
+                let _ = tx.send(AppAction::OperationFailed(format!("그래프 생성 실패: {}", reason))).await;
+            }
+            Err(e) => {
+                let _ = tx.send(AppAction::OperationFailed(format!("태스크 실패: {}", e))).await;
+            }
+        }
+    });
+}
+
+fn handle_graph_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            let _ = state.action_tx.try_send(AppAction::ExitGraphView);
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            let _ = state.action_tx.try_send(AppAction::NavigateGraph { direction: GraphDirection::Down });
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            let _ = state.action_tx.try_send(AppAction::NavigateGraph { direction: GraphDirection::Up });
+        }
+        KeyCode::Char('h') | KeyCode::Left => {
+            let _ = state.action_tx.try_send(AppAction::NavigateGraph { direction: GraphDirection::Left });
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            let _ = state.action_tx.try_send(AppAction::NavigateGraph { direction: GraphDirection::Right });
+        }
+        KeyCode::Tab => {
+            let _ = state.action_tx.try_send(AppAction::ToggleGraphRenderMode);
+        }
+        KeyCode::Char('G') => {
+            if let Some(ref gs) = state.graph_state {
+                let doc_ids = gs.doc_ids.clone();
+                let _ = state.action_tx.try_send(AppAction::GenerateCitationGraph { doc_ids });
+            }
+        }
+        KeyCode::Enter => {
+            if let Some(ref gs) = state.graph_state
+                && let Some(node_idx) = gs.focused_node {
+                    let _ = state.action_tx.try_send(AppAction::SelectGraphNode { node_idx });
+                }
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_navigate_graph(state: &mut AppState, direction: GraphDirection) {
+    if let Some(ref mut gs) = state.graph_state {
+        let step = match direction {
+            GraphDirection::Down | GraphDirection::Right => 1,
+            GraphDirection::Up | GraphDirection::Left => -1,
+        };
+        gs.focus_next(step);
+        state.dirty = true;
+    }
+}

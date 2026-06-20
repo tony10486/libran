@@ -8,6 +8,7 @@ pub struct Document {
     pub title: String,
     pub authors: Option<String>,
     pub journal: Option<String>,
+    pub conference: Option<String>,
     pub pub_year: Option<i64>,
     pub doi: Option<String>,
     pub arxiv_id: Option<String>,
@@ -21,8 +22,8 @@ pub struct Document {
 
 pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
     conn.execute(
-        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             doc.title,
             doc.authors,
@@ -36,6 +37,7 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
             doc.file_hash,
             doc.citation_key,
             doc.source.as_deref().unwrap_or("manual"),
+            doc.conference,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -43,7 +45,7 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
 
 pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source
+        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference
          FROM documents WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -62,34 +64,44 @@ pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
             file_hash: row.get(10)?,
             citation_key: row.get(11)?,
             source: row.get(12)?,
+            conference: row.get(13)?,
         }))
     } else {
         Ok(None)
     }
 }
 
+macro_rules! doc_from_row {
+    ($row:expr) => {
+        Document {
+            id: Some($row.get(0)?),
+            title: $row.get(1)?,
+            authors: $row.get(2)?,
+            journal: $row.get(3)?,
+            pub_year: $row.get(4)?,
+            doi: $row.get(5)?,
+            arxiv_id: $row.get(6)?,
+            abstract_text: $row.get(7)?,
+            keywords: $row.get(8)?,
+            file_path: $row.get(9)?,
+            file_hash: $row.get(10)?,
+            citation_key: $row.get(11)?,
+            source: $row.get(12)?,
+            conference: $row.get(13)?,
+        }
+    };
+}
+
+const DOCUMENT_COLS: &str =
+    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference";
+
 pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source
-         FROM documents WHERE doi = ?1",
+        &format!("SELECT {} FROM documents WHERE doi = ?1", DOCUMENT_COLS),
     )?;
     let mut rows = stmt.query(params![doi])?;
     if let Some(row) = rows.next()? {
-        Ok(Some(Document {
-            id: Some(row.get(0)?),
-            title: row.get(1)?,
-            authors: row.get(2)?,
-            journal: row.get(3)?,
-            pub_year: row.get(4)?,
-            doi: row.get(5)?,
-            arxiv_id: row.get(6)?,
-            abstract_text: row.get(7)?,
-            keywords: row.get(8)?,
-            file_path: row.get(9)?,
-            file_hash: row.get(10)?,
-            citation_key: row.get(11)?,
-            source: row.get(12)?,
-        }))
+        Ok(Some(doc_from_row!(row)))
     } else {
         Ok(None)
     }
@@ -97,26 +109,11 @@ pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
 
 pub fn find_by_hash(conn: &Connection, hash: &str) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source
-         FROM documents WHERE file_hash = ?1",
+        &format!("SELECT {} FROM documents WHERE file_hash = ?1", DOCUMENT_COLS),
     )?;
     let mut rows = stmt.query(params![hash])?;
     if let Some(row) = rows.next()? {
-        Ok(Some(Document {
-            id: Some(row.get(0)?),
-            title: row.get(1)?,
-            authors: row.get(2)?,
-            journal: row.get(3)?,
-            pub_year: row.get(4)?,
-            doi: row.get(5)?,
-            arxiv_id: row.get(6)?,
-            abstract_text: row.get(7)?,
-            keywords: row.get(8)?,
-            file_path: row.get(9)?,
-            file_hash: row.get(10)?,
-            citation_key: row.get(11)?,
-            source: row.get(12)?,
-        }))
+        Ok(Some(doc_from_row!(row)))
     } else {
         Ok(None)
     }
@@ -132,27 +129,9 @@ pub fn citation_key_exists(conn: &Connection, key: &str) -> Result<bool> {
 }
 
 pub fn list_all(conn: &Connection) -> Result<Vec<Document>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source
-         FROM documents ORDER BY id DESC",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(Document {
-            id: Some(row.get(0)?),
-            title: row.get(1)?,
-            authors: row.get(2)?,
-            journal: row.get(3)?,
-            pub_year: row.get(4)?,
-            doi: row.get(5)?,
-            arxiv_id: row.get(6)?,
-            abstract_text: row.get(7)?,
-            keywords: row.get(8)?,
-            file_path: row.get(9)?,
-            file_hash: row.get(10)?,
-            citation_key: row.get(11)?,
-            source: row.get(12)?,
-        })
-    })?;
+    let sql = format!("SELECT {} FROM documents ORDER BY id DESC", DOCUMENT_COLS);
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], |row| Ok(doc_from_row!(row)))?;
     let mut docs = Vec::new();
     for row in rows {
         docs.push(row?);
@@ -162,14 +141,15 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Document>> {
 
 pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
     conn.execute(
-        "UPDATE documents SET title = ?1, authors = ?2, journal = ?3, pub_year = ?4,
-         doi = ?5, arxiv_id = ?6, abstract = ?7, keywords = ?8,
+        "UPDATE documents SET title = ?1, authors = ?2, journal = ?3, conference = ?4, pub_year = ?5,
+         doi = ?6, arxiv_id = ?7, abstract = ?8, keywords = ?9,
          updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?9",
+         WHERE id = ?10",
         params![
             doc.title,
             doc.authors,
             doc.journal,
+            doc.conference,
             doc.pub_year,
             doc.doi,
             doc.arxiv_id,
@@ -192,4 +172,117 @@ pub fn update_citation_key(conn: &Connection, id: i64, key: &str) -> Result<()> 
 pub fn delete(conn: &Connection, id: i64) -> Result<()> {
     conn.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
     Ok(())
+}
+
+// ── Tag helpers ──
+
+pub fn get_tags(conn: &Connection, document_id: i64) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT tag FROM tags WHERE document_id = ?1 ORDER BY tag")?;
+    let rows = stmt.query_map(params![document_id], |row| row.get::<_, String>(0))?;
+    let mut tags = Vec::new();
+    for row in rows {
+        tags.push(row?);
+    }
+    Ok(tags)
+}
+
+pub fn add_tag(conn: &Connection, document_id: i64, tag: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO tags (document_id, tag) VALUES (?1, ?2)",
+        params![document_id, tag],
+    )?;
+    Ok(())
+}
+
+pub fn remove_tag(conn: &Connection, document_id: i64, tag: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM tags WHERE document_id = ?1 AND tag = ?2",
+        params![document_id, tag],
+    )?;
+    Ok(())
+}
+
+// ── Citation helpers ──
+
+/// Add a citation relation with match metadata.
+pub fn add_citation_with_status(
+    conn: &Connection,
+    citing_id: i64,
+    cited_id: i64,
+    match_status: &str,
+    confidence: f64,
+    raw_ref_text: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO citation_relations (citing_id, cited_id, match_status, confidence, raw_ref_text, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))",
+        params![citing_id, cited_id, match_status, confidence, raw_ref_text],
+    )?;
+    Ok(())
+}
+
+/// Add a citation relation: `citing_id` cites `cited_id` (legacy, defaults to manual).
+pub fn add_citation(conn: &Connection, citing_id: i64, cited_id: i64) -> Result<()> {
+    add_citation_with_status(conn, citing_id, cited_id, "manual", 1.0, None)
+}
+
+/// Remove a citation relation.
+pub fn remove_citation(conn: &Connection, citing_id: i64, cited_id: i64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM citation_relations WHERE citing_id = ?1 AND cited_id = ?2",
+        params![citing_id, cited_id],
+    )?;
+    Ok(())
+}
+
+/// Get all document IDs that this document cites.
+pub fn get_cited_docs(conn: &Connection, document_id: i64) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT cited_id FROM citation_relations WHERE citing_id = ?1",
+    )?;
+    let rows = stmt.query_map(params![document_id], |row| row.get::<_, i64>(0))?;
+    let mut ids = Vec::new();
+    for row in rows {
+        ids.push(row?);
+    }
+    Ok(ids)
+}
+
+/// Get all document IDs that cite this document.
+pub fn get_citing_docs(conn: &Connection, document_id: i64) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT citing_id FROM citation_relations WHERE cited_id = ?1",
+    )?;
+    let rows = stmt.query_map(params![document_id], |row| row.get::<_, i64>(0))?;
+    let mut ids = Vec::new();
+    for row in rows {
+        ids.push(row?);
+    }
+    Ok(ids)
+}
+
+/// Store a reference-section extraction attempt.
+pub fn save_reference_extraction(
+    conn: &Connection,
+    doc_id: i64,
+    section_text: &str,
+    extraction_method: &str,
+    success: i32,
+) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO reference_extractions (doc_id, section_text, extraction_method, extraction_success, extracted_at)
+         VALUES (?1, ?2, ?3, ?4, datetime('now'))",
+        params![doc_id, section_text, extraction_method, success],
+    )?;
+    Ok(())
+}
+
+/// Check if reference extraction was already attempted for a document.
+pub fn has_reference_extraction(conn: &Connection, doc_id: i64) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM reference_extractions WHERE doc_id = ?1",
+        params![doc_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }

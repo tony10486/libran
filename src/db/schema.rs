@@ -142,6 +142,31 @@ CREATE TABLE IF NOT EXISTS app_config (
     value           TEXT,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- User-assigned tags per document
+CREATE TABLE IF NOT EXISTS tags (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL,
+    tag             TEXT NOT NULL,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    UNIQUE(document_id, tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tags_document ON tags(document_id);
+CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+
+-- Citation relationships between documents
+CREATE TABLE IF NOT EXISTS citation_relations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    citing_id       INTEGER NOT NULL,
+    cited_id        INTEGER NOT NULL,
+    FOREIGN KEY (citing_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY (cited_id) REFERENCES documents(id) ON DELETE CASCADE,
+    UNIQUE(citing_id, cited_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_citation_citing ON citation_relations(citing_id);
+CREATE INDEX IF NOT EXISTS idx_citation_cited ON citation_relations(cited_id);
 ";
 
 pub fn create_tables(conn: &Connection) -> Result<()> {

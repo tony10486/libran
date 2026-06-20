@@ -17,6 +17,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         Style::default().bg(Color::Black).fg(Color::DarkGray)
     };
 
+    let is_sort_mode = state.is_similarity_sorted();
+
     let items: Vec<ListItem> = if state.documents.is_empty() {
         vec![ListItem::new(Line::from(vec![
             Span::raw("  "),
@@ -33,10 +35,35 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             let doi = doc.doi.as_deref().unwrap_or("");
             let key = doc.citation_key.as_deref().unwrap_or("");
 
+            let score_str = if is_sort_mode {
+                if let Some(score) = state.similarity_scores.iter()
+                    .find(|s| s.document_id == doc.id.unwrap_or(0))
+                {
+                    if doc.id == state.similarity_ref_doc_id {
+                        " [기준]".to_string()
+                    } else if score.total_score > 0.0 {
+                        format!(" [{:.1}]", score.total_score)
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
             ListItem::new(vec![
                 Line::from(vec![
                     Span::styled(marker, Style::default().fg(marker_color).bg(Color::Black)),
                     Span::styled(doc.title.clone(), theme::title_style()),
+                    if score_str.starts_with(" [기준]") {
+                        Span::styled(score_str, Style::default().fg(Color::Cyan).bg(Color::Black))
+                    } else if score_str.starts_with(" [") {
+                        Span::styled(score_str, Style::default().fg(Color::Yellow).bg(Color::Black))
+                    } else {
+                        Span::raw("")
+                    },
                 ]),
                 Line::from(vec![
                     Span::raw("    "),
@@ -94,6 +121,8 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     lines.push(field_line("저자", doc.authors.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
     lines.push(field_line("저널", doc.journal.as_deref().unwrap_or("—")));
+    lines.push(Line::from(""));
+    lines.push(field_line("학회", doc.conference.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
     lines.push(field_line("연도", &doc.pub_year.map(|y| y.to_string()).unwrap_or_else(|| "—".to_string())));
     lines.push(Line::from(""));

@@ -1,3 +1,4 @@
+pub mod graph_panel;
 pub mod help;
 pub mod left_panel;
 pub mod layout;
