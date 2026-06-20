@@ -47,6 +47,10 @@ pub enum AppAction {
     NavigateGraph { direction: GraphDirection },
     SelectGraphNode { node_idx: usize },
     ExitGraphView,
+
+    MouseHover { column: u16, row: u16 },
+    MouseClick { column: u16, row: u16 },
+    TerminalResize { width: u16, height: u16 },
 }
 
 #[derive(Clone, Debug, PartialEq)]

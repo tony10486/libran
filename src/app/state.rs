@@ -76,6 +76,8 @@ pub struct AppState {
     pub citation_entry_cursor: usize,
     pub bibtex_import_mode: bool,
     pub bibtex_import_input: String,
+
+    pub terminal_size: (u16, u16),
 }
 
 impl AppState {
@@ -124,6 +126,7 @@ impl AppState {
             citation_entry_cursor: 0,
             bibtex_import_mode: false,
             bibtex_import_input: String::new(),
+            terminal_size: (80, 24),
         }
     }
 

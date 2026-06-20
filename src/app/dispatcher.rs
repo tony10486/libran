@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 use crate::citation::generate_citation_key;
 use crate::citation::cache;
@@ -118,6 +119,20 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             state.graph_state = None;
             state.active_panel = PanelFocus::Right;
             state.set_status("준비됨");
+            state.dirty = true;
+        }
+        AppAction::MouseHover { column, row } => {
+            if !is_modal_active(state) {
+                handle_mouse_hover(state, column, row);
+            }
+        }
+        AppAction::MouseClick { column, row } => {
+            if !is_modal_active(state) && state.graph_state.is_none() {
+                handle_mouse_click(state, column, row);
+            }
+        }
+        AppAction::TerminalResize { width, height } => {
+            state.terminal_size = (width, height);
             state.dirty = true;
         }
     }
@@ -559,6 +574,156 @@ fn handle_tree_activate(state: &mut AppState) {
         }
         state.dirty = true;
     }
+}
+
+fn is_modal_active(state: &AppState) -> bool {
+    state.edit_mode
+        || state.search_mode
+        || state.add_file_mode
+        || state.new_project_mode
+        || state.citation_entry_mode
+        || state.bibtex_import_mode
+        || state.show_help
+}
+
+fn compute_body_rect(state: &AppState) -> Rect {
+    let (w, h) = state.terminal_size;
+    let area = Rect { x: 0, y: 0, width: w, height: h };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .split(area);
+    chunks[1]
+}
+
+fn compute_right_panel_rect(state: &AppState) -> Rect {
+    let body = compute_body_rect(state);
+
+    if state.show_detail {
+        let split = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(42), Constraint::Length(1), Constraint::Min(1)])
+            .split(body);
+        split[0]
+    } else {
+        let split = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(32), Constraint::Length(1), Constraint::Min(1)])
+            .split(body);
+        split[2]
+    }
+}
+
+fn compute_left_panel_rect(state: &AppState) -> Option<Rect> {
+    if state.show_detail {
+        return None;
+    }
+    let body = compute_body_rect(state);
+    let split = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(32), Constraint::Length(1), Constraint::Min(1)])
+        .split(body);
+    Some(split[0])
+}
+
+fn compute_list_offset(cursor: usize, visible_items: usize, total_items: usize) -> usize {
+    if total_items == 0 || visible_items == 0 {
+        return 0;
+    }
+    let mut offset = 0usize;
+    if cursor >= offset + visible_items {
+        offset = cursor - visible_items + 1;
+    }
+    if offset + visible_items > total_items && total_items > visible_items {
+        offset = total_items - visible_items;
+    }
+    offset
+}
+
+fn handle_mouse_hover(state: &mut AppState, column: u16, row: u16) {
+    let right_rect = compute_right_panel_rect(state);
+    let left_rect = compute_left_panel_rect(state);
+
+    if is_in_rect(column, row, &right_rect) {
+        let visible_items = (right_rect.height as usize) / 3;
+        let total = state.documents.len();
+        if total == 0 || visible_items == 0 {
+            return;
+        }
+        let offset = compute_list_offset(state.list_cursor, visible_items, total);
+        let rel_row = (row - right_rect.y) as usize;
+        let item_index = offset + rel_row / 3;
+        if item_index < total && item_index != state.list_cursor {
+            state.list_cursor = item_index;
+            if state.show_detail {
+                state.load_detail();
+            }
+            state.dirty = true;
+        }
+    } else if let Some(left_rect) = left_rect
+        && is_in_rect(column, row, &left_rect) {
+        let visible_items = left_rect.height as usize;
+        let total = count_tree_nodes(state);
+        if total == 0 || visible_items == 0 {
+            return;
+        }
+        let offset = compute_list_offset(state.tree_cursor, visible_items, total);
+        let rel_row = (row - left_rect.y) as usize;
+        let item_index = offset + rel_row;
+        if item_index < total && item_index != state.tree_cursor {
+            state.tree_cursor = item_index;
+            state.dirty = true;
+        }
+    }
+}
+
+fn handle_mouse_click(state: &mut AppState, column: u16, row: u16) {
+    let right_rect = compute_right_panel_rect(state);
+    let left_rect = compute_left_panel_rect(state);
+
+    if is_in_rect(column, row, &right_rect) {
+        let visible_items = (right_rect.height as usize) / 3;
+        let total = state.documents.len();
+        if total == 0 || visible_items == 0 {
+            return;
+        }
+        let offset = compute_list_offset(state.list_cursor, visible_items, total);
+        let rel_row = (row - right_rect.y) as usize;
+        let item_index = offset + rel_row / 3;
+        if item_index < total {
+            state.list_cursor = item_index;
+            state.show_detail = !state.show_detail;
+            if state.show_detail {
+                state.load_detail();
+                state.active_panel = PanelFocus::Detail;
+            } else {
+                state.detail_doc = None;
+            }
+            state.dirty = true;
+        }
+    } else if let Some(left_rect) = left_rect
+        && is_in_rect(column, row, &left_rect) {
+        let visible_items = left_rect.height as usize;
+        let total = count_tree_nodes(state);
+        if total == 0 || visible_items == 0 {
+            return;
+        }
+        let offset = compute_list_offset(state.tree_cursor, visible_items, total);
+        let rel_row = (row - left_rect.y) as usize;
+        let item_index = offset + rel_row;
+        if item_index < total {
+            state.tree_cursor = item_index;
+            state.active_panel = PanelFocus::Left;
+            handle_tree_activate(state);
+        }
+    }
+}
+
+fn is_in_rect(column: u16, row: u16, rect: &Rect) -> bool {
+    column >= rect.x
+        && column < rect.x + rect.width
+        && row >= rect.y
+        && row < rect.y + rect.height
 }
 
 fn handle_drag(state: &mut AppState, path: PathBuf) {

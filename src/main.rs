@@ -1,6 +1,7 @@
 use anyhow::Result;
-use crossterm::event::{EventStream, KeyEventKind};
+use crossterm::event::{EventStream, KeyEventKind, MouseButton, MouseEventKind};
 use futures::StreamExt;
+use std::sync::atomic::{AtomicU16, Ordering};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -9,6 +10,8 @@ use libran::config::AppConfig;
 use libran::db;
 use libran::terminal;
 use libran::ui;
+
+static LAST_HOVER_ROW: AtomicU16 = AtomicU16::new(u16::MAX);
 
 fn init_logging() {
     use tracing_subscriber::fmt;
@@ -128,8 +131,29 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
             path.map(AppAction::DragDetected)
         }
         crossterm::event::Event::Mouse(mouse) => {
-            debug!("마우스 이벤트: {:?}", mouse);
-            None
+            match mouse.kind {
+                MouseEventKind::Moved => {
+                    if mouse.row == LAST_HOVER_ROW.swap(mouse.row, Ordering::Relaxed) {
+                        None
+                    } else {
+                        Some(AppAction::MouseHover {
+                            column: mouse.column,
+                            row: mouse.row,
+                        })
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    LAST_HOVER_ROW.store(mouse.row, Ordering::Relaxed);
+                    Some(AppAction::MouseClick {
+                        column: mouse.column,
+                        row: mouse.row,
+                    })
+                }
+                _ => {
+                    debug!("마우스 이벤트: {:?}", mouse);
+                    None
+                }
+            }
         }
         crossterm::event::Event::FocusGained => {
             debug!("포커스 획득");
@@ -141,7 +165,8 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
         }
         crossterm::event::Event::Resize(w, h) => {
             debug!("리사이즈: {}x{}", w, h);
-            None
+            LAST_HOVER_ROW.store(u16::MAX, Ordering::Relaxed);
+            Some(AppAction::TerminalResize { width: *w, height: *h })
         }
     }
 }
