@@ -2,6 +2,8 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
+use crate::db::fts_query::normalize_nfc;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
     pub id: Option<i64>,
@@ -25,19 +27,19 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
         "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
-            doc.title,
-            doc.authors,
-            doc.journal,
+            normalize_nfc(&doc.title),
+            doc.authors.as_deref().map(normalize_nfc),
+            doc.journal.as_deref().map(normalize_nfc),
             doc.pub_year,
             doc.doi,
             doc.arxiv_id,
-            doc.abstract_text,
-            doc.keywords,
+            doc.abstract_text.as_deref().map(normalize_nfc),
+            doc.keywords.as_deref().map(normalize_nfc),
             doc.file_path,
             doc.file_hash,
             doc.citation_key,
             doc.source.as_deref().unwrap_or("manual"),
-            doc.conference,
+            doc.conference.as_deref().map(normalize_nfc),
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -146,15 +148,15 @@ pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
          updated_at = CURRENT_TIMESTAMP
          WHERE id = ?10",
         params![
-            doc.title,
-            doc.authors,
-            doc.journal,
-            doc.conference,
+            normalize_nfc(&doc.title),
+            doc.authors.as_deref().map(normalize_nfc),
+            doc.journal.as_deref().map(normalize_nfc),
+            doc.conference.as_deref().map(normalize_nfc),
             doc.pub_year,
             doc.doi,
             doc.arxiv_id,
-            doc.abstract_text,
-            doc.keywords,
+            doc.abstract_text.as_deref().map(normalize_nfc),
+            doc.keywords.as_deref().map(normalize_nfc),
             doc.id,
         ],
     )?;

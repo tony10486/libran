@@ -127,6 +127,58 @@ CREATE TRIGGER IF NOT EXISTS trg_fts_update AFTER UPDATE ON documents BEGIN
     VALUES (new.id, new.title, new.authors, new.journal, new.abstract, new.keywords);
 END;
 
+CREATE VIRTUAL TABLE IF NOT EXISTS documents_bigram_fts USING fts5(
+    title, authors, journal, abstract, keywords,
+    content='', tokenize='unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_bigram_insert AFTER INSERT ON documents BEGIN
+    INSERT INTO documents_bigram_fts(rowid, title, authors, journal, abstract, keywords)
+    VALUES (new.id, bigrams_cjk(new.title), bigrams_cjk(new.authors),
+            bigrams_cjk(new.journal), bigrams_cjk(new.abstract), bigrams_cjk(new.keywords));
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_bigram_delete AFTER DELETE ON documents BEGIN
+    INSERT INTO documents_bigram_fts(documents_bigram_fts, rowid, title, authors, journal, abstract, keywords)
+    VALUES ('delete', old.id, bigrams_cjk(old.title), bigrams_cjk(old.authors),
+            bigrams_cjk(old.journal), bigrams_cjk(old.abstract), bigrams_cjk(old.keywords));
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_bigram_update AFTER UPDATE ON documents BEGIN
+    INSERT INTO documents_bigram_fts(documents_bigram_fts, rowid, title, authors, journal, abstract, keywords)
+    VALUES ('delete', old.id, bigrams_cjk(old.title), bigrams_cjk(old.authors),
+            bigrams_cjk(old.journal), bigrams_cjk(old.abstract), bigrams_cjk(old.keywords));
+    INSERT INTO documents_bigram_fts(rowid, title, authors, journal, abstract, keywords)
+    VALUES (new.id, bigrams_cjk(new.title), bigrams_cjk(new.authors),
+            bigrams_cjk(new.journal), bigrams_cjk(new.abstract), bigrams_cjk(new.keywords));
+END;
+
+CREATE VIRTUAL TABLE IF NOT EXISTS documents_choseong_fts USING fts5(
+    title, authors, journal, abstract, keywords,
+    content='', tokenize='unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_choseong_insert AFTER INSERT ON documents BEGIN
+    INSERT INTO documents_choseong_fts(rowid, title, authors, journal, abstract, keywords)
+    VALUES (new.id, choseong_bigrams_cjk(new.title), choseong_bigrams_cjk(new.authors),
+            choseong_bigrams_cjk(new.journal), choseong_bigrams_cjk(new.abstract), choseong_bigrams_cjk(new.keywords));
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_choseong_delete AFTER DELETE ON documents BEGIN
+    INSERT INTO documents_choseong_fts(documents_choseong_fts, rowid, title, authors, journal, abstract, keywords)
+    VALUES ('delete', old.id, choseong_bigrams_cjk(old.title), choseong_bigrams_cjk(old.authors),
+            choseong_bigrams_cjk(old.journal), choseong_bigrams_cjk(old.abstract), choseong_bigrams_cjk(old.keywords));
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_choseong_update AFTER UPDATE ON documents BEGIN
+    INSERT INTO documents_choseong_fts(documents_choseong_fts, rowid, title, authors, journal, abstract, keywords)
+    VALUES ('delete', old.id, choseong_bigrams_cjk(old.title), choseong_bigrams_cjk(old.authors),
+            choseong_bigrams_cjk(old.journal), choseong_bigrams_cjk(old.abstract), choseong_bigrams_cjk(old.keywords));
+    INSERT INTO documents_choseong_fts(rowid, title, authors, journal, abstract, keywords)
+    VALUES (new.id, choseong_bigrams_cjk(new.title), choseong_bigrams_cjk(new.authors),
+            choseong_bigrams_cjk(new.journal), choseong_bigrams_cjk(new.abstract), choseong_bigrams_cjk(new.keywords));
+END;
+
 CREATE TABLE IF NOT EXISTS api_cache (
     cache_key       TEXT PRIMARY KEY,
     source          TEXT NOT NULL,

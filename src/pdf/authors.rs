@@ -192,32 +192,58 @@ mod tests {
     }
 
     #[test]
+    fn test_guess_authors_iop_with_nbsp_and_noise() {
+        let text = "Home Search Collections\nA short guide to pure point diffraction in cut-and-project sets\n\n16, 2345,,, Christoph\u{a0}Richard and Nicolae\u{a0}Strungaru\n\n1 Department für Mathematik, Friedrich-Alexander-Universität Erlangen-Nürnberg\n\nAbstract\nWe briefly review the diffraction of quasicrystals.\n";
+        let authors = guess_authors(text);
+        assert!(
+            authors.iter().any(|a| a.contains("Christoph Richard") || a.contains("Richard")),
+            "should find Christoph Richard: {authors:?}"
+        );
+        assert!(
+            authors.iter().any(|a| a.contains("Nicolae Strungaru") || a.contains("Strungaru")),
+            "should find Nicolae Strungaru: {authors:?}"
+        );
+    }
+
+    #[test]
+    fn test_guess_authors_no_abstract_marker_with_and_pattern() {
+        let text = "Some Journal Title\nA Great Paper Title Here\nChristoph Richard and Nicolae Strungaru\n1 Department of Math, Some University\nE-mail: foo@bar.edu\nReceived 27 June 2016\n1. Introduction\nLorem ipsum dolor sit amet.\n";
+        let authors = guess_authors(text);
+        assert!(
+            !authors.is_empty(),
+            "should find authors without abstract marker: {authors:?}"
+        );
+        assert!(authors.iter().any(|a| a.contains("Richard") || a.contains("Strungaru")));
+    }
+
+    #[test]
     fn diag_richard2017() {
         let path = std::path::PathBuf::from("tmp/[중요]richard2017.pdf");
         if !path.exists() {
-            eprintln!("SKIP diag: PDF not found");
             return;
         }
+        use std::io::Write;
+        let mut f = std::fs::File::create("/tmp/richard_diag.txt").unwrap();
         let text = crate::pdf::text::extract_text(&path).expect("extract_text");
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        eprintln!("=== {} non-empty lines, {} chars ===", lines.len(), text.len());
+        writeln!(f, "=== {} non-empty lines, {} chars ===", lines.len(), text.len()).unwrap();
         for (i, line) in lines.iter().take(50).enumerate() {
-            eprintln!("  L{:02}: {:?}", i, &line[..line.len().min(200)]);
+            writeln!(f, "  L{:02}: {:?}", i, &line[..line.len().min(200)]).unwrap();
         }
-        eprintln!("\n=== Abstract search ===");
+        writeln!(f, "\n=== Abstract search ===").unwrap();
         for (i, line) in lines.iter().enumerate() {
             let low = line.trim().to_lowercase();
             if low.starts_with("abstract") {
-                eprintln!("  L{:02}: {:?}", i, &line[..line.len().min(200)]);
+                writeln!(f, "  L{:02}: {:?}", i, &line[..line.len().min(200)]).unwrap();
                 break;
             }
         }
         let authors = guess_authors(&text);
-        eprintln!("\n=== guess_authors result: {:?} ===", authors);
+        writeln!(f, "\n=== guess_authors result: {:?} ===", authors).unwrap();
         let meta = crate::pdf::process_file(&path).expect("process_file");
-        eprintln!("  title: {:?}", meta.title);
-        eprintln!("  authors: {:?}", meta.authors);
-        eprintln!("  journal: {:?}", meta.journal);
-        eprintln!("  pub_year: {:?}", meta.pub_year);
+        writeln!(f, "  title: {:?}", meta.title).unwrap();
+        writeln!(f, "  authors: {:?}", meta.authors).unwrap();
+        writeln!(f, "  journal: {:?}", meta.journal).unwrap();
+        writeln!(f, "  pub_year: {:?}", meta.pub_year).unwrap();
     }
 }

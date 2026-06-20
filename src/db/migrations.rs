@@ -1,6 +1,8 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
+use crate::db::fts_query::normalize_nfc;
+
 /// Migration versions for tracking applied migrations.
 const MIGRATION_KEY: &str = "db_version";
 
@@ -93,6 +95,86 @@ pub fn run(conn: &Connection) -> Result<()> {
         )?;
 
         set_version(conn, 2)?;
+    }
+
+    if version < 3 {
+        // Migration 3: populate bigram FTS table + NFC-normalize existing documents
+        conn.execute(
+            "INSERT INTO documents_bigram_fts(rowid, title, authors, journal, abstract, keywords)
+             SELECT id, bigrams_cjk(title), bigrams_cjk(authors), bigrams_cjk(journal),
+                    bigrams_cjk(abstract), bigrams_cjk(keywords)
+             FROM documents",
+            [],
+        )?;
+
+        nfc_normalize_existing_documents(conn)?;
+
+        set_version(conn, 3)?;
+    }
+
+    if version < 4 {
+        // Migration 4: populate choseong FTS table for 초성 search
+        conn.execute(
+            "INSERT INTO documents_choseong_fts(rowid, title, authors, journal, abstract, keywords)
+             SELECT id, choseong_bigrams_cjk(title), choseong_bigrams_cjk(authors),
+                    choseong_bigrams_cjk(journal), choseong_bigrams_cjk(abstract),
+                    choseong_bigrams_cjk(keywords)
+             FROM documents",
+            [],
+        )?;
+
+        set_version(conn, 4)?;
+    }
+
+    Ok(())
+}
+
+fn nfc_normalize_existing_documents(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, authors, journal, abstract, keywords FROM documents",
+    )?;
+    let docs: Vec<(i64, String, Option<String>, Option<String>, Option<String>, Option<String>)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+            ))
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt);
+
+    for (id, title, authors, journal, abstract_text, keywords) in docs {
+        let title_n = normalize_nfc(&title);
+        let authors_n = authors.as_deref().map(normalize_nfc);
+        let journal_n = journal.as_deref().map(normalize_nfc);
+        let abstract_n = abstract_text.as_deref().map(normalize_nfc);
+        let keywords_n = keywords.as_deref().map(normalize_nfc);
+
+        let changed = title_n != title
+            || authors_n != authors
+            || journal_n != journal
+            || abstract_n != abstract_text
+            || keywords_n != keywords;
+
+        if changed {
+            conn.execute(
+                "UPDATE documents SET title = ?1, authors = ?2, journal = ?3,
+                 abstract = ?4, keywords = ?5 WHERE id = ?6",
+                rusqlite::params![
+                    title_n,
+                    authors_n,
+                    journal_n,
+                    abstract_n,
+                    keywords_n,
+                    id,
+                ],
+            )?;
+        }
     }
 
     Ok(())
