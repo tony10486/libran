@@ -2,3 +2,6 @@
 /target
 *.db
 *.db-journal
+*.pdf
+bugs.md
+/tmp

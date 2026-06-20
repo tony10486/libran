@@ -51,20 +51,53 @@ pub fn process_file(path: &Path) -> Result<RawMetadata> {
     }
 
     if let Ok(text) = text::extract_text(path) {
-        let first_pages = extract_first_pages(&text, 2);
-        let ids = identifiers::search_academic_identifiers(&first_pages);
+        let ids = identifiers::search_academic_identifiers(&text);
         metadata.doi = ids.doi;
         metadata.arxiv_id = ids.arxiv_id;
 
-        if metadata.title.is_none() {
-            metadata.title = heuristic::guess_title(&first_pages);
+        if metadata.arxiv_id.is_none() {
+            metadata.arxiv_id = extract_arxiv_from_filename(path);
         }
+
+        if metadata.title.is_none() {
+            metadata.title = heuristic::guess_title(&text);
+        }
+
+        if metadata.authors.is_empty() {
+            metadata.authors = heuristic::guess_authors(&text);
+        }
+    }
+
+    if metadata.title.is_none() {
+        metadata.title = extract_title_from_filename(path);
     }
 
     Ok(metadata)
 }
 
-fn extract_first_pages(text: &str, page_count: usize) -> String {
-    let pages: Vec<&str> = text.split('\x0c').collect();
-    pages.into_iter().take(page_count).collect::<Vec<_>>().join("\n")
+fn extract_arxiv_from_filename(path: &Path) -> Option<String> {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+
+    static ARXIV_FILE_RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(\d{4}\.\d{4,5}(?:v\d+)?)").unwrap()
+    });
+
+    let filename = path.file_name()?.to_string_lossy();
+    let caps = ARXIV_FILE_RE.captures(&filename)?;
+    Some(caps[1].to_string())
+}
+
+fn extract_title_from_filename(path: &Path) -> Option<String> {
+    let stem = path.file_stem()?.to_string_lossy();
+    let cleaned = stem.replace(['_', '-'], " ");
+    let title = cleaned
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if title.is_empty() {
+        None
+    } else {
+        Some(title)
+    }
 }

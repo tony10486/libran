@@ -12,6 +12,7 @@ crossterm = { version = "0.28", features = ["event-stream"] }
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 lopdf = "0.37"
+unpdf = "=0.7.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 regex = "1"
@@ -28,6 +29,7 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
 
 [dev-dependencies]
 tempfile = "3"

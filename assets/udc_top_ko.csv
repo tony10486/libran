@@ -1,0 +1,87 @@
+notation,ko_label,en_label
+0,총류·정보학,Computer science, information & general works
+00,지식·학문,Knowledge & scholarship
+004,컴퓨터과학·컴퓨팅,Computer science & computing
+005,소프트웨어 공학,Software engineering
+01,서지학,Bibliography & bibliographies
+02,도서관학,Librarianship
+1,철학·심리학,Philosophy & psychology
+11,인식론·인과론,Epistemology & causation
+15,비자연주의 철학,Non-naturalistic philosophies
+16,논리학,Logic
+17,윤리·도덕철학,Ethics & moral philosophy
+2,종교,Religion
+21,초기 그리스도교 이전 종교,Pre-Christian & early Christian religions
+22,성서,Bible
+23,그리스도교 교파,Christian denominations
+3,사회과학,Social sciences
+31,통계학·인구통계,Statistics & demography
+32,정치·정치학,Politics & political science
+33,경제학,Economics
+34,법학,Law
+35,행정학,Public administration
+36,사회복지·사회문제,Social welfare & social problems
+37,교육학,Education
+38,상업·통신,Commerce & communications
+39,풍속·민속,Customs & folklore
+4,(공석),(Vacant)
+5,수학·자연과학,Mathematics & natural sciences
+50,일반 자연과학,General natural sciences
+51,수학,Mathematics
+512,대수학,Algebra
+514,기하학,Geometry
+515,위상수학,Topology
+517,해석학,Analysis
+517.9,미분방정식·적분방정식,Differential equations & integral equations
+52,천문학·천체물리학,Astronomy & astrophysics
+53,물리학,Physics
+531,역학,Mechanics
+532,유체역학,Fluid mechanics
+533,기체역학,Gas mechanics
+535,광학,Optics
+537,전기·전자기학,Electricity & electromagnetism
+538,자기학,Magnetism
+538.9,응축물질물리학,Condensed matter physics
+539,물질의 물리적 본성,Physical nature of matter
+54,화학,Chemistry
+541,물리화학,Physical chemistry
+542,실용·실험화학,Practical & laboratory chemistry
+543,분석화학,Analytical chemistry
+546,무기화학,Inorganic chemistry
+547,유기화학,Organic chemistry
+55,지구과학·지질학,Earth sciences & geology
+56,고생물학,Paleontology
+57,생물학,Biology
+58,식물학,Botany
+59,동물학,Zoology
+6,응용과학·기술,Applied sciences & technology
+60,일반 응용과학,General applied sciences
+61,의학·보건,Medicine & health
+62,공학,Engineering
+63,농업·관련 기술,Agriculture & related technologies
+64,가정학,Home economics
+65,경영·관리,Management & business
+66,화학 기술,Chemical technology
+67,제조·금속공학,Manufacturing & metalworking
+68,기타 기술,Other technologies
+69,건설·건축,Building & construction
+7,예술·레크리에이션,Arts & recreation
+71,물리계획·도시설계,Physical planning & urban design
+72,건축학,Architecture
+73,조각,Sculpture
+74,드로잉·장식예술,Drawing & decorative arts
+75,회화,Painting
+76,그래픽예술·판화,Graphic arts & prints
+77,사진학,Photography
+78,음악,Music
+79,레크리에이션·스포츠,Recreation & sports
+8,언어·언어학,Language & linguistics
+80,일반 언어학,General linguistics
+81,언어,Languages
+82,문학,Literature
+9,역사·지리,History & geography
+90,일반 역사,General history
+91,지리학,Geography
+92,전기,Biography
+93,고대사,History of ancient world
+94,근현대사,History of modern world

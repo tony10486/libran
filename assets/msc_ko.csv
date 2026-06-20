@@ -1,0 +1,63 @@
+notation,ko_label,en_label
+00,일반,General
+01,역사·전기,History and biography
+03,논문집·총서,Collected works
+05,현장 간행물,Expository publications
+06,연구 기관·학회,Research institutes and societies
+08,컴퓨터 과학,Computer science
+11,수사학·수론,Number theory
+12,체론,Field theory and polynomials
+13,환론·가환대수,Commutative algebra
+14,대수기하학,Algebraic geometry
+15,선형대수학·다중선형대수,Linear and multilinear algebra
+16,결합대수학,Associative rings and algebras
+17,비결합대수학,Nonassociative rings and algebras
+18,범주론·동수대수,Category theory; homological algebra
+19,K-이론,K-theory
+20,군론·일반화,Group theory and generalizations
+22,위상군·리군,Topological groups; Lie groups
+26,실함수,Real functions
+28,측도·적분,Measure and integration
+30,복소함수,Functions of a complex variable
+31,퍼텐셜 이론,Potential theory
+32,여러 복소변수,Several complex variables
+33,특수함수,Special functions
+34,상미분방정식,Ordinary differential equations
+35,편미분방정식,Partial differential equations
+37,동역학계·에르고딕 이론,Dynamical systems and ergodic theory
+39,차분방정식·함수방정식,Difference and functional equations
+40,수열·급수,Sequences; series
+41,근사론·전개,Approximations and expansions
+42,푸리에해석,Fourier analysis
+43,추상조화해석,Abstract harmonic analysis
+44,적분변환,Integral transforms
+45,적분방정식,Integral equations
+46,함수해석,Functional analysis
+47,작용소 이론,Operator theory
+49,변분법·최적화,Calculus of variations; optimization
+51,기하학,Geometry
+52,변분기하,Convex and differential geometry
+53,미분기하,Differential geometry
+54,일반위상수학,General topology
+55,대수적 위상수학,Algebraic topology
+57,다양체·셀 복합체,Manifolds and cell complexes
+58,대수적 위상기하,Global analysis; analysis on manifolds
+60,확률론,Probability theory
+62,통계학,Statistics
+65,수치해석,Numerical analysis
+68,컴퓨터 과학,Computer science
+70,기계·계산체계,Mechanics of systems
+70-08,계산체계의 컴퓨터 방법,Computational methods in mechanics of systems
+74,변형체 역학,Mechanics of deformable solids
+76,유체역학,Fluid mechanics
+78,광학·전자기학,Optics; electromagnetic theory
+80,열역학·통계물리,Classical thermodynamics; statistical mechanics
+81,양자이론,Quantum theory
+82,통계물리,Statistical mechanics
+83,상대론·중력,Relativity and gravitational theory
+85,천문학·천체물리,Astronomy and astrophysics
+86,지구물리,Geophysics
+90,생물학·생체역학,Biology; biomechanics
+92,기타 자연과학,Other natural sciences
+94,정보·통신·회로,Information and communication; circuits
+97,수학교육,Mathematics education

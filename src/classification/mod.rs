@@ -1,4 +1,5 @@
 pub mod custom;
+pub mod data_loader;
 pub mod label_override;
 pub mod lcc;
 pub mod msc;

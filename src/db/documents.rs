@@ -160,6 +160,27 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Document>> {
     Ok(docs)
 }
 
+pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
+    conn.execute(
+        "UPDATE documents SET title = ?1, authors = ?2, journal = ?3, pub_year = ?4,
+         doi = ?5, arxiv_id = ?6, abstract = ?7, keywords = ?8,
+         updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?9",
+        params![
+            doc.title,
+            doc.authors,
+            doc.journal,
+            doc.pub_year,
+            doc.doi,
+            doc.arxiv_id,
+            doc.abstract_text,
+            doc.keywords,
+            doc.id,
+        ],
+    )?;
+    Ok(())
+}
+
 pub fn update_citation_key(conn: &Connection, id: i64, key: &str) -> Result<()> {
     conn.execute(
         "UPDATE documents SET citation_key = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",

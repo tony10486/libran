@@ -155,3 +155,29 @@ pub fn get_node_id(conn: &Connection, scheme_code: &str, notation: &str) -> Resu
         .ok();
     Ok(result)
 }
+
+pub fn set_label_by_notation(
+    conn: &Connection,
+    scheme_id: i64,
+    notation: &str,
+    lang: &str,
+    label: &str,
+    source: &str,
+) -> Result<()> {
+    let node_id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM classification_nodes WHERE scheme_id = ?1 AND notation = ?2",
+            rusqlite::params![scheme_id, notation],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(nid) = node_id {
+        conn.execute(
+            "INSERT OR REPLACE INTO classification_labels (node_id, lang, label, source)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![nid, lang, label, source],
+        )?;
+    }
+    Ok(())
+}

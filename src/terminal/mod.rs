@@ -3,10 +3,11 @@ pub mod input;
 pub mod paste;
 
 use anyhow::Result;
-use crossterm::{
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+use crossterm::event::{
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
 };
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::execute;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{self, Stdout};
@@ -19,7 +20,8 @@ pub fn setup_terminal() -> Result<AppTerminal> {
     execute!(
         stdout,
         EnterAlternateScreen,
-        crossterm::event::EnableBracketedPaste,
+        EnableBracketedPaste,
+        EnableMouseCapture,
     )?;
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
@@ -30,7 +32,8 @@ pub fn restore_terminal(terminal: &mut AppTerminal) -> Result<()> {
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
-        crossterm::event::DisableBracketedPaste,
+        DisableBracketedPaste,
+        DisableMouseCapture,
         LeaveAlternateScreen,
     )?;
     terminal.show_cursor()?;
