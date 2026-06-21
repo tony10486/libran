@@ -1,6 +1,5 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::time::Duration as StdDuration;
@@ -127,40 +126,42 @@ pub fn store_cached_metrics(
     Ok(())
 }
 
-fn create_client() -> Result<Client> {
-    let client = Client::builder()
-        .timeout(StdDuration::from_secs(15))
-        .build()?;
-    Ok(client)
-}
-
 pub async fn fetch_author_metrics(
     backend: MetricsBackend,
     api_key: Option<&str>,
     author_name: &str,
 ) -> Result<AuthorMetrics> {
-    match backend {
-        MetricsBackend::SemanticScholar => {
-            match fetch_from_semantic_scholar(author_name).await {
-                Ok(m) => Ok(m),
-                Err(first_err) => {
-                    if first_err.to_string().contains("429") {
-                        tokio::time::sleep(StdDuration::from_secs(2)).await;
-                        fetch_from_semantic_scholar(author_name)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("재시도 후에도 실패: {}", e))
-                    } else {
-                        Err(first_err)
-                    }
+    const MAX_RETRIES: u32 = 3;
+    let mut backoff_secs: u64 = 1;
+    let mut last_err: Option<anyhow::Error> = None;
+
+    for attempt in 0..=MAX_RETRIES {
+        let result = match backend {
+            MetricsBackend::SemanticScholar => {
+                fetch_from_semantic_scholar(author_name).await
+            }
+            MetricsBackend::OpenAlex => fetch_from_openalex(api_key, author_name).await,
+        };
+
+        match result {
+            Ok(m) => return Ok(m),
+            Err(e) => {
+                let is_rate_limited = e.to_string().contains("429");
+                if !is_rate_limited || attempt == MAX_RETRIES {
+                    return Err(e);
                 }
+                last_err = Some(e);
+                tokio::time::sleep(StdDuration::from_secs(backoff_secs)).await;
+                backoff_secs = backoff_secs.saturating_mul(2);
             }
         }
-        MetricsBackend::OpenAlex => fetch_from_openalex(api_key, author_name).await,
     }
+
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("재시도 실패")))
 }
 
 async fn fetch_from_semantic_scholar(author_name: &str) -> Result<AuthorMetrics> {
-    let client = create_client()?;
+    let client = crate::api::http_client::create_polite_http_client(None, 15)?;
     let url = format!(
         "https://api.semanticscholar.org/graph/v1/author/search?query={}&fields=name,paperCount,citationCount,hIndex&limit=1",
         urlencoding::encode(author_name)
@@ -197,7 +198,7 @@ async fn fetch_from_semantic_scholar(author_name: &str) -> Result<AuthorMetrics>
 }
 
 async fn fetch_from_openalex(api_key: Option<&str>, author_name: &str) -> Result<AuthorMetrics> {
-    let client = create_client()?;
+    let client = crate::api::http_client::create_polite_http_client(None, 15)?;
     let mut url = format!(
         "https://api.openalex.org/authors?search={}&per_page=1&select=id,display_name,works_count,cited_by_count,summary_stats",
         urlencoding::encode(author_name)
@@ -234,20 +235,6 @@ async fn fetch_from_openalex(api_key: Option<&str>, author_name: &str) -> Result
         cited_by_count: Some(author.cited_by_count),
         source: MetricsBackend::OpenAlex,
     })
-}
-
-mod urlencoding {
-    pub fn encode(s: &str) -> String {
-        s.chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~' {
-                    c.to_string()
-                } else {
-                    format!("%{:02X}", c as u32)
-                }
-            })
-            .collect()
-    }
 }
 
 #[derive(Deserialize)]

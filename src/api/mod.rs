@@ -1,6 +1,7 @@
 pub mod arxiv;
 pub mod cache;
 pub mod crossref;
+pub mod http_client;
 pub mod metrics;
 pub mod rate_limiter;
 

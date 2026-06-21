@@ -176,7 +176,7 @@ fn render_edit_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let popup = centered_rect(60, 50, area);
     frame.render_widget(Clear, popup);
 
-    let field_name = crate::app::dispatcher::EDIT_FIELD_NAMES
+    let field_name = crate::app::dispatcher::EDIT_FIELDS
         .get(state.edit_field)
         .unwrap_or(&"?");
 
@@ -197,7 +197,7 @@ fn render_edit_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         Line::from(vec![
             Span::styled("  필드: ", Style::default().fg(Color::DarkGray).bg(Color::Black)),
             Span::styled(
-                format!("{} ({}/{})", field_name, state.edit_field + 1, crate::app::dispatcher::EDIT_FIELD_NAMES.len()),
+                format!("{} ({}/{})", field_name, state.edit_field + 1, crate::app::dispatcher::EDIT_FIELDS.len()),
                 Style::default().fg(Color::Cyan).bg(Color::Black),
             ),
         ]),

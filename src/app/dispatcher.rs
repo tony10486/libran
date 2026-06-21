@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
-use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 use crate::citation::generate_citation_key;
 use crate::citation::cache;
 use crate::citation::entry;
@@ -19,11 +18,14 @@ use crate::similarity::scoring::{compute_scores, DocumentFeatures};
 use crate::storage::library;
 
 use super::action::{AppAction, GraphDirection};
+use super::api_metadata::*;
+use super::custom_fields_handler::*;
 use super::graph_state::GraphState;
+use super::metrics_handler::*;
 use super::state::PanelFocus;
 use super::AppState;
 
-const EDIT_FIELDS: &[&str] = &["제목", "저자", "저널", "학회", "연도", "DOI", "arXiv", "초록", "키워드"];
+pub const EDIT_FIELDS: &[&str] = &["제목", "저자", "저널", "학회", "연도", "DOI", "arXiv", "초록", "키워드"];
 
 pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
     match action {
@@ -241,7 +243,7 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
     false
 }
 
-fn normalize_korean_key(key: KeyEvent) -> KeyEvent {
+pub(crate) fn normalize_korean_key(key: KeyEvent) -> KeyEvent {
     if let KeyCode::Char(c) = key.code {
         if let Some(mapped) = korean_to_qwerty(c) {
             return KeyEvent { code: KeyCode::Char(mapped), modifiers: key.modifiers, kind: key.kind, state: key.state };
@@ -662,13 +664,7 @@ fn cycle_pair(current: PanelFocus, (a, b): (PanelFocus, PanelFocus), forward: bo
 
 fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
     match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => {
-            state.show_detail = false;
-            state.detail_doc = None;
-            state.active_panel = PanelFocus::Right;
-            state.dirty = true;
-        }
-        KeyCode::Enter => {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
             state.show_detail = false;
             state.detail_doc = None;
             state.active_panel = PanelFocus::Right;
@@ -1084,184 +1080,6 @@ fn handle_confirm_delete_key(state: &mut AppState, key: KeyEvent) -> bool {
     false
 }
 
-fn handle_metrics_overlay_key(state: &mut AppState, key: KeyEvent) -> bool {
-    let key = normalize_korean_key(key);
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
-            state.show_metrics_overlay = false;
-            state.metrics_overlay_name.clear();
-            state.dirty = true;
-        }
-        _ => {}
-    }
-    false
-}
-
-fn handle_api_key_input_key(state: &mut AppState, key: KeyEvent) -> bool {
-    match key.code {
-        KeyCode::Esc => {
-            state.api_key_input_mode = false;
-            state.api_key_input.clear();
-            state.set_status("준비됨");
-        }
-        KeyCode::Enter => {
-            let key_input = state.api_key_input.clone();
-            state.api_key_input_mode = false;
-            state.api_key_input.clear();
-            let _ = state.action_tx.try_send(AppAction::RegisterApiKey(key_input));
-        }
-        KeyCode::Backspace => {
-            state.api_key_input.pop();
-            state.dirty = true;
-        }
-        KeyCode::Char(c) => {
-            state.api_key_input.push(c);
-            state.dirty = true;
-        }
-        _ => {}
-    }
-    false
-}
-
-fn handle_fetch_author_metrics(state: &mut AppState, name: String) {
-    if !state.api_mode.allows_api_calls() {
-        state.set_status("오프라인 모드입니다 (o 키로 전환)");
-        return;
-    }
-    if let Some(existing) = state.author_metrics.get(&name) {
-        state.show_metrics_overlay = true;
-        state.metrics_overlay_name = name.clone();
-        state.set_status(&format!(
-            "캐시된 지표: {} (h={}, 출처: {})",
-            existing.name,
-            existing.h_index.unwrap_or(0),
-            existing.source.display_name()
-        ));
-        state.dirty = true;
-        return;
-    }
-
-    let backend = state.metrics_backend;
-    let max_age = state.metrics_refresh_interval_days;
-    let cached_metrics = {
-        if let Ok(conn) = state.db.lock() {
-            crate::api::metrics::get_cached_metrics(&conn, backend, &name, max_age)
-                .ok()
-                .flatten()
-        } else {
-            None
-        }
-    };
-    if let Some(cached) = cached_metrics {
-        state.author_metrics.insert(name.clone(), cached.clone());
-        state.show_metrics_overlay = true;
-        state.metrics_overlay_name = name.clone();
-        state.set_status(&format!(
-            "캐시된 지표: {} (h={}, 출처: {})",
-            cached.name,
-            cached.h_index.unwrap_or(0),
-            cached.source.display_name()
-        ));
-        state.dirty = true;
-        return;
-    }
-
-    let backend = state.metrics_backend;
-    let api_key = state.openalex_api_key.clone();
-    let tx = state.action_tx.clone();
-    let name_clone = name.clone();
-    let db = state.db.clone();
-    let stale_metrics = if let Ok(conn) = db.lock() {
-        crate::api::metrics::get_stale_cached_metrics(&conn, backend, &name_clone)
-            .ok()
-            .flatten()
-    } else {
-        None
-    };
-    tokio::spawn(async move {
-        match crate::api::metrics::fetch_author_metrics(backend, api_key.as_deref(), &name_clone)
-            .await
-        {
-            Ok(metrics) => {
-                if let Ok(conn) = db.lock() {
-                    let _ = crate::api::metrics::store_cached_metrics(
-                        &conn, backend, &name_clone, &metrics,
-                    );
-                }
-                let _ = tx
-                    .send(AppAction::AuthorMetricsFetched {
-                        name: name_clone,
-                        metrics: Box::new(metrics),
-                    })
-                    .await;
-            }
-            Err(e) => {
-                let err_str = e.to_string();
-                if (err_str.contains("429") || err_str.contains("제한"))
-                    && let Some(stale) = stale_metrics
-                {
-                    let _ = tx
-                        .send(AppAction::AuthorMetricsFetched {
-                            name: name_clone,
-                            metrics: Box::new(stale),
-                        })
-                        .await;
-                    return;
-                }
-                let _ = tx
-                    .send(AppAction::AuthorMetricsFailed {
-                        name: name_clone,
-                        reason: err_str,
-                    })
-                    .await;
-            }
-        }
-    });
-}
-
-fn handle_author_metrics_fetched(state: &mut AppState, name: String, metrics: AuthorMetrics) {
-    state.author_metrics.insert(name.clone(), metrics.clone());
-    state.show_metrics_overlay = true;
-    state.metrics_overlay_name = name.clone();
-    state.set_status(&format!(
-        "지표 조회 완료: {} (h={})",
-        name,
-        metrics.h_index.unwrap_or(0)
-    ));
-    state.dirty = true;
-}
-
-fn handle_set_metrics_backend(state: &mut AppState, backend: MetricsBackend) {
-    state.metrics_backend = backend;
-    if let Ok(conn) = state.db.lock() {
-        let _ = conn.execute(
-            "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
-             VALUES ('metrics_backend', ?1, datetime('now'))",
-            rusqlite::params![backend.as_str()],
-        );
-    }
-    state.set_status(&format!("지표 백엔드: {}", backend.display_name()));
-}
-
-fn handle_register_api_key(state: &mut AppState, key: String) {
-    let key_trimmed = key.trim().to_string();
-    if key_trimmed.is_empty() {
-        state.set_status("API 키가 비어 있어 백엔드를 Semantic Scholar로 전환합니다");
-        handle_set_metrics_backend(state, MetricsBackend::SemanticScholar);
-        return;
-    }
-    state.openalex_api_key = Some(key_trimmed.clone());
-    if let Ok(conn) = state.db.lock() {
-        let _ = conn.execute(
-            "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
-             VALUES ('openalex_api_key', ?1, datetime('now'))",
-            rusqlite::params![key_trimmed],
-        );
-    }
-    handle_set_metrics_backend(state, MetricsBackend::OpenAlex);
-    state.set_status("OpenAlex API 키 등록 완료");
-}
-
 fn handle_edit_key(state: &mut AppState, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
@@ -1349,30 +1167,27 @@ fn handle_tree_activate(state: &mut AppState) {
     let cursor = state.tree_cursor;
     let projects_header = 1usize;
     let projects_rows = state.projects.len().max(1);
-    let first_spacer = 1usize;
+        let first_spacer = 1usize;
 
-    // Cursor on "프로젝트" header or first spacer — no-op.
     if cursor < projects_header + projects_rows + first_spacer {
-        // Cursor on a project row?
         if cursor >= projects_header && cursor < projects_header + projects_rows {
             let proj_idx = cursor - projects_header;
             if let Some(proj) = state.projects.get(proj_idx) {
                 let new_id = if state.active_project_id == proj.id { None } else { proj.id };
                 let _ = state.action_tx.try_send(AppAction::SelectProject(new_id));
             }
+            }
+            return;
         }
-        return;
-    }
 
-    let mut idx = projects_header + projects_rows + first_spacer;
+        let mut idx = projects_header + projects_rows + first_spacer;
 
-    if state.series_grouping_enabled {
-        let series_header = 1usize;
-        let series_rows = state.series.len().max(1);
-        let series_section = series_header + series_rows;
-        if cursor < idx + series_section + 1 {
-            // Cursor on a series row?
-            if cursor >= idx + series_header && cursor < idx + series_header + series_rows {
+        if state.series_grouping_enabled {
+            let series_header = 1usize;
+            let series_rows = state.series.len().max(1);
+            let series_section = series_header + series_rows;
+            if cursor < idx + series_section + 1 {
+                if cursor >= idx + series_header && cursor < idx + series_header + series_rows {
                 let ser_idx = cursor - (idx + series_header);
                 if let Some(ser) = state.series.get(ser_idx) {
                     let new_id = if state.active_series_id == ser.id { None } else { ser.id };
@@ -1415,7 +1230,6 @@ fn handle_tree_activate(state: &mut AppState) {
         idx += authors_section + 1; // +1 for trailing spacer
     }
 
-    // Now idx points to "UDC 분류" header.
     let tree_idx = cursor - idx - 1; // -1 to skip the UDC header
     if tree_idx < UDC_TOP_LEVEL_STRS.len() {
         let notation = UDC_TOP_LEVEL_STRS[tree_idx].to_string();
@@ -1738,366 +1552,6 @@ fn process_metadata_inner(
             MetaResult::Saved(id)
         }
         Err(e) => MetaResult::Failed(e.to_string()),
-    }
-}
-
-fn try_api_lookup(tx: tokio::sync::mpsc::Sender<AppAction>, mode: crate::api::ApiMode, doc: &documents::Document) {
-    let doi = doc.doi.clone();
-    let arxiv_id = doc.arxiv_id.clone();
-    let doc_id = doc.id.unwrap_or(0);
-    let title = doc.title.clone();
-
-    tokio::spawn(async move {
-        if let Some(doi) = doi {
-            match crate::api::crossref::create_polite_http_client(None) {
-                Ok(client) => {
-                    match crate::api::crossref::fetch_by_doi(&client, &doi).await {
-                        Ok(body) => {
-                            if let Some(meta) = parse_crossref_response(&body) {
-                                let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
-                            } else {
-                                let _ = tx.send(AppAction::ApiLookupSkipped("CrossRef 응답 파싱 실패".to_string())).await;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
-                }
-            }
-        } else if let Some(arxiv) = arxiv_id {
-            match crate::api::arxiv::create_client() {
-                Ok(client) => {
-                    match crate::api::arxiv::fetch_by_arxiv_id(&client, &arxiv).await {
-                        Ok(body) => {
-                            if let Some(meta) = parse_arxiv_response(&body) {
-                                let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
-                            } else {
-                                let _ = tx.send(AppAction::ApiLookupSkipped("arXiv 응답 파싱 실패".to_string())).await;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
-                }
-            }
-        } else if mode == crate::api::ApiMode::AutoFallback {
-            match crate::api::crossref::create_polite_http_client(None) {
-                Ok(client) => {
-                    match crate::api::crossref::search_by_title(&client, &title).await {
-                        Ok(body) => {
-                            if let Some(meta) = parse_crossref_search_response(&body) {
-                                let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
-                            } else {
-                                let _ = tx.send(AppAction::ApiLookupSkipped("제목 검색 결과 없음".to_string())).await;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
-                }
-            }
-        } else {
-            let _ = tx.send(AppAction::ApiLookupSkipped("식별자 없음".to_string())).await;
-        }
-    });
-}
-
-fn parse_crossref_response(body: &str) -> Option<pdf::RawMetadata> {
-    let json: serde_json::Value = serde_json::from_str(body).ok()?;
-    let message = json.get("message")?;
-    let title = message.get("title").and_then(|t| t.as_array()).and_then(|a| a.first()).and_then(|t| t.as_str());
-    let authors = message.get("author").and_then(|a| a.as_array()).map(|arr| {
-        arr.iter().filter_map(|a| {
-            let family = a.get("family").and_then(|f| f.as_str()).unwrap_or("");
-            let given = a.get("given").and_then(|g| g.as_str()).unwrap_or("");
-            if !family.is_empty() {
-                if given.is_empty() {
-                    Some(family.to_string())
-                } else {
-                    Some(format!("{}, {}", family, given))
-                }
-            } else {
-                a.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())
-            }
-        }).collect::<Vec<String>>()
-    }).unwrap_or_default();
-
-    let journal = message.get("container-title").and_then(|t| t.as_array()).and_then(|a| a.first()).and_then(|t| t.as_str());
-    let year = message.get("published-print").or_else(|| message.get("published-online")).or_else(|| message.get("issued"))
-        .and_then(|d| d.get("date-parts")).and_then(|d| d.as_array()).and_then(|a| a.first())
-        .and_then(|a| a.as_array()).and_then(|a| a.first()).and_then(|y| y.as_i64());
-    let doi = message.get("DOI").and_then(|d| d.as_str());
-    let abstract_text = message.get("abstract").and_then(|a| a.as_str()).map(strip_jats_tags);
-
-    Some(pdf::RawMetadata {
-        title: title.map(|s| s.to_string()),
-        authors,
-        journal: journal.map(|s| s.to_string()),
-        pub_year: year,
-        doi: doi.map(|s| s.to_string()),
-        arxiv_id: None,
-        abstract_text,
-        keywords: Vec::new(),
-        source: pdf::MetadataSource::Crossref,
-    })
-}
-
-fn strip_jats_tags(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut in_tag = false;
-    for c in s.chars() {
-        if c == '<' {
-            in_tag = true;
-        } else if c == '>' {
-            in_tag = false;
-        } else if !in_tag {
-            result.push(c);
-        }
-    }
-    result.trim().to_string()
-}
-
-fn parse_crossref_search_response(body: &str) -> Option<pdf::RawMetadata> {
-    let json: serde_json::Value = serde_json::from_str(body).ok()?;
-    let items = json.get("message").and_then(|m| m.get("items")).and_then(|i| i.as_array())?;
-    let first = items.first()?;
-    let title = first.get("title").and_then(|t| t.as_array()).and_then(|a| a.first()).and_then(|t| t.as_str());
-    let authors = first.get("author").and_then(|a| a.as_array()).map(|arr| {
-        arr.iter().filter_map(|a| {
-            let family = a.get("family").and_then(|f| f.as_str()).unwrap_or("");
-            let given = a.get("given").and_then(|g| g.as_str()).unwrap_or("");
-            if !family.is_empty() {
-                if given.is_empty() { Some(family.to_string()) } else { Some(format!("{}, {}", family, given)) }
-            } else { None }
-        }).collect::<Vec<String>>()
-    }).unwrap_or_default();
-    let journal = first.get("container-title").and_then(|t| t.as_array()).and_then(|a| a.first()).and_then(|t| t.as_str());
-    let year = first.get("published-print").or_else(|| first.get("issued"))
-        .and_then(|d| d.get("date-parts")).and_then(|d| d.as_array()).and_then(|a| a.first())
-        .and_then(|a| a.as_array()).and_then(|a| a.first()).and_then(|y| y.as_i64());
-    let doi = first.get("DOI").and_then(|d| d.as_str());
-
-    Some(pdf::RawMetadata {
-        title: title.map(|s| s.to_string()),
-        authors,
-        journal: journal.map(|s| s.to_string()),
-        pub_year: year,
-        doi: doi.map(|s| s.to_string()),
-        arxiv_id: None,
-        abstract_text: None,
-        keywords: Vec::new(),
-        source: pdf::MetadataSource::Crossref,
-    })
-}
-
-fn parse_arxiv_response(body: &str) -> Option<pdf::RawMetadata> {
-    let mut buf = Vec::new();
-
-    let mut title: Option<String> = None;
-    let mut authors: Vec<String> = Vec::new();
-    let mut abstract_text: Option<String> = None;
-    let mut year: Option<i64> = None;
-
-    use quick_xml::events::Event;
-    let mut reader = quick_xml::Reader::from_str(body);
-    let mut in_title = false;
-    let mut in_summary = false;
-    let mut in_published = false;
-    let mut in_name = false;
-    let mut current_name = String::new();
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
-                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                match name.as_str() {
-                    "title" => in_title = true,
-                    "summary" => in_summary = true,
-                    "published" => in_published = true,
-                    "name" => { in_name = true; current_name.clear(); }
-                    _ => {}
-                }
-            }
-            Ok(Event::End(e)) => {
-                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                match name.as_str() {
-                    "title" => in_title = false,
-                    "summary" => in_summary = false,
-                    "published" => in_published = false,
-                    "name" => {
-                        in_name = false;
-                        if !current_name.is_empty() {
-                            authors.push(current_name.clone());
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Event::Text(e)) => {
-                let text = e.unescape().ok().map(|s| s.to_string()).unwrap_or_default();
-                if in_title && title.is_none() {
-                    title = Some(text.clone());
-                }
-                if in_summary {
-                    abstract_text = Some(text.clone());
-                }
-                if in_published
-                    && let Some(y) = text.get(0..4).and_then(|s| s.parse::<i64>().ok()) {
-                        year = Some(y);
-                    }
-                if in_name {
-                    current_name = text;
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    if title.is_none() && authors.is_empty() {
-        return None;
-    }
-
-    Some(pdf::RawMetadata {
-        title,
-        authors,
-        journal: None,
-        pub_year: year,
-        doi: None,
-        arxiv_id: None,
-        abstract_text,
-        keywords: Vec::new(),
-        source: pdf::MetadataSource::Arxiv,
-    })
-}
-
-fn apply_api_metadata(state: &mut AppState, meta: pdf::RawMetadata, doc_id: i64) {
-    let is_api_source = matches!(
-        meta.source,
-        pdf::MetadataSource::Crossref | pdf::MetadataSource::Arxiv
-    );
-    let result = {
-        if let Ok(conn) = state.db.lock() {
-            if let Ok(Some(mut doc)) = documents::get_by_id(&conn, doc_id) {
-                let mut changed = false;
-                if is_api_source {
-                    if let Some(ref t) = meta.title {
-                        if !t.is_empty() && t != "Untitled" {
-                            doc.title = t.clone();
-                            changed = true;
-                        }
-                    }
-                    if !meta.authors.is_empty() {
-                        doc.authors = Some(meta.authors.join("; "));
-                        changed = true;
-                    }
-                    if let Some(ref j) = meta.journal {
-                        if !j.is_empty() {
-                            doc.journal = Some(j.clone());
-                            changed = true;
-                        }
-                    }
-                    if let Some(y) = meta.pub_year {
-                        doc.pub_year = Some(y);
-                        changed = true;
-                    }
-                    if let Some(ref d) = meta.doi {
-                        if doc.doi.is_none() {
-                            doc.doi = Some(d.clone());
-                            changed = true;
-                        }
-                    }
-                    if let Some(ref a) = meta.abstract_text {
-                        if !a.is_empty() {
-                            doc.abstract_text = Some(a.clone());
-                            changed = true;
-                        }
-                    }
-                } else {
-                    if (doc.title.is_empty() || doc.title == "Untitled")
-                        && let Some(ref t) = meta.title {
-                            doc.title = t.clone();
-                            changed = true;
-                        }
-                    let authors_empty = doc.authors.as_deref().map_or(true, |a| a.trim().is_empty());
-                    let authors_look_wrong = doc.authors.as_deref().map_or(false, |a| {
-                        let a = a.trim();
-                        !a.contains(' ') && a.len() <= 20
-                    });
-                    if !meta.authors.is_empty()
-                        && (authors_empty || authors_look_wrong)
-                    {
-                        doc.authors = Some(meta.authors.join("; "));
-                        changed = true;
-                    }
-                    if (doc.journal.is_none() || doc.journal.as_deref().map_or(true, |j| j.trim().is_empty()))
-                        && let Some(ref j) = meta.journal {
-                            doc.journal = Some(j.clone());
-                            changed = true;
-                        }
-                    if doc.pub_year.is_none()
-                        && let Some(y) = meta.pub_year {
-                            doc.pub_year = Some(y);
-                            changed = true;
-                        }
-                    if doc.doi.is_none()
-                        && let Some(ref d) = meta.doi {
-                            doc.doi = Some(d.clone());
-                            changed = true;
-                        }
-                    if (doc.abstract_text.is_none() || doc.abstract_text.as_deref().map_or(true, |a| a.trim().is_empty()))
-                        && let Some(ref a) = meta.abstract_text {
-                            doc.abstract_text = Some(a.clone());
-                            changed = true;
-                        }
-                }
-                if changed {
-                    match documents::update(&conn, &doc) {
-                        Ok(()) => Some(Ok(())),
-                        Err(e) => Some(Err(e.to_string())),
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
-
-    match result {
-        Some(Ok(())) => {
-            state.reload_documents();
-            if state.show_detail
-                && state
-                    .detail_doc
-                    .as_ref()
-                    .and_then(|d| d.id)
-                    .map(|d_id| d_id == doc_id)
-                    .unwrap_or(false)
-            {
-                state.load_detail();
-            }
-            state.finish_processing("API 메타데이터 보강 완료");
-        }
-        Some(Err(msg)) => state.finish_processing(&format!("API 저장 실패: {}", msg)),
-        None => state.finish_processing("API: 보강할 필드 없음"),
     }
 }
 
@@ -2682,7 +2136,7 @@ pub fn count_tree_nodes(state: &AppState) -> usize {
         count += 1; // spacer after authors
     }
     count += 1; // "UDC 분류" header
-    count += 9;
+    count += UDC_TOP_LEVEL_STRS.len();
     for (notation, _) in UDC_TOP_LEVEL_TUPLES {
         if state.expanded_nodes.contains(*notation) {
             if let Some(children) = crate::ui::left_panel::UDC_CHILDREN.get(*notation) {
@@ -2714,8 +2168,6 @@ pub const UDC_TOP_LEVEL_TUPLES: &[(&str, &str)] = &[
     ("8", "언어"),
     ("9", "역사"),
 ];
-
-pub const EDIT_FIELD_NAMES: &[&str] = EDIT_FIELDS;
 
 pub fn count_authors_section_start(state: &AppState) -> usize {
     let mut count = 1; // "프로젝트" header
@@ -3016,122 +2468,4 @@ fn handle_navigate_graph(state: &mut AppState, direction: GraphDirection) {
         gs.focus_next(step);
         state.dirty = true;
     }
-}
-
-fn handle_select_udc(state: &mut AppState, notation: Option<String>) {
-    state.active_udc_notation = notation.clone();
-    state.active_project_id = None;
-    state.active_author = None;
-    state.active_series_id = None;
-    if let Some(ref notation) = notation {
-        state.expanded_nodes.insert(notation.clone());
-        if let Ok(conn) = state.db.lock() {
-            let all = documents::list_all(&conn).unwrap_or_default();
-            let filtered: Vec<Document> = all.into_iter().filter(|d| {
-                if let Ok(Some(node_id)) = crate::classification::scheme::get_node_id(&conn, "udc", notation) {
-                    conn.query_row(
-                        "SELECT COUNT(*) FROM document_classifications WHERE document_id = ?1 AND node_id = ?2",
-                        rusqlite::params![d.id.unwrap_or(0), node_id],
-                        |row| row.get::<_, i64>(0),
-                    ).unwrap_or(0) > 0
-                } else {
-                    false
-                }
-            }).collect();
-            let count = filtered.len();
-            state.documents = filtered;
-            state.document_count = count;
-            state.list_cursor = 0;
-        }
-        state.set_status(&format!("UDC {} 분류 문헌", notation));
-    } else {
-        state.reload_documents();
-    }
-    state.dirty = true;
-}
-
-fn handle_add_custom_field(state: &mut AppState, doc_id: i64, key: String, value: String) {
-    if key.trim().is_empty() {
-        state.set_status("필드 키를 입력하세요");
-        return;
-    }
-    let result = {
-        if let Ok(conn) = state.db.lock() {
-            crate::db::custom_fields::add_field(&conn, doc_id, key.trim(), value.trim())
-        } else {
-            Err(anyhow::anyhow!("DB 락 획득 실패"))
-        }
-    };
-    match result {
-        Ok(_) => {
-            state.load_detail();
-            state.set_status("커스텀 필드 추가됨");
-        }
-        Err(e) => state.set_status(&format!("필드 추가 실패: {}", e)),
-    }
-    state.dirty = true;
-}
-
-fn handle_delete_custom_field(state: &mut AppState, doc_id: i64, field_id: i64) {
-    let result = {
-        if let Ok(conn) = state.db.lock() {
-            crate::db::custom_fields::delete_field(&conn, doc_id, field_id)
-        } else {
-            Err(anyhow::anyhow!("DB 락 획득 실패"))
-        }
-    };
-    match result {
-        Ok(_) => {
-            state.load_detail();
-            state.set_status("커스텀 필드 삭제됨");
-        }
-        Err(e) => state.set_status(&format!("필드 삭제 실패: {}", e)),
-    }
-    state.dirty = true;
-}
-
-fn handle_custom_field_key(state: &mut AppState, key: KeyEvent) -> bool {
-    match key.code {
-        KeyCode::Esc => {
-            state.custom_field_mode = false;
-            state.custom_field_key.clear();
-            state.custom_field_value.clear();
-            state.custom_field_editing_key = false;
-            state.dirty = true;
-        }
-        KeyCode::Tab => {
-            state.custom_field_editing_key = !state.custom_field_editing_key;
-            state.dirty = true;
-        }
-        KeyCode::Enter => {
-            let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
-            let key = state.custom_field_key.clone();
-            let value = state.custom_field_value.clone();
-            state.custom_field_mode = false;
-            state.custom_field_key.clear();
-            state.custom_field_value.clear();
-            state.custom_field_editing_key = false;
-            let _ = state.action_tx.try_send(AppAction::AddCustomField { doc_id, key, value });
-        }
-        KeyCode::Backspace => {
-            if state.custom_field_editing_key {
-                state.custom_field_key.pop();
-            } else {
-                state.custom_field_value.pop();
-            }
-            state.dirty = true;
-        }
-        KeyCode::Char(c) => {
-            if state.custom_field_editing_key {
-                if c.is_ascii_graphic() || c == ' ' {
-                    state.custom_field_key.push(c);
-                }
-            } else {
-                state.custom_field_value.push(c);
-            }
-            state.dirty = true;
-        }
-        _ => {}
-    }
-    false
 }
