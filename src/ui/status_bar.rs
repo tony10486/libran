@@ -6,50 +6,22 @@ use ratatui::Frame;
 use crate::app::AppState;
 
 pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
-    let online = state.api_mode.allows_api_calls();
     let sort_active = state.is_similarity_sorted();
 
     let mut spans = vec![
         Span::raw(" "),
         Span::styled(&state.status_text, Style::default().fg(Color::Gray).bg(Color::Black)),
-        Span::raw("  "),
-        Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)),
     ];
 
-    // Similarity sort indicator
     if sort_active {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)));
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
             "▣ 유사도 정렬",
             Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD).bg(Color::Black),
         ));
-        spans.push(Span::raw("  "));
-        spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)));
     }
-
-    spans.extend(vec![
-        Span::raw("  "),
-        Span::styled("API:", Style::default().fg(Color::DarkGray).bg(Color::Black)),
-        Span::raw(" "),
-        Span::styled(state.api_mode.as_str(), Style::default().fg(Color::Cyan).bg(Color::Black)),
-        Span::raw("  "),
-        Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)),
-        Span::raw("  "),
-        Span::styled(
-            state.document_count.to_string(),
-            Style::default().fg(Color::Yellow).bg(Color::Black),
-        ),
-        Span::styled(" 문헌", Style::default().fg(Color::Gray).bg(Color::Black)),
-        Span::raw("  "),
-        Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)),
-        Span::raw("  "),
-        Span::styled(
-            if online { "● 온라인" } else { "● 오프라인" },
-            Style::default()
-                .fg(if online { Color::Green } else { Color::DarkGray })
-                .bg(Color::Black),
-        ),
-    ]);
 
     if state.is_processing {
         spans.push(Span::raw("  "));
@@ -67,6 +39,8 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
     // Right-aligned shortcuts
     let right_keys = [("Tab", "패널"),
         ("j/k", "이동"),
+        ("t", "태그"),
+        ("r", "별점"),
         ("s", "유사도"),
         ("/", "검색"),
         ("?", "도움말"),
@@ -98,6 +72,6 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
         ));
     }
 
-    let footer = Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Black));
+    let footer = Paragraph::new(Line::from(spans)).style(Style::default().fg(Color::Gray).bg(Color::Black));
     frame.render_widget(footer, area);
 }

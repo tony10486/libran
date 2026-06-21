@@ -20,12 +20,35 @@ pub struct Document {
     pub file_hash: Option<String>,
     pub citation_key: Option<String>,
     pub source: Option<String>,
+    pub rating: Option<i64>,
+}
+
+impl Default for Document {
+    fn default() -> Self {
+        Self {
+            id: None,
+            title: String::new(),
+            authors: None,
+            journal: None,
+            conference: None,
+            pub_year: None,
+            doi: None,
+            arxiv_id: None,
+            abstract_text: None,
+            keywords: None,
+            file_path: None,
+            file_hash: None,
+            citation_key: None,
+            source: None,
+            rating: None,
+        }
+    }
 }
 
 pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
     conn.execute(
-        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         params![
             normalize_nfc(&doc.title),
             doc.authors.as_deref().map(normalize_nfc),
@@ -40,6 +63,7 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
             doc.citation_key,
             doc.source.as_deref().unwrap_or("manual"),
             doc.conference.as_deref().map(normalize_nfc),
+            doc.rating,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -47,7 +71,7 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
 
 pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference
+        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating
          FROM documents WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -67,6 +91,7 @@ pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
             citation_key: row.get(11)?,
             source: row.get(12)?,
             conference: row.get(13)?,
+            rating: row.get(14)?,
         }))
     } else {
         Ok(None)
@@ -90,12 +115,13 @@ macro_rules! doc_from_row {
             citation_key: $row.get(11)?,
             source: $row.get(12)?,
             conference: $row.get(13)?,
+            rating: $row.get(14)?,
         }
     };
 }
 
 const DOCUMENT_COLS: &str =
-    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference";
+    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating";
 
 pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
@@ -167,6 +193,14 @@ pub fn update_citation_key(conn: &Connection, id: i64, key: &str) -> Result<()> 
     conn.execute(
         "UPDATE documents SET citation_key = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
         params![key, id],
+    )?;
+    Ok(())
+}
+
+pub fn update_rating(conn: &Connection, id: i64, rating: Option<i64>) -> Result<()> {
+    conn.execute(
+        "UPDATE documents SET rating = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+        params![rating, id],
     )?;
     Ok(())
 }
@@ -287,4 +321,32 @@ pub fn has_reference_extraction(conn: &Connection, doc_id: i64) -> Result<bool> 
         |row| row.get(0),
     )?;
     Ok(count > 0)
+}
+
+/// Aggregate (author, doc_count) pairs with at least `min_count` docs.
+/// Splits `documents.authors` by ';', trims, NFC-normalizes, and sorts by
+/// count desc then name asc.
+pub fn list_authors(conn: &Connection, min_count: usize) -> Result<Vec<(String, i64)>> {
+    let mut stmt = conn.prepare("SELECT authors FROM documents WHERE authors IS NOT NULL AND trim(authors) <> ''")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+
+    let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for row in rows {
+        let authors = row?;
+        for raw in authors.split(';') {
+            let name = raw.trim();
+            if name.is_empty() {
+                continue;
+            }
+            *counts.entry(normalize_nfc(name).to_string()).or_insert(0) += 1;
+        }
+    }
+    drop(stmt);
+
+    let mut out: Vec<(String, i64)> = counts
+        .into_iter()
+        .filter(|(_, c)| (*c as usize) >= min_count)
+        .collect();
+    out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    Ok(out)
 }

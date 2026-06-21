@@ -7,6 +7,7 @@ use crate::config::AppConfig;
 use crate::db::documents::Document;
 use crate::db::facets::FacetCount;
 use crate::db::projects::Project;
+use crate::db::series::Series;
 use crate::db::DbConn;
 use crate::similarity::scoring::{DocumentScore, UdcTree};
 use crate::similarity::SimilarityConfig;
@@ -29,6 +30,8 @@ pub struct AppState {
 
     pub documents: Vec<Document>,
     pub projects: Vec<Project>,
+    pub series: Vec<Series>,
+    pub authors: Vec<(String, i64)>,
     pub facets: Vec<FacetCount>,
 
     pub active_panel: PanelFocus,
@@ -48,6 +51,12 @@ pub struct AppState {
     pub new_project_mode: bool,
     pub new_project_input: String,
 
+    // ── Series bundling (optional grouping of same-series issues) ──
+    pub series_grouping_enabled: bool,
+    pub active_series_id: Option<i64>,
+    pub new_series_mode: bool,
+    pub new_series_input: String,
+
     pub edit_mode: bool,
     pub edit_field: usize,
     pub edit_input: String,
@@ -57,6 +66,7 @@ pub struct AppState {
     pub tree_cursor: usize,
 
     pub active_project_id: Option<i64>,
+    pub active_author: Option<String>,
     pub is_processing: bool,
     pub status_text: String,
     pub api_mode: ApiMode,
@@ -83,6 +93,22 @@ pub struct AppState {
     pub note_mode: bool,
     pub note_input: String,
     pub current_note: Option<String>,
+
+    // ── Tags ──
+    pub tag_mode: bool,
+    pub tag_input: String,
+    pub current_tags: Vec<String>,
+
+    // ── Rating ──
+    pub rating_mode: bool,
+
+    pub pick_project_mode: bool,
+    pub pick_project_input: String,
+    pub pick_project_cursor: usize,
+
+    pub authors_expanded: bool,
+    pub author_search_mode: bool,
+    pub author_search_input: String,
 }
 
 impl AppState {
@@ -90,12 +116,15 @@ impl AppState {
         let api_mode = config.api_mode.clone();
         let similarity_config = SimilarityConfig::load();
         let udc_tree = load_udc_tree_from_db(&db);
+        let series_grouping_enabled = load_series_grouping_enabled(&db);
         AppState {
             db,
             config,
             action_tx,
             documents: Vec::new(),
             projects: Vec::new(),
+            series: Vec::new(),
+            authors: Vec::new(),
             facets: Vec::new(),
             active_panel: PanelFocus::Left,
             list_cursor: 0,
@@ -109,6 +138,10 @@ impl AppState {
             detail_doc: None,
             new_project_mode: false,
             new_project_input: String::new(),
+            series_grouping_enabled,
+            active_series_id: None,
+            new_series_mode: false,
+            new_series_input: String::new(),
             edit_mode: false,
             edit_field: 0,
             edit_input: String::new(),
@@ -116,6 +149,7 @@ impl AppState {
             expanded_nodes: HashSet::new(),
             tree_cursor: 0,
             active_project_id: None,
+            active_author: None,
             is_processing: false,
             status_text: "준비됨".to_string(),
             api_mode,
@@ -135,6 +169,16 @@ impl AppState {
             note_mode: false,
             note_input: String::new(),
             current_note: None,
+            tag_mode: false,
+            tag_input: String::new(),
+            current_tags: Vec::new(),
+            rating_mode: false,
+            pick_project_mode: false,
+            pick_project_input: String::new(),
+            pick_project_cursor: 0,
+            authors_expanded: false,
+            author_search_mode: false,
+            author_search_input: String::new(),
         }
     }
 
@@ -175,6 +219,9 @@ impl AppState {
             if let Ok(facets) = crate::db::facets::count_by_classification(&conn, None, None) {
                 self.facets = facets;
             }
+            if let Ok(authors) = crate::db::documents::list_authors(&conn, 1) {
+                self.authors = authors;
+            }
         }
         self.dirty = true;
     }
@@ -187,14 +234,41 @@ impl AppState {
         self.dirty = true;
     }
 
+    pub fn reload_series(&mut self) {
+        if let Ok(conn) = self.db.lock()
+            && let Ok(series) = crate::db::series::list_series(&conn) {
+                self.series = series;
+            }
+        self.dirty = true;
+    }
+
+    pub fn reload_authors(&mut self) {
+        if let Ok(conn) = self.db.lock()
+            && let Ok(authors) = crate::db::documents::list_authors(&conn, 1) {
+                self.authors = authors;
+            }
+        self.dirty = true;
+    }
+
     pub fn load_detail(&mut self) {
         if let Some(doc) = self.documents.get(self.list_cursor) {
             self.detail_doc = Some(doc.clone());
             let doc_id = doc.id.unwrap_or(0);
             if let Ok(conn) = self.db.lock() {
                 self.current_note = crate::db::notes::get(&conn, doc_id).ok().flatten();
+                self.current_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
             } else {
                 self.current_note = None;
+                self.current_tags = Vec::new();
+            }
+        }
+    }
+
+    pub fn reload_tags(&mut self) {
+        if let Some(doc) = &self.detail_doc {
+            let doc_id = doc.id.unwrap_or(0);
+            if let Ok(conn) = self.db.lock() {
+                self.current_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
             }
         }
     }
@@ -252,4 +326,18 @@ fn load_udc_tree_from_db(db: &DbConn) -> UdcTree {
     } else {
         UdcTree::new(std::collections::HashMap::new())
     }
+}
+
+fn load_series_grouping_enabled(db: &DbConn) -> bool {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'series_grouping_enabled'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        return v.as_deref() == Some("true");
+    }
+    false
 }

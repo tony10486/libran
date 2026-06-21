@@ -60,3 +60,17 @@ pub fn list_documents(conn: &Connection, project_id: i64) -> Result<Vec<i64>> {
     }
     Ok(ids)
 }
+
+pub fn delete_project(conn: &Connection, project_id: i64) -> Result<()> {
+    conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
+    Ok(())
+}
+
+pub fn count_documents(conn: &Connection, project_id: i64) -> Result<i64> {
+    let n: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM project_documents WHERE project_id = ?1",
+        params![project_id],
+        |row| row.get(0),
+    )?;
+    Ok(n)
+}

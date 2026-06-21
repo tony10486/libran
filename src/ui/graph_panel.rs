@@ -26,7 +26,7 @@ fn render_empty(frame: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray))
         .title(" 인용 그래프 ")
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -47,7 +47,7 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             format!(" 인용 그래프 ({} 노드, {} 에지){} ", node_count, edge_count, cache_tag),
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ))
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -148,7 +148,7 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
     ]);
     lines.push(help);
 
-    let para = Paragraph::new(lines).style(Style::default().bg(Color::Black));
+    let para = Paragraph::new(lines).style(Style::default().fg(Color::Gray).bg(Color::Black));
     frame.render_widget(para, inner);
 }
 
@@ -164,7 +164,7 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
             format!(" 인용 그래프 표 ({}, {}){} ", node_count, edge_count, cache_tag),
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ))
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -215,8 +215,8 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
 
     let table = Table::new(rows, [Constraint::Length(20), Constraint::Length(20), Constraint::Length(10), Constraint::Length(8)])
         .header(header)
-        .style(Style::default().bg(Color::Black))
-        .block(Block::default().style(Style::default().bg(Color::Black)));
+        .style(Style::default().fg(Color::Gray).bg(Color::Black))
+        .block(Block::default().style(Style::default().fg(Color::Gray).bg(Color::Black)));
 
     frame.render_widget(table, inner);
 }

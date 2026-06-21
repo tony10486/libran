@@ -139,6 +139,47 @@ pub fn run(conn: &Connection) -> Result<()> {
         set_version(conn, 5)?;
     }
 
+    if version < 6 {
+        // Migration 6: add rating column to documents (nullable, 1-5 stars)
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN rating INTEGER", []);
+        set_version(conn, 6)?;
+    }
+
+    if version < 7 {
+        // Migration 7: series bundling — series + document_series tables
+        // Tables are CREATE IF NOT EXISTS in schema.rs, so they already exist for
+        // fresh databases. For pre-existing DBs the migration guarantees presence
+        // and seeds the series auto-grouping config default.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS series (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT NOT NULL,
+                publisher       TEXT,
+                issn            TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_series_name ON series(name);
+            CREATE INDEX IF NOT EXISTS idx_series_issn ON series(issn);
+
+            CREATE TABLE IF NOT EXISTS document_series (
+                document_id     INTEGER NOT NULL,
+                series_id       INTEGER NOT NULL,
+                volume          TEXT,
+                issue           TEXT,
+                sort_order      INTEGER DEFAULT 0,
+                added_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (document_id, series_id),
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_doc_series_series ON document_series(series_id);
+            CREATE INDEX IF NOT EXISTS idx_doc_series_doc ON document_series(document_id);
+
+            INSERT OR IGNORE INTO app_config (key, value) VALUES ('series_grouping_enabled', 'false');",
+        )?;
+        set_version(conn, 7)?;
+    }
+
     Ok(())
 }
 

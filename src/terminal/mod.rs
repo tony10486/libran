@@ -6,6 +6,7 @@ use anyhow::Result;
 use crossterm::event::{
     DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
 };
+use crossterm::style::ResetColor;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::execute;
 use ratatui::backend::CrosstermBackend;
@@ -20,6 +21,7 @@ pub fn setup_terminal() -> Result<AppTerminal> {
     execute!(
         stdout,
         EnterAlternateScreen,
+        ResetColor,
         EnableBracketedPaste,
         EnableMouseCapture,
     )?;
@@ -34,6 +36,7 @@ pub fn restore_terminal(terminal: &mut AppTerminal) -> Result<()> {
         terminal.backend_mut(),
         DisableBracketedPaste,
         DisableMouseCapture,
+        ResetColor,
         LeaveAlternateScreen,
     )?;
     terminal.show_cursor()?;

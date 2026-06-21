@@ -5,7 +5,7 @@ use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub fn render(frame: &mut Frame, area: Rect) {
-    let popup = centered_rect(55, 70, area);
+    let popup = centered_rect(55, 80, area);
     frame.render_widget(Clear, popup);
 
     let lines = vec![
@@ -17,36 +17,37 @@ pub fn render(frame: &mut Frame, area: Rect) {
                 .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
         )]),
         Line::from(""),
+        sub_header("네비게이션"),
         help_line("  Tab", "패널 간 포커스 이동"),
-        Line::from(""),
         help_line("  j / ↓", "아래로 이동"),
-        Line::from(""),
         help_line("  k / ↑", "위로 이동"),
-        Line::from(""),
         help_line("  Enter", "문헌 상세 보기 / 닫기"),
-        Line::from(""),
-        help_line("  /", "검색 모드 진입"),
-        Line::from(""),
-        help_line("  a", "파일 경로 입력 추가"),
-        Line::from(""),
-        help_line("  Space", "문헌 다중 선택 토글"),
-        Line::from(""),
-        help_line("  e", "문헌 메타데이터 편집"),
-        Line::from(""),
-        help_line("  s", "유사도 순 정렬 (선택 문헌 기준)"),
-        Line::from(""),
-        help_line("  Esc", "유사도 정렬 해제"),
-        Line::from(""),
-        help_line("  d", "문헌 삭제"),
-        Line::from(""),
-        help_line("  x", "BibTeX 내보내기"),
-        Line::from(""),
-        help_line("  n", "새 프로젝트 생성"),
-        Line::from(""),
-        help_line("  o", "API 모드 토글"),
-        Line::from(""),
+        help_line("  ←", "상세 보기 닫기"),
         help_line("  ?", "도움말 토글"),
         Line::from(""),
+        sub_header("문헌 관리"),
+        help_line("  /", "검색 모드 진입"),
+        help_line("  a", "파일 경로 입력 추가"),
+        help_line("  Space", "문헌 다중 선택 토글"),
+        help_line("  e", "문헌 메타데이터 편집"),
+        help_line("  t", "태그 편집 (상세 보기에서)"),
+        help_line("  r", "별점 설정 (상세 보기에서, 1-5)"),
+        help_line("  s", "유사도 순 정렬 (선택 문헌 기준)"),
+        help_line("  Esc", "유사도 정렬 해제"),
+        help_line("  d", "문헌 삭제"),
+        Line::from(""),
+        sub_header("프로젝트 · 시리즈"),
+        help_line("  n", "새 프로젝트 생성"),
+        help_line("  m", "선택 문헌을 프로젝트에 추가 (다이얼로그)"),
+        help_line("  S", "새 시리즈 생성"),
+        help_line("  M", "시리즈 그룹핑 토글"),
+        help_line("  A", "같은 저널 문헌 자동 묶기"),
+        help_line("  Enter", "왼쪽 패널에서 연구자 섹션 펼치기/접기 + 선택"),
+        help_line("  f", "연구자 이름 검색 (섹션 펼친 후)"),
+        Line::from(""),
+        sub_header("내보내기 · 설정"),
+        help_line("  x", "BibTeX 내보내기"),
+        help_line("  o", "API 모드 토글"),
         help_line("  q / Esc", "종료"),
         Line::from(""),
         Line::from(""),
@@ -64,9 +65,16 @@ pub fn render(frame: &mut Frame, area: Rect) {
     ];
 
     let help = Paragraph::new(lines)
-        .style(Style::default().bg(Color::Black))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black))
         .wrap(Wrap { trim: false });
     frame.render_widget(help, popup);
+}
+
+fn sub_header(name: &str) -> Line<'static> {
+    Line::from(vec![Span::styled(
+        format!("  ▸ {}", name),
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED),
+    )])
 }
 
 fn help_line<'a>(key: &'a str, desc: &'a str) -> Line<'a> {

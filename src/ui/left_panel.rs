@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
 use ratatui::Frame;
@@ -20,7 +20,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let list = List::default()
         .items(items)
-        .style(Style::default().bg(Color::Black))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black))
         .highlight_style(highlight);
 
     let mut list_state = ListState::default();
@@ -38,34 +38,158 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
     items.push(ListItem::new(Line::from(vec![
         Span::raw("  "),
         Span::styled("프로젝트", theme::header_style()),
+        Span::raw(" "),
+        Span::styled("────────────────────", Style::default().fg(Color::DarkGray)),
     ])));
 
     if state.projects.is_empty() {
         items.push(ListItem::new(Line::from(vec![
             Span::raw("    "),
-            Span::styled("(프로젝트 없음)", theme::dim_style()),
+            Span::styled("(n 키로 생성)", theme::dim_style()),
         ])));
     } else {
         for proj in &state.projects {
-            let marker = if state.active_project_id == proj.id {
-                "◆ "
+            let count = if let Ok(conn) = state.db.lock() {
+                crate::db::projects::count_documents(&conn, proj.id.unwrap_or(0)).unwrap_or(0)
             } else {
-                "  "
+                0
             };
-            let name_style = if state.active_project_id == proj.id {
-                Style::default().fg(Color::Cyan).bg(Color::Black)
+            let is_active = state.active_project_id == proj.id;
+            let (icon, icon_style, name_style) = if is_active {
+                (
+                    "▣",
+                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                )
             } else {
-                Style::default().fg(Color::Gray).bg(Color::Black)
+                (
+                    "□",
+                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::Gray),
+                )
             };
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("    "),
-                Span::styled(marker, Style::default().fg(Color::Yellow).bg(Color::Black)),
+                Span::styled(icon, icon_style),
+                Span::raw(" "),
                 Span::styled(proj.name.clone(), name_style),
+                Span::styled(format!(" ({})", count), theme::dim_style()),
             ])));
         }
     }
 
     items.push(ListItem::new(""));
+
+    // Series section (optional, shown when series grouping is enabled)
+    if state.series_grouping_enabled {
+        items.push(ListItem::new(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("시리즈", theme::header_style()),
+            Span::raw(" "),
+            Span::styled("────────────────────", Style::default().fg(Color::DarkGray)),
+        ])));
+
+        if state.series.is_empty() {
+            items.push(ListItem::new(Line::from(vec![
+                Span::raw("    "),
+                Span::styled("(S 키로 생성)", theme::dim_style()),
+            ])));
+        } else {
+            for ser in &state.series {
+                let count = if let Ok(conn) = state.db.lock() {
+                    crate::db::series::count_documents(&conn, ser.id.unwrap_or(0)).unwrap_or(0)
+                } else {
+                    0
+                };
+                let is_active = state.active_series_id == ser.id;
+                let (icon, icon_style, name_style) = if is_active {
+                    (
+                        "≡",
+                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    (
+                        "≡",
+                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(Color::Gray),
+                    )
+                };
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(icon, icon_style),
+                    Span::raw(" "),
+                    Span::styled(ser.name.clone(), name_style),
+                    Span::styled(format!(" ({})", count), theme::dim_style()),
+                ])));
+            }
+        }
+
+        items.push(ListItem::new(""));
+    }
+
+    if !state.authors.is_empty() {
+        let arrow = if state.authors_expanded { "▾" } else { "▸" };
+        items.push(ListItem::new(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(arrow, Style::default().fg(Color::DarkGray)),
+            Span::raw(" "),
+            Span::styled("연구자별 보기", theme::header_style()),
+            Span::raw(" "),
+            Span::styled("────────", Style::default().fg(Color::DarkGray)),
+        ])));
+
+        if state.authors_expanded {
+            if state.author_search_mode {
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled("검색: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::styled(state.author_search_input.clone(), Style::default().fg(Color::White)),
+                    Span::styled("▎", Style::default().fg(Color::Cyan)),
+                ])));
+            }
+
+            let q = state.author_search_input.to_lowercase();
+            let filtered: Vec<&(String, i64)> = state
+                .authors
+                .iter()
+                .filter(|(name, _)| q.is_empty() || name.to_lowercase().contains(&q))
+                .collect();
+
+            if filtered.is_empty() && !state.author_search_input.is_empty() {
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("      "),
+                    Span::styled("일치하는 연구자가 없습니다", Style::default().fg(Color::DarkGray)),
+                ])));
+            }
+
+            for (name, count) in filtered {
+                let is_active = state.active_author.as_deref() == Some(name.as_str());
+                let (icon, icon_style, name_style) = if is_active {
+                    (
+                        "◆",
+                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    (
+                        "·",
+                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(Color::Gray),
+                    )
+                };
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(icon, icon_style),
+                    Span::raw(" "),
+                    Span::styled(name.clone(), name_style),
+                    Span::styled(format!(" ({})", count), theme::dim_style()),
+                ])));
+            }
+        }
+
+        items.push(ListItem::new(""));
+    }
 
     // UDC classification section
     items.push(ListItem::new(Line::from(vec![
@@ -87,10 +211,10 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
 
         items.push(ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled(arrow, Style::default().fg(Color::DarkGray).bg(Color::Black)),
+            Span::styled(arrow, Style::default().fg(Color::DarkGray)),
             Span::raw(" "),
             Span::styled(format!("{:<3} ", notation), theme::code_style()),
-            Span::styled(*label, Style::default().fg(Color::Gray).bg(Color::Black)),
+            Span::styled(*label, Style::default().fg(Color::Gray)),
             count_span,
         ])));
 
@@ -109,12 +233,12 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
 
                     items.push(ListItem::new(Line::from(vec![
                         Span::raw("      "),
-                        Span::styled(child_arrow, Style::default().fg(Color::DarkGray).bg(Color::Black)),
+                        Span::styled(child_arrow, Style::default().fg(Color::DarkGray)),
                         Span::raw(" "),
                         Span::styled(format!("{:<5} ", child_notation), theme::code_style()),
-                        Span::styled(child_notation.as_str(), Style::default().fg(Color::Gray).bg(Color::Black)),
+                        Span::styled(child_notation.as_str(), Style::default().fg(Color::Gray)),
                         Span::raw(" "),
-                        Span::styled(child_label.as_str(), Style::default().fg(Color::Gray).bg(Color::Black)),
+                        Span::styled(child_label.as_str(), Style::default().fg(Color::Gray)),
                         child_count_span,
                     ])));
                 }
@@ -143,7 +267,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("  ▸ "),
                 Span::styled(format!("{:<8} ", notation), theme::code_style()),
-                Span::styled(*label, Style::default().fg(Color::Gray).bg(Color::Black)),
+                Span::styled(*label, Style::default().fg(Color::Gray)),
                 count_span,
             ])));
         }
@@ -160,11 +284,36 @@ fn get_facet_count(state: &AppState, notation: &str) -> Option<i64> {
         .map(|f| f.count)
 }
 
-fn count_visible_nodes(state: &AppState) -> usize {
-    // Rough count for cursor bounds
-    let mut count = 2; // header + spacer
+pub fn count_visible_nodes(state: &AppState) -> usize {
+    let mut count = 1; // "프로젝트" header
     count += state.projects.len().max(1);
-    count += 2; // spacer + UDC header
+    count += 1; // spacer after projects
+    if state.series_grouping_enabled {
+        count += 1; // "시리즈" header
+        count += state.series.len().max(1);
+        count += 1; // spacer after series
+    }
+    if !state.authors.is_empty() {
+        count += 1; // "연구자별 보기" header
+        if state.authors_expanded {
+            if state.author_search_mode {
+                count += 1; // search input line
+            }
+            let q = state.author_search_input.to_lowercase();
+            let filtered_len = state
+                .authors
+                .iter()
+                .filter(|(name, _)| q.is_empty() || name.to_lowercase().contains(&q))
+                .count();
+            if filtered_len == 0 && !state.author_search_input.is_empty() {
+                count += 1; // "일치하는 연구자가 없습니다"
+            } else {
+                count += filtered_len;
+            }
+        }
+        count += 1; // spacer after authors
+    }
+    count += 1; // "UDC 분류" header
     count += UDC_TOP_LEVEL.len();
     for (notation, _) in UDC_TOP_LEVEL {
         if state.expanded_nodes.contains(*notation)
@@ -199,7 +348,7 @@ const UDC_TOP_LEVEL: &[(&str, &str)] = &[
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
-static UDC_CHILDREN: Lazy<HashMap<&'static str, Vec<(String, String)>>> = Lazy::new(|| {
+pub(crate) static UDC_CHILDREN: Lazy<HashMap<&'static str, Vec<(String, String)>>> = Lazy::new(|| {
     let mut m = HashMap::new();
     m.insert(
         "5",

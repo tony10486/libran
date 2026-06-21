@@ -171,6 +171,7 @@ mod tests {
             file_hash: None,
             citation_key: None,
             source: None,
+            rating: None,
         }
     }
 

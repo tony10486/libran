@@ -6,6 +6,7 @@ pub mod notes;
 pub mod projects;
 pub mod schema;
 pub mod search;
+pub mod series;
 
 #[cfg(test)]
 mod test_support;

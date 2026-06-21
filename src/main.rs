@@ -58,6 +58,7 @@ async fn main() -> Result<()> {
     let mut state = AppState::new(db_conn, config, action_tx.clone());
     state.init_classification();
     state.reload_projects();
+    state.reload_series();
     state.reload_documents();
     info!("초기화 완료: {} 문헌", state.document_count);
 

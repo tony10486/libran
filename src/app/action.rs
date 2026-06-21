@@ -51,6 +51,22 @@ pub enum AppAction {
     MouseHover { column: u16, row: u16 },
     MouseClick { column: u16, row: u16 },
     TerminalResize { width: u16, height: u16 },
+
+    AddTag { doc_id: i64, tag: String },
+    RemoveTag { doc_id: i64, tag: String },
+    SetRating { doc_id: i64, rating: Option<u8> },
+
+    CreateSeries(String),
+    SelectSeries(Option<i64>),
+    DeleteSeries(i64),
+    ToggleSeriesGrouping,
+    AssignDocToSeries { doc_id: i64, series_id: i64, volume: Option<String>, issue: Option<String> },
+    AutoGroupSeries,
+
+    AddDocsToProject { project_id: i64, doc_ids: Vec<i64> },
+    DeleteProject(i64),
+
+    SelectAuthor(Option<String>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -14,10 +14,6 @@ use crate::app::AppState;
 pub fn render(frame: &mut Frame, state: &AppState) {
     layout::render(frame, state);
 
-    if state.search_mode {
-        search_bar::render_search(frame, frame.area(), &state.search_input);
-    }
-
     if state.add_file_mode {
         search_bar::render_add_file(frame, frame.area(), &state.add_file_input);
     }

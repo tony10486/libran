@@ -228,6 +228,35 @@ CREATE TABLE IF NOT EXISTS document_notes (
     updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
 );
+
+-- Series: bundles multiple issues/volumes of the same publication
+-- (e.g., Lecture Notes in Mathematics, Journal of Number Theory)
+CREATE TABLE IF NOT EXISTS series (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    publisher       TEXT,
+    issn            TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_name ON series(name);
+CREATE INDEX IF NOT EXISTS idx_series_issn ON series(issn);
+
+-- Document-Series relationship (M:N with per-issue metadata)
+CREATE TABLE IF NOT EXISTS document_series (
+    document_id     INTEGER NOT NULL,
+    series_id       INTEGER NOT NULL,
+    volume          TEXT,
+    issue           TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    added_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (document_id, series_id),
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_series_series ON document_series(series_id);
+CREATE INDEX IF NOT EXISTS idx_doc_series_doc ON document_series(document_id);
 ";
 
 pub fn create_tables(conn: &Connection) -> Result<()> {

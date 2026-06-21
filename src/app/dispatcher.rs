@@ -10,7 +10,8 @@ use crate::citation::extract;
 use crate::citation::graph;
 use crate::citation::graph::CitationGraph;
 use crate::citation::match_refs;
-use crate::db::documents;
+use crate::db::documents::{self, Document};
+use crate::db::projects::Project;
 use crate::export::{export, ExportFormat};
 use crate::pdf;
 use crate::similarity::scoring::{compute_scores, DocumentFeatures};
@@ -135,8 +136,78 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             state.terminal_size = (width, height);
             state.dirty = true;
         }
+        AppAction::AddTag { doc_id, tag } => {
+            if let Ok(conn) = state.db.lock() {
+                let _ = documents::add_tag(&conn, doc_id, &tag);
+            }
+            state.reload_tags();
+            state.set_status(&format!("태그 추가: {}", tag));
+            state.dirty = true;
+        }
+        AppAction::RemoveTag { doc_id, tag } => {
+            if let Ok(conn) = state.db.lock() {
+                let _ = documents::remove_tag(&conn, doc_id, &tag);
+            }
+            state.reload_tags();
+            state.set_status(&format!("태그 삭제: {}", tag));
+            state.dirty = true;
+        }
+        AppAction::SetRating { doc_id, rating } => {
+            if let Ok(conn) = state.db.lock() {
+                let _ = documents::update_rating(&conn, doc_id, rating.map(|r| r as i64));
+            }
+            if let Some(doc) = state.documents.iter_mut().find(|d| d.id == Some(doc_id)) {
+                doc.rating = rating.map(|r| r as i64);
+            }
+            if let Some(doc) = state.detail_doc.as_mut() {
+                if doc.id == Some(doc_id) {
+                    doc.rating = rating.map(|r| r as i64);
+                }
+            }
+            let status = match rating {
+                Some(r) => format!("별점 설정: {}점", r),
+                None => "별점 삭제됨".to_string(),
+            };
+            state.set_status(&status);
+            state.dirty = true;
+        }
+        AppAction::CreateSeries(name) => handle_create_series(state, name),
+        AppAction::SelectSeries(series_id) => handle_select_series(state, series_id),
+        AppAction::DeleteSeries(series_id) => handle_delete_series(state, series_id),
+        AppAction::ToggleSeriesGrouping => handle_toggle_series_grouping(state),
+        AppAction::AssignDocToSeries { doc_id, series_id, volume, issue } => {
+            handle_assign_doc_to_series(state, doc_id, series_id, volume, issue)
+        }
+        AppAction::AutoGroupSeries => handle_auto_group_series(state),
+        AppAction::AddDocsToProject { project_id, doc_ids } => {
+            handle_add_docs_to_project(state, project_id, doc_ids)
+        }
+        AppAction::DeleteProject(project_id) => handle_delete_project(state, project_id),
+        AppAction::SelectAuthor(author) => handle_select_author(state, author),
     }
     false
+}
+
+fn normalize_korean_key(key: KeyEvent) -> KeyEvent {
+    if let KeyCode::Char(c) = key.code {
+        if let Some(mapped) = korean_to_qwerty(c) {
+            return KeyEvent { code: KeyCode::Char(mapped), modifiers: key.modifiers, kind: key.kind, state: key.state };
+        }
+    }
+    key
+}
+
+fn korean_to_qwerty(c: char) -> Option<char> {
+    const MAP: &[(char, char)] = &[
+        ('ㅂ','q'),('ㅈ','w'),('ㄷ','e'),('ㄱ','r'),('ㅅ','t'),
+        ('ㅛ','y'),('ㅕ','u'),('ㅑ','i'),('ㅐ','o'),('ㅔ','p'),
+        ('ㅁ','a'),('ㄴ','s'),('ㅇ','d'),('ㄹ','f'),('ㅎ','g'),
+        ('ㅗ','h'),('ㅓ','j'),('ㅏ','k'),('ㅣ','l'),
+        ('ㅋ','z'),('ㅌ','x'),('ㅊ','c'),('ㅍ','v'),('ㅠ','b'),('ㅜ','n'),('ㅡ','m'),
+        ('ㅃ','Q'),('ㅉ','W'),('ㄸ','E'),('ㄲ','R'),('ㅆ','T'),
+        ('ㅒ','O'),('ㅖ','P'),
+    ];
+    MAP.iter().find(|(k, _)| *k == c).map(|(_, v)| *v)
 }
 
 fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
@@ -144,6 +215,7 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         return false;
     }
 
+    // Input modes: pass raw key (Korean text should be entered as-is)
     if state.show_help {
         state.show_help = false;
         state.dirty = true;
@@ -157,6 +229,7 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         return handle_bibtex_import_key(state, key);
     }
     if state.graph_state.is_some() {
+        let key = normalize_korean_key(key);
         return handle_graph_key(state, key);
     }
     if state.search_mode {
@@ -168,15 +241,34 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     if state.new_project_mode {
         return handle_new_project_key(state, key);
     }
+    if state.new_series_mode {
+        return handle_new_series_key(state, key);
+    }
+    if state.pick_project_mode {
+        return handle_pick_project_key(state, key);
+    }
+    if state.author_search_mode {
+        return handle_author_search_key(state, key);
+    }
     if state.edit_mode {
         return handle_edit_key(state, key);
     }
     if state.note_mode {
         return handle_note_key(state, key);
     }
+    if state.tag_mode {
+        return handle_tag_key(state, key);
+    }
+    if state.rating_mode {
+        return handle_rating_key(state, key);
+    }
     if state.show_detail {
+        let key = normalize_korean_key(key);
         return handle_detail_key(state, key);
     }
+
+    // Non-input modes: normalize Korean keys to QWERTY
+    let key = normalize_korean_key(key);
 
     match key.code {
         KeyCode::Char('q') => return true,
@@ -214,6 +306,41 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.set_status("프로젝트 이름 입력 후 Enter");
             state.dirty = true;
         }
+        KeyCode::Char('m') => {
+            if state.selected_doc_ids.is_empty() {
+                state.set_status("먼저 문헌을 선택하세요 (Space)");
+            } else if state.projects.is_empty() {
+                state.set_status("프로젝트가 없습니다 (n 키로 생성)");
+            } else {
+                state.pick_project_mode = true;
+                state.pick_project_input.clear();
+                state.pick_project_cursor = 0;
+                state.set_status("프로젝트를 선택 후 Enter");
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char('S') => {
+            state.new_series_mode = true;
+            state.new_series_input.clear();
+            state.set_status("시리즈 이름 입력 후 Enter");
+            state.dirty = true;
+        }
+        KeyCode::Char('M') => {
+            let _ = state.action_tx.try_send(AppAction::ToggleSeriesGrouping);
+        }
+        KeyCode::Char('A') => {
+            let _ = state.action_tx.try_send(AppAction::AutoGroupSeries);
+        }
+        KeyCode::Char('f') => {
+            if state.authors_expanded && !state.authors.is_empty() {
+                state.author_search_mode = true;
+                state.author_search_input.clear();
+                state.set_status("연구자 이름 검색");
+                state.dirty = true;
+            } else {
+                state.set_status("먼저 연구자 섹션을 펼치세요 (Enter)");
+            }
+        }
         KeyCode::Char('o') => {
             let _ = state.action_tx.try_send(AppAction::ToggleApiMode);
         }
@@ -248,6 +375,24 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                         state.set_status("편집: Tab으로 필드 이동, Enter로 저장");
                         state.dirty = true;
                     }
+        }
+        KeyCode::Char('t') => {
+            let doc_id = if state.active_panel == PanelFocus::Detail {
+                state.detail_doc.as_ref().and_then(|d| d.id)
+            } else if state.active_panel == PanelFocus::Right {
+                state.documents.get(state.list_cursor).and_then(|d| d.id)
+            } else {
+                None
+            };
+            if doc_id.is_some() {
+                state.load_detail();
+                state.show_detail = true;
+                state.active_panel = PanelFocus::Detail;
+                state.tag_mode = true;
+                state.tag_input = state.current_tags.join(" ");
+                state.set_status("태그 편집 (스페이스 구분, Esc 저장)");
+                state.dirty = true;
+            }
         }
         KeyCode::Char('g') => {
             if !state.selected_doc_ids.is_empty() {
@@ -396,8 +541,32 @@ fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.note_input = state.current_note.clone().unwrap_or_default();
             state.dirty = true;
         }
+        KeyCode::Char('t') => {
+            if state.detail_doc.as_ref().and_then(|d| d.id).is_some() {
+                state.tag_mode = true;
+                state.tag_input = state.current_tags.join(" ");
+                state.set_status("태그 편집 (스페이스 구분, Esc 저장)");
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char('r') => {
+            if state.detail_doc.as_ref().and_then(|d| d.id).is_some() {
+                state.rating_mode = true;
+                state.set_status("별점 입력 (1-5, 0=삭제, Esc 취소)");
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char('?') => {
+            state.show_help = !state.show_help;
+            state.dirty = true;
+        }
         KeyCode::Tab | KeyCode::Right => cycle_panel(state, true),
-        KeyCode::Left => cycle_panel(state, false),
+        KeyCode::Left => {
+            state.show_detail = false;
+            state.detail_doc = None;
+            state.active_panel = PanelFocus::Right;
+            state.dirty = true;
+        }
         KeyCode::Char('j') | KeyCode::Down => move_cursor_down(state),
         KeyCode::Char('k') | KeyCode::Up => move_cursor_up(state),
         _ => {}
@@ -433,6 +602,74 @@ fn handle_note_key(state: &mut AppState, key: KeyEvent) -> bool {
     false
 }
 
+fn handle_tag_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
+            let new_tags: Vec<String> = state
+                .tag_input
+                .split_whitespace()
+                .map(|s| s.trim_matches('#').to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if let Ok(conn) = state.db.lock() {
+                let old_tags =
+                    crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                for tag in &old_tags {
+                    if !new_tags.contains(tag) {
+                        let _ = crate::db::documents::remove_tag(&conn, doc_id, tag);
+                    }
+                }
+                for tag in &new_tags {
+                    if !old_tags.contains(tag) {
+                        let _ = crate::db::documents::add_tag(&conn, doc_id, tag);
+                    }
+                }
+            }
+            state.current_tags = new_tags;
+            state.tag_mode = false;
+            state.tag_input.clear();
+            state.set_status("태그 저장됨");
+            state.dirty = true;
+        }
+        KeyCode::Backspace => {
+            state.tag_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.tag_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_rating_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.rating_mode = false;
+            state.set_status("준비됨");
+            state.dirty = true;
+        }
+        KeyCode::Char(c @ '1'..='5') => {
+            let rating = c.to_digit(10).unwrap() as u8;
+            let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
+            let _ = state.action_tx.try_send(AppAction::SetRating { doc_id, rating: Some(rating) });
+            state.rating_mode = false;
+            state.dirty = true;
+        }
+        KeyCode::Char('0') | KeyCode::Backspace => {
+            let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
+            let _ = state.action_tx.try_send(AppAction::SetRating { doc_id, rating: None });
+            state.rating_mode = false;
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
 fn handle_search_key(state: &mut AppState, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
@@ -442,20 +679,19 @@ fn handle_search_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Enter => {
             state.search_mode = false;
-            if !state.search_input.is_empty() {
-                let term = state.search_input.clone();
-                let _ = state.action_tx.try_send(AppAction::UpdateSearchFilter(term));
-            } else {
+            if state.search_input.is_empty() {
                 state.reload_documents();
             }
         }
         KeyCode::Backspace => {
             state.search_input.pop();
-            state.dirty = true;
+            let term = state.search_input.clone();
+            handle_search_filter(state, term);
         }
         KeyCode::Char(c) => {
             state.search_input.push(c);
-            state.dirty = true;
+            let term = state.search_input.clone();
+            handle_search_filter(state, term);
         }
         _ => {}
     }
@@ -517,6 +753,145 @@ fn handle_new_project_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char(c) => {
             state.new_project_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_new_series_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.new_series_mode = false;
+            state.new_series_input.clear();
+            state.set_status("준비됨");
+        }
+        KeyCode::Enter => {
+            state.new_series_mode = false;
+            let name = state.new_series_input.clone();
+            state.new_series_input.clear();
+            if !name.is_empty() {
+                let _ = state.action_tx.try_send(AppAction::CreateSeries(name));
+            } else {
+                state.set_status("준비됨");
+            }
+        }
+        KeyCode::Backspace => {
+            state.new_series_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.new_series_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn filtered_projects(state: &AppState) -> Vec<&Project> {
+    let q = state.pick_project_input.to_lowercase();
+    state
+        .projects
+        .iter()
+        .filter(|p| q.is_empty() || p.name.to_lowercase().contains(&q))
+        .collect()
+}
+
+pub fn filtered_authors(state: &AppState) -> Vec<&(String, i64)> {
+    let q = state.author_search_input.to_lowercase();
+    state
+        .authors
+        .iter()
+        .filter(|(name, _)| q.is_empty() || name.to_lowercase().contains(&q))
+        .collect()
+}
+
+fn handle_pick_project_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.pick_project_mode = false;
+            state.pick_project_input.clear();
+            state.pick_project_cursor = 0;
+            state.set_status("준비됨");
+        }
+        KeyCode::Enter => {
+            let filtered = filtered_projects(state);
+            if let Some(proj) = filtered.get(state.pick_project_cursor) {
+                let project_id = proj.id.unwrap_or(0);
+                let doc_ids: Vec<i64> = state.selected_doc_ids.iter().copied().collect();
+                state.pick_project_mode = false;
+                state.pick_project_input.clear();
+                state.pick_project_cursor = 0;
+                let _ = state.action_tx.try_send(AppAction::AddDocsToProject {
+                    project_id,
+                    doc_ids,
+                });
+            } else {
+                state.set_status("선택할 프로젝트가 없습니다");
+            }
+        }
+        KeyCode::Backspace => {
+            state.pick_project_input.pop();
+            let new_len = filtered_projects(state).len();
+            if state.pick_project_cursor >= new_len && new_len > 0 {
+                state.pick_project_cursor = new_len - 1;
+            } else if new_len == 0 {
+                state.pick_project_cursor = 0;
+            }
+            state.dirty = true;
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            let filtered_len = filtered_projects(state).len();
+            if filtered_len > 0 {
+                state.pick_project_cursor = (state.pick_project_cursor + 1) % filtered_len;
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            let filtered_len = filtered_projects(state).len();
+            if filtered_len > 0 {
+                if state.pick_project_cursor == 0 {
+                    state.pick_project_cursor = filtered_len - 1;
+                } else {
+                    state.pick_project_cursor -= 1;
+                }
+                state.dirty = true;
+            }
+        }
+        KeyCode::Char(c) => {
+            state.pick_project_input.push(c);
+            let new_len = filtered_projects(state).len();
+            if state.pick_project_cursor >= new_len && new_len > 0 {
+                state.pick_project_cursor = new_len - 1;
+            } else if new_len == 0 {
+                state.pick_project_cursor = 0;
+            }
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_author_search_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.author_search_mode = false;
+            state.author_search_input.clear();
+            state.set_status("준비됨");
+        }
+        KeyCode::Enter => {
+            state.author_search_mode = false;
+            state.set_status("검색 완료");
+        }
+        KeyCode::Backspace => {
+            state.author_search_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.author_search_input.push(c);
             state.dirty = true;
         }
         _ => {}
@@ -608,8 +983,77 @@ fn apply_edit_to_doc(doc: &mut documents::Document, field: usize, value: &str) {
 }
 
 fn handle_tree_activate(state: &mut AppState) {
-    let offset = 2 + state.projects.len().max(1);
-    let tree_idx = state.tree_cursor.saturating_sub(offset);
+    let cursor = state.tree_cursor;
+    let projects_header = 1usize;
+    let projects_rows = state.projects.len().max(1);
+    let first_spacer = 1usize;
+
+    // Cursor on "프로젝트" header or first spacer — no-op.
+    if cursor < projects_header + projects_rows + first_spacer {
+        // Cursor on a project row?
+        if cursor >= projects_header && cursor < projects_header + projects_rows {
+            let proj_idx = cursor - projects_header;
+            if let Some(proj) = state.projects.get(proj_idx) {
+                let new_id = if state.active_project_id == proj.id { None } else { proj.id };
+                let _ = state.action_tx.try_send(AppAction::SelectProject(new_id));
+            }
+        }
+        return;
+    }
+
+    let mut idx = projects_header + projects_rows + first_spacer;
+
+    if state.series_grouping_enabled {
+        let series_header = 1usize;
+        let series_rows = state.series.len().max(1);
+        let series_section = series_header + series_rows;
+        if cursor < idx + series_section + 1 {
+            // Cursor on a series row?
+            if cursor >= idx + series_header && cursor < idx + series_header + series_rows {
+                let ser_idx = cursor - (idx + series_header);
+                if let Some(ser) = state.series.get(ser_idx) {
+                    let new_id = if state.active_series_id == ser.id { None } else { ser.id };
+                    let _ = state.action_tx.try_send(AppAction::SelectSeries(new_id));
+                }
+            }
+            return;
+        }
+        idx += series_section + 1; // +1 for trailing spacer
+    }
+
+    let authors_header = 1usize;
+    if !state.authors.is_empty() {
+        let filtered = filtered_authors(state);
+        let authors_rows = if state.authors_expanded { filtered.len() } else { 0 };
+        let authors_section = authors_header + authors_rows;
+        if cursor < idx + authors_section + 1 {
+            if cursor == idx {
+                state.authors_expanded = !state.authors_expanded;
+                state.author_search_input.clear();
+                state.dirty = true;
+                return;
+            }
+            if state.authors_expanded
+                && cursor >= idx + authors_header
+                && cursor < idx + authors_header + authors_rows
+            {
+                let auth_idx = cursor - (idx + authors_header);
+                if let Some((name, _)) = filtered.get(auth_idx) {
+                    let new_name = if state.active_author.as_deref() == Some(name.as_str()) {
+                        None
+                    } else {
+                        Some(name.clone())
+                    };
+                    let _ = state.action_tx.try_send(AppAction::SelectAuthor(new_name));
+                }
+            }
+            return;
+        }
+        idx += authors_section + 1; // +1 for trailing spacer
+    }
+
+    // Now idx points to "UDC 분류" header.
+    let tree_idx = cursor - idx - 1; // -1 to skip the UDC header
     if tree_idx < UDC_TOP_LEVEL_STRS.len() {
         let notation = UDC_TOP_LEVEL_STRS[tree_idx].to_string();
         if state.expanded_nodes.contains(&notation) {
@@ -626,8 +1070,14 @@ fn is_modal_active(state: &AppState) -> bool {
         || state.search_mode
         || state.add_file_mode
         || state.new_project_mode
+        || state.new_series_mode
+        || state.pick_project_mode
+        || state.author_search_mode
         || state.citation_entry_mode
         || state.bibtex_import_mode
+        || state.note_mode
+        || state.tag_mode
+        || state.rating_mode
         || state.show_help
 }
 
@@ -875,6 +1325,7 @@ fn process_metadata_inner(
         file_hash: hash,
         citation_key: None,
         source: Some("pdf_extract".to_string()),
+        rating: None,
     };
 
     let key = generate_citation_key(&temp_doc, mode, |k| {
@@ -1246,6 +1697,7 @@ fn handle_search_filter(state: &mut AppState, term: String) {
 
 fn handle_select_project(state: &mut AppState, project_id: Option<i64>) {
     state.active_project_id = project_id;
+    state.active_author = None;
     if let Some(pid) = project_id {
         let docs = {
             if let Ok(conn) = state.db.lock() {
@@ -1290,6 +1742,252 @@ fn handle_create_project(state: &mut AppState, name: String) {
             state.set_status(&format!("프로젝트 생성: {}", name));
         }
         Err(e) => state.set_status(&format!("프로젝트 생성 실패: {}", e)),
+    }
+}
+
+fn handle_delete_project(state: &mut AppState, project_id: i64) {
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::projects::delete_project(&conn, project_id)
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            if state.active_project_id == Some(project_id) {
+                state.active_project_id = None;
+                state.reload_documents();
+            }
+            state.reload_projects();
+            state.set_status("프로젝트 삭제됨");
+        }
+        Err(e) => state.set_status(&format!("프로젝트 삭제 실패: {}", e)),
+    }
+}
+
+fn handle_add_docs_to_project(state: &mut AppState, project_id: i64, doc_ids: Vec<i64>) {
+    let project_name = state
+        .projects
+        .iter()
+        .find(|p| p.id == Some(project_id))
+        .map(|p| p.name.as_str())
+        .unwrap_or("프로젝트")
+        .to_string();
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            for doc_id in &doc_ids {
+                let _ = crate::db::projects::add_document(&conn, project_id, *doc_id);
+            }
+            Ok::<(), anyhow::Error>(())
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            state.selected_doc_ids.clear();
+            state.set_status(&format!("{}건 문헌을 '{}'에 추가", doc_ids.len(), project_name));
+            if state.active_project_id == Some(project_id) {
+                handle_select_project(state, Some(project_id));
+            }
+            state.dirty = true;
+        }
+        Err(e) => state.set_status(&format!("추가 실패: {}", e)),
+    }
+}
+
+fn handle_create_series(state: &mut AppState, name: String) {
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::series::create_series(&conn, &name, None, None)
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_id) => {
+            if !state.series_grouping_enabled {
+                state.series_grouping_enabled = true;
+                if let Ok(conn) = state.db.lock() {
+                    let _ = conn.execute(
+                        "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', 'true', datetime('now'))",
+                        [],
+                    );
+                }
+            }
+            state.reload_series();
+            state.set_status(&format!("시리즈 생성: {}", name));
+        }
+        Err(e) => state.set_status(&format!("시리즈 생성 실패: {}", e)),
+    }
+}
+
+fn handle_select_series(state: &mut AppState, series_id: Option<i64>) {
+    state.active_series_id = series_id;
+    state.active_author = None;
+    if let Some(sid) = series_id {
+        let docs = {
+            if let Ok(conn) = state.db.lock() {
+                if let Ok(ids) = crate::db::series::list_documents(&conn, sid) {
+                    let mut docs = Vec::new();
+                    for id in ids {
+                        if let Ok(Some(doc)) = documents::get_by_id(&conn, id) {
+                            docs.push(doc);
+                        }
+                    }
+                    Some(docs)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        if let Some(docs) = docs {
+            let count = docs.len();
+            state.documents = docs;
+            state.document_count = count;
+            state.list_cursor = 0;
+        }
+    } else {
+        state.reload_documents();
+    }
+    state.dirty = true;
+}
+
+fn handle_select_author(state: &mut AppState, author: Option<String>) {
+    state.active_author = author.clone();
+    state.active_project_id = None;
+    state.active_series_id = None;
+    if let Some(ref name) = author {
+        let conn = state.db.lock();
+        if let Ok(conn) = conn {
+            let all = documents::list_all(&conn).unwrap_or_default();
+            let norm_name = crate::db::fts_query::normalize_nfc(name);
+            let filtered: Vec<Document> = all
+                .into_iter()
+                .filter(|d| {
+                    d.authors
+                        .as_deref()
+                        .map(|a| {
+                            a.split(';')
+                                .any(|seg| crate::db::fts_query::normalize_nfc(seg.trim()) == norm_name)
+                        })
+                        .unwrap_or(false)
+                })
+                .collect();
+            let count = filtered.len();
+            state.documents = filtered;
+            state.document_count = count;
+            state.list_cursor = 0;
+        }
+    } else {
+        state.reload_documents();
+    }
+    state.dirty = true;
+}
+
+fn handle_delete_series(state: &mut AppState, series_id: i64) {
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::series::delete_series(&conn, series_id)
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            if state.active_series_id == Some(series_id) {
+                state.active_series_id = None;
+                state.reload_documents();
+            }
+            state.reload_series();
+            state.set_status("시리즈 삭제됨");
+        }
+        Err(e) => state.set_status(&format!("시리즈 삭제 실패: {}", e)),
+    }
+}
+
+fn handle_toggle_series_grouping(state: &mut AppState) {
+    state.series_grouping_enabled = !state.series_grouping_enabled;
+    let value = if state.series_grouping_enabled { "true" } else { "false" };
+    if let Ok(conn) = state.db.lock() {
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', ?1, datetime('now'))",
+            rusqlite::params![value],
+        );
+    }
+    if !state.series_grouping_enabled {
+        state.active_series_id = None;
+        state.reload_documents();
+    } else {
+        state.reload_series();
+    }
+    state.set_status(if state.series_grouping_enabled {
+        "시리즈 그룹핑 활성화"
+    } else {
+        "시리즈 그룹핑 비활성화"
+    });
+    state.dirty = true;
+}
+
+fn handle_assign_doc_to_series(
+    state: &mut AppState,
+    doc_id: i64,
+    series_id: i64,
+    volume: Option<String>,
+    issue: Option<String>,
+) {
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::series::add_document(
+                &conn,
+                series_id,
+                doc_id,
+                volume.as_deref(),
+                issue.as_deref(),
+            )
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            state.set_status(&format!("문헌 {}을(를) 시리즈에 추가", doc_id));
+            state.dirty = true;
+        }
+        Err(e) => state.set_status(&format!("시리즈 추가 실패: {}", e)),
+    }
+}
+
+fn handle_auto_group_series(state: &mut AppState) {
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::series::auto_group_by_journal(&conn)
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(ids) => {
+            if !ids.is_empty() {
+                if !state.series_grouping_enabled {
+                    state.series_grouping_enabled = true;
+                    if let Ok(conn) = state.db.lock() {
+                        let _ = conn.execute(
+                            "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', 'true', datetime('now'))",
+                            [],
+                        );
+                    }
+                }
+                state.reload_series();
+                state.set_status(&format!("자동 그룹핑: {}개 시리즈 생성/갱신", ids.len()));
+            } else {
+                state.set_status("자동 그룹핑: 묶을 수 있는 시리즈 없음");
+            }
+        }
+        Err(e) => state.set_status(&format!("자동 그룹핑 실패: {}", e)),
     }
 }
 
@@ -1500,14 +2198,36 @@ fn get_udc_notations(conn: &rusqlite::Connection, document_id: i64) -> Vec<Strin
 }
 
 pub fn count_tree_nodes(state: &AppState) -> usize {
-    let mut count = 2;
+    let mut count = 1; // "프로젝트" header
     count += state.projects.len().max(1);
-    count += 1;
-    count += 1;
+    count += 1; // spacer after projects
+    if state.series_grouping_enabled {
+        count += 1; // "시리즈" header
+        count += state.series.len().max(1);
+        count += 1; // spacer after series
+    }
+    if !state.authors.is_empty() {
+        count += 1; // "연구자별 보기" header
+        if state.authors_expanded {
+            if state.author_search_mode {
+                count += 1; // search input line
+            }
+            let filtered_len = filtered_authors(state).len();
+            if filtered_len == 0 && !state.author_search_input.is_empty() {
+                count += 1; // "일치하는 연구자가 없습니다"
+            } else {
+                count += filtered_len;
+            }
+        }
+        count += 1; // spacer after authors
+    }
+    count += 1; // "UDC 분류" header
     count += 9;
     for (notation, _) in UDC_TOP_LEVEL_TUPLES {
         if state.expanded_nodes.contains(*notation) {
-            count += 3;
+            if let Some(children) = crate::ui::left_panel::UDC_CHILDREN.get(*notation) {
+                count += children.len();
+            }
         }
     }
 

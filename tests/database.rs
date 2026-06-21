@@ -38,6 +38,8 @@ fn test_schema_creation() -> Result<()> {
         "app_config",
         "tags",
         "citation_relations",
+        "series",
+        "document_series",
     ] {
         assert!(tables.contains(&expected.to_string()), "missing table: {}", expected);
     }
@@ -63,6 +65,7 @@ fn test_document_insert_and_retrieve() -> Result<()> {
 
         citation_key: Some("Smith2024".to_string()),
         source: Some("pdf_extract".to_string()),
+        rating: None,
     };
 
     let id = db::documents::insert(&conn, &doc)?;
@@ -94,6 +97,7 @@ fn test_doi_uniqueness() -> Result<()> {
         file_hash: None,
         citation_key: Some("Key1".to_string()),
         source: None,
+        rating: None,
     };
     db::documents::insert(&conn, &doc1)?;
 
@@ -112,6 +116,7 @@ fn test_doi_uniqueness() -> Result<()> {
         file_hash: None,
         citation_key: Some("Key2".to_string()),
         source: None,
+        rating: None,
     };
     let result = db::documents::insert(&conn, &doc2);
     assert!(result.is_err(), "duplicate DOI should fail");
@@ -138,6 +143,7 @@ fn test_project_document_mapping() -> Result<()> {
         file_hash: None,
         citation_key: Some("ML2024".to_string()),
         source: None,
+        rating: None,
     };
     let doc_id = db::documents::insert(&conn, &doc)?;
 
@@ -167,6 +173,7 @@ fn test_fts_trigram_search() -> Result<()> {
         file_hash: None,
         citation_key: Some("Kim2024".to_string()),
         source: None,
+        rating: None,
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -193,6 +200,7 @@ fn test_citation_key_exists_check() -> Result<()> {
         file_hash: None,
         citation_key: Some("UniqueKey".to_string()),
         source: None,
+        rating: None,
     };
     db::documents::insert(&conn, &doc)?;
 
@@ -219,6 +227,7 @@ fn test_file_hash_dedup() -> Result<()> {
         file_hash: Some("abc123".to_string()),
         citation_key: Some("Hash1".to_string()),
         source: None,
+        rating: None,
     };
     db::documents::insert(&conn, &doc)?;
 
@@ -249,6 +258,7 @@ fn test_korean_substring_2char() -> Result<()> {
         file_hash: None,
         citation_key: Some("Kim2024a".to_string()),
         source: None,
+        rating: None,
     };
     let doc2 = Document {
         id: None,
@@ -265,6 +275,7 @@ fn test_korean_substring_2char() -> Result<()> {
         file_hash: None,
         citation_key: Some("Lee2023".to_string()),
         source: None,
+        rating: None,
     };
     let id1 = db::documents::insert(&conn, &doc1)?;
     let id2 = db::documents::insert(&conn, &doc2)?;
@@ -293,6 +304,7 @@ fn test_korean_substring_3char_trigram() -> Result<()> {
         file_hash: None,
         citation_key: Some("Kwak2024".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -319,6 +331,7 @@ fn test_korean_1char_via_like() -> Result<()> {
         file_hash: None,
         citation_key: Some("Test1c".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -345,6 +358,7 @@ fn test_mixed_cjk_latin_search() -> Result<()> {
         file_hash: None,
         citation_key: Some("Mixed1".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -371,6 +385,7 @@ fn test_no_false_positive_korean() -> Result<()> {
         file_hash: None,
         citation_key: Some("FP1".to_string()),
         source: None,
+        rating: None,
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -397,6 +412,7 @@ fn test_english_regression_trigram() -> Result<()> {
         file_hash: None,
         citation_key: Some("Eng1".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -423,6 +439,7 @@ fn test_english_2char_like_fallback() -> Result<()> {
         file_hash: None,
         citation_key: Some("Eng2c".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -449,6 +466,7 @@ fn test_fts_trigger_sync() -> Result<()> {
         file_hash: None,
         citation_key: Some("Sync1".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -490,6 +508,7 @@ fn test_bigram_2char_cjk_match() -> Result<()> {
         file_hash: None,
         citation_key: Some("Bigram1".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -519,6 +538,7 @@ fn test_bigram_trigger_sync() -> Result<()> {
         file_hash: None,
         citation_key: Some("BigramSync".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -563,6 +583,7 @@ fn test_nfc_normalized_at_rest() -> Result<()> {
         file_hash: None,
         citation_key: Some("NfcTest".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -589,6 +610,7 @@ fn test_bigram_no_false_positive() -> Result<()> {
         file_hash: None,
         citation_key: Some("BigramFP".to_string()),
         source: None,
+        rating: None,
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -615,6 +637,7 @@ fn test_bigram_japanese_and_chinese() -> Result<()> {
         file_hash: None,
         citation_key: Some("JpBigram".to_string()),
         source: None,
+        rating: None,
     };
     let id_jp = db::documents::insert(&conn, &doc_jp)?;
 
@@ -645,6 +668,7 @@ fn test_migration_v3_populates_bigram_table() -> Result<()> {
         file_hash: None,
         citation_key: Some("MigV3".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -685,6 +709,7 @@ fn test_choseong_2char_match() -> Result<()> {
         file_hash: None,
         citation_key: Some("Cho1".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -714,6 +739,7 @@ fn test_choseong_3char_match() -> Result<()> {
         file_hash: None,
         citation_key: Some("Cho2".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -743,6 +769,7 @@ fn test_choseong_author_search() -> Result<()> {
         file_hash: None,
         citation_key: Some("Cho3".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -772,6 +799,7 @@ fn test_choseong_no_false_positive() -> Result<()> {
         file_hash: None,
         citation_key: Some("ChoFP".to_string()),
         source: None,
+        rating: None,
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -801,6 +829,7 @@ fn test_choseong_trigger_sync() -> Result<()> {
         file_hash: None,
         citation_key: Some("ChoSync".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -851,6 +880,7 @@ fn test_choseong_does_not_cross_latin_gap() -> Result<()> {
         file_hash: None,
         citation_key: Some("ChoGap".to_string()),
         source: None,
+        rating: None,
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -886,6 +916,7 @@ fn test_document_notes_crud() -> Result<()> {
         file_hash: None,
         citation_key: Some("NoteTest".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -926,6 +957,7 @@ fn test_document_notes_cascade_delete() -> Result<()> {
         file_hash: None,
         citation_key: Some("CascadeDel".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
     db::notes::set(&conn, id, "삭제될 노트")?;
@@ -955,6 +987,7 @@ fn test_document_notes_multiline() -> Result<()> {
         file_hash: None,
         citation_key: Some("MultiNote".to_string()),
         source: None,
+        rating: None,
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -962,6 +995,144 @@ fn test_document_notes_multiline() -> Result<()> {
     db::notes::set(&conn, id, content)?;
     let note = db::notes::get(&conn, id)?;
     assert_eq!(note.as_deref(), Some(content));
+
+    Ok(())
+}
+
+fn make_doc(title: &str, journal: Option<&str>, doi: &str, cite_key: &str) -> Document {
+    Document {
+        id: None,
+        title: title.to_string(),
+        authors: Some("Author, A.".to_string()),
+        journal: journal.map(|s| s.to_string()),
+        conference: None,
+        pub_year: Some(2024),
+        doi: Some(doi.to_string()),
+        arxiv_id: None,
+        abstract_text: None,
+        keywords: None,
+        file_path: None,
+        file_hash: None,
+        citation_key: Some(cite_key.to_string()),
+        source: None,
+        rating: None,
+    }
+}
+
+#[test]
+fn test_series_crud() -> Result<()> {
+    let conn = setup_db()?;
+
+    let s1 = db::series::create_series(&conn, "Lecture Notes in Math", Some("Springer"), Some("0025-5858"))?;
+    let s2 = db::series::create_series(&conn, "Journal of Number Theory", None, None)?;
+    assert!(s1 > 0 && s2 > s1);
+
+    let list = db::series::list_series(&conn)?;
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0].name, "Journal of Number Theory");
+    assert_eq!(list[1].name, "Lecture Notes in Math");
+    assert_eq!(list[1].publisher.as_deref(), Some("Springer"));
+    assert_eq!(list[1].issn.as_deref(), Some("0025-5858"));
+
+    let found = db::series::get_by_name(&conn, "Lecture Notes in Math")?;
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().id, Some(s1));
+
+    let none = db::series::get_by_name(&conn, "Nonexistent")?;
+    assert!(none.is_none());
+
+    db::series::delete_series(&conn, s1)?;
+    let after = db::series::list_series(&conn)?;
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].name, "Journal of Number Theory");
+
+    Ok(())
+}
+
+#[test]
+fn test_series_document_mapping() -> Result<()> {
+    let conn = setup_db()?;
+    let sid = db::series::create_series(&conn, "Number Theory Series", None, None)?;
+
+    let d1 = db::documents::insert(&conn, &make_doc("Vol 1", Some("NTS"), "10.1/nt1", "NT1"))?;
+    let d2 = db::documents::insert(&conn, &make_doc("Vol 2", Some("NTS"), "10.1/nt2", "NT2"))?;
+    let d3 = db::documents::insert(&conn, &make_doc("Vol 3", Some("NTS"), "10.1/nt3", "NT3"))?;
+
+    db::series::add_document(&conn, sid, d1, Some("1"), None)?;
+    db::series::add_document(&conn, sid, d2, Some("2"), None)?;
+    db::series::add_document(&conn, sid, d3, Some("3"), None)?;
+
+    assert_eq!(db::series::count_documents(&conn, sid)?, 3);
+
+    let docs = db::series::list_documents(&conn, sid)?;
+    assert_eq!(docs.len(), 3);
+
+    let series_for_d1 = db::series::list_series_for_document(&conn, d1)?;
+    assert_eq!(series_for_d1.len(), 1);
+    assert_eq!(series_for_d1[0].name, "Number Theory Series");
+
+    db::series::remove_document(&conn, sid, d2)?;
+    assert_eq!(db::series::count_documents(&conn, sid)?, 2);
+
+    db::series::delete_series(&conn, sid)?;
+    let after = db::series::list_series_for_document(&conn, d1)?;
+    assert_eq!(after.len(), 0, "delete_series should cascade to document_series");
+
+    Ok(())
+}
+
+#[test]
+fn test_auto_group_by_journal() -> Result<()> {
+    let conn = setup_db()?;
+
+    db::documents::insert(&conn, &make_doc("Paper A", Some("J. Number Theory"), "10.1/a", "A2024"))?;
+    db::documents::insert(&conn, &make_doc("Paper B", Some("J. Number Theory"), "10.1/b", "B2024"))?;
+    db::documents::insert(&conn, &make_doc("Paper C", Some("J. Number Theory"), "10.1/c", "C2024"))?;
+    db::documents::insert(&conn, &make_doc("Paper D", Some("Phys. Rev. Lett."), "10.1/d", "D2024"))?;
+    db::documents::insert(&conn, &make_doc("Paper E", Some("Phys. Rev. Lett."), "10.1/e", "E2024"))?;
+    db::documents::insert(&conn, &make_doc("Lonely Paper", Some("Solo Journal"), "10.1/f", "F2024"))?;
+
+    let proposals = db::series::propose_series_by_journal(&conn)?;
+    assert_eq!(proposals.len(), 2, "two journals with 2+ docs each");
+    assert_eq!(proposals[0].name, "J. Number Theory");
+    assert_eq!(proposals[0].document_ids.len(), 3);
+    assert_eq!(proposals[1].name, "Phys. Rev. Lett.");
+    assert_eq!(proposals[1].document_ids.len(), 2);
+
+    let ids = db::series::auto_group_by_journal(&conn)?;
+    assert_eq!(ids.len(), 2);
+
+    let series = db::series::list_series(&conn)?;
+    assert_eq!(series.len(), 2);
+
+    let nts = db::series::get_by_name(&conn, "J. Number Theory")?.unwrap();
+    assert_eq!(db::series::count_documents(&conn, nts.id.unwrap())?, 3);
+
+    let prl = db::series::get_by_name(&conn, "Phys. Rev. Lett.")?.unwrap();
+    assert_eq!(db::series::count_documents(&conn, prl.id.unwrap())?, 2);
+
+    let solo = db::series::get_by_name(&conn, "Solo Journal")?;
+    assert!(solo.is_none(), "single-doc journal should not become a series");
+
+    Ok(())
+}
+
+#[test]
+fn test_propose_series_skips_existing() -> Result<()> {
+    let conn = setup_db()?;
+
+    db::documents::insert(&conn, &make_doc("P1", Some("Math J"), "10.1/p1", "P1"))?;
+    db::documents::insert(&conn, &make_doc("P2", Some("Math J"), "10.1/p2", "P2"))?;
+
+    db::series::create_series(&conn, "Math J", None, None)?;
+
+    let proposals = db::series::propose_series_by_journal(&conn)?;
+    assert!(proposals.is_empty(), "should skip journals that already have a series");
+
+    let ids = db::series::auto_group_by_journal(&conn)?;
+    assert_eq!(ids.len(), 1, "auto_group reuses existing series");
+    let series = db::series::list_series(&conn)?;
+    assert_eq!(series.len(), 1);
 
     Ok(())
 }

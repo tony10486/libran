@@ -26,6 +26,7 @@ pub fn make_doc(title: &str, authors: Option<&str>) -> Document {
         file_hash: None,
         citation_key: None,
         source: None,
+        rating: None,
     }
 }
 

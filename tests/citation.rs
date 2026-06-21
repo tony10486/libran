@@ -21,6 +21,7 @@ fn test_bibtex_export_format() {
         file_hash: None,
         citation_key: Some("Smith2024".to_string()),
         source: None,
+        rating: None,
     };
 
     let mut buf = Vec::new();
@@ -53,6 +54,7 @@ fn test_csl_json_export_format() {
         file_hash: None,
         citation_key: Some("Smith2024".to_string()),
         source: None,
+        rating: None,
     };
 
     let mut buf = Vec::new();
@@ -85,6 +87,7 @@ fn test_collision_resolution_chain() {
         file_hash: None,
         citation_key: None,
         source: None,
+        rating: None,
     };
 
     let existing: Vec<String> = vec!["Smith2024".into(), "Smith2024a".into(), "Smith2024b".into()];
@@ -111,6 +114,7 @@ fn test_custom_template_all_vars() {
         file_hash: None,
         citation_key: None,
         source: None,
+        rating: None,
     };
 
     let key = generate_citation_key(

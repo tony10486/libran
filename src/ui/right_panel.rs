@@ -14,7 +14,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let highlight = if focused {
         theme::focus_style()
     } else {
-        Style::default().bg(Color::Black).fg(Color::DarkGray)
+        Style::default().bg(Color::Indexed(236))
     };
 
     let is_sort_mode = state.is_similarity_sorted();
@@ -53,14 +53,26 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
                 String::new()
             };
 
+            let rating_str = match doc.rating {
+                Some(r) if (1..=5).contains(&r) => {
+                    format!(" {}", "★".repeat(r as usize) + &"☆".repeat(5 - r as usize))
+                }
+                _ => String::new(),
+            };
+
             ListItem::new(vec![
                 Line::from(vec![
-                    Span::styled(marker, Style::default().fg(marker_color).bg(Color::Black)),
+                    Span::styled(marker, Style::default().fg(marker_color)),
                     Span::styled(doc.title.clone(), theme::title_style()),
+                    if !rating_str.is_empty() {
+                        Span::styled(rating_str, Style::default().fg(Color::Yellow))
+                    } else {
+                        Span::raw("")
+                    },
                     if score_str.starts_with(" [기준]") {
-                        Span::styled(score_str, Style::default().fg(Color::Cyan).bg(Color::Black))
+                        Span::styled(score_str, Style::default().fg(Color::Cyan))
                     } else if score_str.starts_with(" [") {
-                        Span::styled(score_str, Style::default().fg(Color::Yellow).bg(Color::Black))
+                        Span::styled(score_str, Style::default().fg(Color::Yellow))
                     } else {
                         Span::raw("")
                     },
@@ -82,7 +94,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let list = List::default()
         .items(items)
-        .style(Style::default().bg(Color::Black))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black))
         .highlight_style(highlight);
 
     let mut list_state = ListState::default();
@@ -145,13 +157,44 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     lines.push(field_line("출처", doc.source.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
 
+    let rating_display = match doc.rating {
+        Some(r) if (1..=5).contains(&r) => {
+            format!("{} ({}점)", "★".repeat(r as usize) + &"☆".repeat(5 - r as usize), r)
+        }
+        _ => "—".to_string(),
+    };
+    lines.push(field_line("별점", &rating_display));
+    lines.push(Line::from(""));
+
+    if state.current_tags.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("  태그   ", theme::label_style()),
+            Span::styled("(없음)", theme::dim_style()),
+        ]));
+    } else {
+        let mut tag_spans = vec![
+            Span::styled("  태그   ", theme::label_style()),
+        ];
+        for (i, tag) in state.current_tags.iter().enumerate() {
+            if i > 0 {
+                tag_spans.push(Span::raw(" "));
+            }
+            tag_spans.push(Span::styled(
+                format!("#{}", tag),
+                Style::default().fg(Color::Magenta).bg(Color::Black),
+            ));
+        }
+        lines.push(Line::from(tag_spans));
+    }
+    lines.push(Line::from(""));
+
     if let Some(abs) = &doc.abstract_text {
         lines.push(Line::from(vec![Span::styled("  ─── 초록 ───", theme::dim_style())]));
         lines.push(Line::from(""));
         for line in abs.lines().take(10) {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(line.to_string(), Style::default().fg(Color::Gray).bg(Color::Black)),
+                Span::styled(line.to_string(), Style::default().fg(Color::Gray)),
             ]));
         }
     } else {
@@ -177,7 +220,7 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
                 " ✎ 노트 (편집 중) ",
                 Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
             ))
-            .style(Style::default().bg(note_bg));
+            .style(Style::default().fg(note_fg).bg(note_bg));
 
         let hint = Line::from(vec![Span::styled(
             " [Enter] 줄바꿈  [Esc] 저장  [Ctrl+D] 삭제",
@@ -213,7 +256,7 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
                 title,
                 Style::default().fg(note_fg),
             ))
-            .style(Style::default().bg(note_bg));
+            .style(Style::default().fg(note_fg).bg(note_bg));
 
         let mut note_lines: Vec<Line> = Vec::new();
         if has_note {
@@ -244,6 +287,6 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
 fn field_line(label: &str, value: &str) -> Line<'static> {
     Line::from(vec![
         Span::styled(format!("  {:6} ", label), theme::label_style()),
-        Span::styled(value.to_string(), Style::default().fg(Color::Gray).bg(Color::Black)),
+        Span::styled(value.to_string(), Style::default().fg(Color::Gray)),
     ])
 }
