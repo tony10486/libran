@@ -67,9 +67,8 @@ impl CitationStyle {
     }
 
     /// Whether the renderer has a working implementation for this style.
-    /// Phase 1 implements only APA 7th.
     pub fn is_implemented(&self) -> bool {
-        matches!(self, Self::Apa7th)
+        true
     }
 
     /// Whether the style uses footnotes/endnotes rather than in-text citations.
@@ -80,6 +79,36 @@ impl CitationStyle {
                 | Self::Chicago18ShortenedNotesBib
                 | Self::Mhra4thNotes
         )
+    }
+
+    /// Stable string identifier for persistence (app_config storage).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::AcsGuide2022 => "acs_guide_2022",
+            Self::Ama11th => "ama_11th",
+            Self::Apa7th => "apa_7th",
+            Self::Apsa2018 => "apsa_2018",
+            Self::Asa6th7th => "asa_6th_7th",
+            Self::Chicago18AuthorDate => "chicago_18_author_date",
+            Self::Chicago18NotesBib => "chicago_18_notes_bib",
+            Self::Chicago18ShortenedNotesBib => "chicago_18_shortened_notes_bib",
+            Self::CiteThemRight12thHarvard => "cite_them_right_12th_harvard",
+            Self::ElsevierHarvardWithTitles => "elsevier_harvard_with_titles",
+            Self::IeeeV11_29_2023 => "ieee_v11_29_2023",
+            Self::Mhra4thNotes => "mhra_4th_notes",
+            Self::Mla9thInText => "mla_9th_in_text",
+            Self::Nature => "nature",
+            Self::NlmVancouverCitingMedicine2nd => "nlm_vancouver_citing_medicine_2nd",
+        }
+    }
+
+    /// Parse a stable string identifier back into a CitationStyle.
+    /// Returns None if the string does not match any style.
+    pub fn from_str(s: &str) -> Option<Self> {
+        Self::all()
+            .iter()
+            .copied()
+            .find(|style| style.as_str() == s)
     }
 }
 
@@ -110,6 +139,19 @@ impl CitationLanguage {
             CitationLanguage::Chinese,
         ];
         ALL
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::English => "english",
+            Self::Korean => "korean",
+            Self::Japanese => "japanese",
+            Self::Chinese => "chinese",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        Self::all().iter().copied().find(|lang| lang.as_str() == s)
     }
 }
 
