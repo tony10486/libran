@@ -86,6 +86,7 @@ mod tests {
             citation_key: citation_key.map(String::from),
             source: source.map(String::from),
             rating,
+            ..Default::default()
         }
     }
 

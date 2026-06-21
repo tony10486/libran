@@ -27,6 +27,7 @@ pub fn make_doc(title: &str, authors: Option<&str>) -> Document {
         citation_key: None,
         source: None,
         rating: None,
+        ..Default::default()
     }
 }
 

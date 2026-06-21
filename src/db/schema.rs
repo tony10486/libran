@@ -16,6 +16,17 @@ CREATE TABLE IF NOT EXISTS documents (
     file_hash       TEXT,
     citation_key    TEXT UNIQUE,
     source          TEXT DEFAULT 'manual',
+    volume          TEXT,
+    issue           TEXT,
+    page_start      TEXT,
+    page_end        TEXT,
+    publisher       TEXT,
+    city            TEXT,
+    edition         TEXT,
+    isbn            TEXT,
+    issn            TEXT,
+    url             TEXT,
+    accessed_date   TEXT,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -1523,6 +1523,7 @@ fn process_metadata_inner(
         citation_key: None,
         source: Some("pdf_extract".to_string()),
         rating: None,
+        ..Default::default()
     };
 
     let key = generate_citation_key(&temp_doc, mode, |k| {

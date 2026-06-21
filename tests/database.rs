@@ -67,6 +67,7 @@ fn test_document_insert_and_retrieve() -> Result<()> {
         citation_key: Some("Smith2024".to_string()),
         source: Some("pdf_extract".to_string()),
         rating: None,
+        ..Default::default()
     };
 
     let id = db::documents::insert(&conn, &doc)?;
@@ -99,6 +100,7 @@ fn test_doi_uniqueness() -> Result<()> {
         citation_key: Some("Key1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     db::documents::insert(&conn, &doc1)?;
 
@@ -118,6 +120,7 @@ fn test_doi_uniqueness() -> Result<()> {
         citation_key: Some("Key2".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let result = db::documents::insert(&conn, &doc2);
     assert!(result.is_err(), "duplicate DOI should fail");
@@ -145,6 +148,7 @@ fn test_project_document_mapping() -> Result<()> {
         citation_key: Some("ML2024".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let doc_id = db::documents::insert(&conn, &doc)?;
 
@@ -175,6 +179,7 @@ fn test_fts_trigram_search() -> Result<()> {
         citation_key: Some("Kim2024".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -202,6 +207,7 @@ fn test_citation_key_exists_check() -> Result<()> {
         citation_key: Some("UniqueKey".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     db::documents::insert(&conn, &doc)?;
 
@@ -229,6 +235,7 @@ fn test_file_hash_dedup() -> Result<()> {
         citation_key: Some("Hash1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     db::documents::insert(&conn, &doc)?;
 
@@ -260,6 +267,7 @@ fn test_korean_substring_2char() -> Result<()> {
         citation_key: Some("Kim2024a".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let doc2 = Document {
         id: None,
@@ -277,6 +285,7 @@ fn test_korean_substring_2char() -> Result<()> {
         citation_key: Some("Lee2023".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id1 = db::documents::insert(&conn, &doc1)?;
     let id2 = db::documents::insert(&conn, &doc2)?;
@@ -306,6 +315,7 @@ fn test_korean_substring_3char_trigram() -> Result<()> {
         citation_key: Some("Kwak2024".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -333,6 +343,7 @@ fn test_korean_1char_via_like() -> Result<()> {
         citation_key: Some("Test1c".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -360,6 +371,7 @@ fn test_mixed_cjk_latin_search() -> Result<()> {
         citation_key: Some("Mixed1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -387,6 +399,7 @@ fn test_no_false_positive_korean() -> Result<()> {
         citation_key: Some("FP1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -414,6 +427,7 @@ fn test_english_regression_trigram() -> Result<()> {
         citation_key: Some("Eng1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -441,6 +455,7 @@ fn test_english_2char_like_fallback() -> Result<()> {
         citation_key: Some("Eng2c".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -468,6 +483,7 @@ fn test_fts_trigger_sync() -> Result<()> {
         citation_key: Some("Sync1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -510,6 +526,7 @@ fn test_bigram_2char_cjk_match() -> Result<()> {
         citation_key: Some("Bigram1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -540,6 +557,7 @@ fn test_bigram_trigger_sync() -> Result<()> {
         citation_key: Some("BigramSync".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -585,6 +603,7 @@ fn test_nfc_normalized_at_rest() -> Result<()> {
         citation_key: Some("NfcTest".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -612,6 +631,7 @@ fn test_bigram_no_false_positive() -> Result<()> {
         citation_key: Some("BigramFP".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -639,6 +659,7 @@ fn test_bigram_japanese_and_chinese() -> Result<()> {
         citation_key: Some("JpBigram".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id_jp = db::documents::insert(&conn, &doc_jp)?;
 
@@ -670,6 +691,7 @@ fn test_migration_v3_populates_bigram_table() -> Result<()> {
         citation_key: Some("MigV3".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -711,6 +733,7 @@ fn test_choseong_2char_match() -> Result<()> {
         citation_key: Some("Cho1".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -741,6 +764,7 @@ fn test_choseong_3char_match() -> Result<()> {
         citation_key: Some("Cho2".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -771,6 +795,7 @@ fn test_choseong_author_search() -> Result<()> {
         citation_key: Some("Cho3".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -801,6 +826,7 @@ fn test_choseong_no_false_positive() -> Result<()> {
         citation_key: Some("ChoFP".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -831,6 +857,7 @@ fn test_choseong_trigger_sync() -> Result<()> {
         citation_key: Some("ChoSync".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -882,6 +909,7 @@ fn test_choseong_does_not_cross_latin_gap() -> Result<()> {
         citation_key: Some("ChoGap".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let _id = db::documents::insert(&conn, &doc)?;
 
@@ -918,6 +946,7 @@ fn test_document_notes_crud() -> Result<()> {
         citation_key: Some("NoteTest".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -959,6 +988,7 @@ fn test_document_notes_cascade_delete() -> Result<()> {
         citation_key: Some("CascadeDel".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
     db::notes::set(&conn, id, "삭제될 노트")?;
@@ -989,6 +1019,7 @@ fn test_document_notes_multiline() -> Result<()> {
         citation_key: Some("MultiNote".to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     };
     let id = db::documents::insert(&conn, &doc)?;
 
@@ -1017,6 +1048,7 @@ fn make_doc(title: &str, journal: Option<&str>, doi: &str, cite_key: &str) -> Do
         citation_key: Some(cite_key.to_string()),
         source: None,
         rating: None,
+        ..Default::default()
     }
 }
 

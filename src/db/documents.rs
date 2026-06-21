@@ -21,6 +21,17 @@ pub struct Document {
     pub citation_key: Option<String>,
     pub source: Option<String>,
     pub rating: Option<i64>,
+    pub volume: Option<String>,
+    pub issue: Option<String>,
+    pub page_start: Option<String>,
+    pub page_end: Option<String>,
+    pub publisher: Option<String>,
+    pub city: Option<String>,
+    pub edition: Option<String>,
+    pub isbn: Option<String>,
+    pub issn: Option<String>,
+    pub url: Option<String>,
+    pub accessed_date: Option<String>,
 }
 
 impl Default for Document {
@@ -41,14 +52,25 @@ impl Default for Document {
             citation_key: None,
             source: None,
             rating: None,
+            volume: None,
+            issue: None,
+            page_start: None,
+            page_end: None,
+            publisher: None,
+            city: None,
+            edition: None,
+            isbn: None,
+            issn: None,
+            url: None,
+            accessed_date: None,
         }
     }
 }
 
 pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
     conn.execute(
-        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
         params![
             normalize_nfc(&doc.title),
             doc.authors.as_deref().map(normalize_nfc),
@@ -64,6 +86,17 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
             doc.source.as_deref().unwrap_or("manual"),
             doc.conference.as_deref().map(normalize_nfc),
             doc.rating,
+            doc.volume,
+            doc.issue,
+            doc.page_start,
+            doc.page_end,
+            doc.publisher,
+            doc.city,
+            doc.edition,
+            doc.isbn,
+            doc.issn,
+            doc.url,
+            doc.accessed_date,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -71,7 +104,7 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
 
 pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating
+        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date
          FROM documents WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -92,6 +125,17 @@ pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
             source: row.get(12)?,
             conference: row.get(13)?,
             rating: row.get(14)?,
+            volume: row.get(15)?,
+            issue: row.get(16)?,
+            page_start: row.get(17)?,
+            page_end: row.get(18)?,
+            publisher: row.get(19)?,
+            city: row.get(20)?,
+            edition: row.get(21)?,
+            isbn: row.get(22)?,
+            issn: row.get(23)?,
+            url: row.get(24)?,
+            accessed_date: row.get(25)?,
         }))
     } else {
         Ok(None)
@@ -116,12 +160,23 @@ macro_rules! doc_from_row {
             source: $row.get(12)?,
             conference: $row.get(13)?,
             rating: $row.get(14)?,
+            volume: $row.get(15)?,
+            issue: $row.get(16)?,
+            page_start: $row.get(17)?,
+            page_end: $row.get(18)?,
+            publisher: $row.get(19)?,
+            city: $row.get(20)?,
+            edition: $row.get(21)?,
+            isbn: $row.get(22)?,
+            issn: $row.get(23)?,
+            url: $row.get(24)?,
+            accessed_date: $row.get(25)?,
         }
     };
 }
 
 const DOCUMENT_COLS: &str =
-    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating";
+    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date";
 
 pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
@@ -171,8 +226,10 @@ pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
     conn.execute(
         "UPDATE documents SET title = ?1, authors = ?2, journal = ?3, conference = ?4, pub_year = ?5,
          doi = ?6, arxiv_id = ?7, abstract = ?8, keywords = ?9,
+         volume = ?10, issue = ?11, page_start = ?12, page_end = ?13, publisher = ?14, city = ?15,
+         edition = ?16, isbn = ?17, issn = ?18, url = ?19, accessed_date = ?20,
          updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?10",
+         WHERE id = ?21",
         params![
             normalize_nfc(&doc.title),
             doc.authors.as_deref().map(normalize_nfc),
@@ -183,6 +240,17 @@ pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
             doc.arxiv_id,
             doc.abstract_text.as_deref().map(normalize_nfc),
             doc.keywords.as_deref().map(normalize_nfc),
+            doc.volume,
+            doc.issue,
+            doc.page_start,
+            doc.page_end,
+            doc.publisher,
+            doc.city,
+            doc.edition,
+            doc.isbn,
+            doc.issn,
+            doc.url,
+            doc.accessed_date,
             doc.id,
         ],
     )?;

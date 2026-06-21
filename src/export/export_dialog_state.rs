@@ -237,6 +237,7 @@ mod tests {
             citation_key: None,
             source: None,
             rating: None,
+            ..Default::default()
         }
     }
 

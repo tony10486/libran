@@ -1,3 +1,13 @@
+pub mod bibliontology_rdf;
+pub mod bookmarks;
+pub mod cff;
+pub mod coins;
 pub mod csv_export;
+pub mod endnote_xml;
+pub mod evernote;
 pub mod mods;
+pub mod refer_bibix;
+pub mod refworks_tagged;
 pub mod ris;
+pub mod tei;
+pub mod wikidata_qs;

@@ -197,6 +197,22 @@ pub fn run(conn: &Connection) -> Result<()> {
         set_version(conn, 8)?;
     }
 
+    if version < 9 {
+        // Migration 9: add bibliographic fields for citation export
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN volume TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN issue TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN page_start TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN page_end TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN publisher TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN city TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN edition TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN isbn TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN issn TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN url TEXT", []);
+        let _ = conn.execute("ALTER TABLE documents ADD COLUMN accessed_date TEXT", []);
+        set_version(conn, 9)?;
+    }
+
     Ok(())
 }
 
