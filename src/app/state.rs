@@ -135,6 +135,9 @@ pub struct AppState {
     pub custom_field_key: String,
     pub custom_field_value: String,
     pub custom_field_editing_key: bool,
+
+    pub show_export_dialog: bool,
+    pub export_dialog_state: crate::export::export_dialog_state::ExportDialogState,
 }
 
 impl AppState {
@@ -229,6 +232,8 @@ impl AppState {
             custom_field_key: String::new(),
             custom_field_value: String::new(),
             custom_field_editing_key: false,
+            show_export_dialog: false,
+            export_dialog_state: crate::export::export_dialog_state::ExportDialogState::new(),
         }
     }
 
