@@ -1993,10 +1993,12 @@ fn handle_export_dialog_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.dirty = true;
         }
         KeyCode::Enter => {
+            save_export_preferences(state);
             handle_clipboard_copy(state);
         }
         KeyCode::Char('e') => {
             let format = state.export_dialog_state.selected_format;
+            save_export_preferences(state);
             state.show_export_dialog = false;
             handle_export(state, format);
         }
@@ -2012,6 +2014,17 @@ fn update_dialog_preview(state: &mut AppState) {
                 state.export_dialog_state.update_preview(&doc);
             }
         }
+    }
+}
+
+fn save_export_preferences(state: &mut AppState) {
+    if let Ok(conn) = state.db.lock() {
+        let _ = crate::export::preferences::save(
+            &conn,
+            state.export_dialog_state.selected_format,
+            state.export_dialog_state.selected_style,
+            state.export_dialog_state.selected_language,
+        );
     }
 }
 

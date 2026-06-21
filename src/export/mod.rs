@@ -3,6 +3,7 @@ use anyhow::Result;
 use std::io::Write;
 
 pub mod export_dialog_state;
+pub mod preferences;
 
 pub fn export(documents: &[Document], format: ExportFormat, writer: &mut impl Write) -> Result<()> {
     match format {
@@ -132,6 +133,31 @@ impl ExportFormat {
     /// Returns true for formats implemented in the current phase.
     pub fn is_implemented(&self) -> bool {
         true
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ExportFormat::BibliontologyRdf => "bibliontology_rdf",
+            ExportFormat::Bibtex => "bibtex",
+            ExportFormat::Bookmarks => "bookmarks",
+            ExportFormat::Cff => "cff",
+            ExportFormat::CffReferences => "cff_references",
+            ExportFormat::Coins => "coins",
+            ExportFormat::CslJson => "csl_json",
+            ExportFormat::Csv => "csv",
+            ExportFormat::EndnoteXml => "endnote_xml",
+            ExportFormat::Mods => "mods",
+            ExportFormat::ReferBibix => "refer_bibix",
+            ExportFormat::RefworksTagged => "refworks_tagged",
+            ExportFormat::Ris => "ris",
+            ExportFormat::EvernoteExport => "evernote_export",
+            ExportFormat::Tei => "tei",
+            ExportFormat::WikidataQuickStatements => "wikidata_quick_statements",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        Self::all().iter().copied().find(|fmt| fmt.as_str() == s)
     }
 }
 

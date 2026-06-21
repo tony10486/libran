@@ -42,6 +42,7 @@ impl ExportDialogState {
         }
     }
 
+
     fn active_sections(&self) -> Vec<DialogSection> {
         if self.is_display_mode_active() {
             vec![
@@ -279,11 +280,12 @@ mod tests {
     }
 
     #[test]
-    fn test_style_cursor_only_allows_apa() {
+    fn test_style_cursor_cycles_all_styles() {
         let mut state = ExportDialogState::new();
         state.focused_section = DialogSection::Style;
-        state.cursor_down();
         assert_eq!(state.selected_style, CitationStyle::Apa7th);
+        state.cursor_down();
+        assert_ne!(state.selected_style, CitationStyle::Apa7th);
         state.cursor_up();
         assert_eq!(state.selected_style, CitationStyle::Apa7th);
     }

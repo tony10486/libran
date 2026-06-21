@@ -151,6 +151,7 @@ impl AppState {
         let openalex_api_key = load_openalex_api_key(&db);
         let auto_fetch_metrics = load_auto_fetch_metrics(&db);
         let metrics_refresh_interval_days = load_metrics_refresh_interval_days(&db);
+        let export_dialog_state = load_export_dialog_state(&db);
         AppState {
             db,
             config,
@@ -233,7 +234,7 @@ impl AppState {
             custom_field_value: String::new(),
             custom_field_editing_key: false,
             show_export_dialog: false,
-            export_dialog_state: crate::export::export_dialog_state::ExportDialogState::new(),
+            export_dialog_state,
         }
     }
 
@@ -480,4 +481,43 @@ fn load_metrics_refresh_interval_days(db: &DbConn) -> u32 {
         }
     }
     7
+}
+
+fn load_export_dialog_state(db: &DbConn) -> crate::export::export_dialog_state::ExportDialogState {
+    use crate::citation::text::styles::{
+        CitationLanguage, CitationStyle, DisplayMode,
+    };
+    use crate::export::export_dialog_state::{DialogSection, ExportDialogState};
+    use crate::export::ExportFormat;
+
+    let default_state = ExportDialogState::new();
+    if let Ok(conn) = db.lock() {
+        if let Some((format, style, language)) = crate::export::preferences::load(&conn) {
+            let format_cursor = ExportFormat::all()
+                .iter()
+                .position(|f| *f == format)
+                .unwrap_or(0);
+            let style_cursor = CitationStyle::all()
+                .iter()
+                .position(|s| *s == style)
+                .unwrap_or(0);
+            let language_cursor = CitationLanguage::all()
+                .iter()
+                .position(|l| *l == language)
+                .unwrap_or(0);
+            return ExportDialogState {
+                selected_format: format,
+                selected_style: style,
+                selected_language: language,
+                display_mode: DisplayMode::InText,
+                focused_section: DialogSection::Format,
+                format_cursor,
+                style_cursor,
+                language_cursor,
+                display_mode_cursor: 0,
+                preview_text: String::new(),
+            };
+        }
+    }
+    default_state
 }
