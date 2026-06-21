@@ -1,3 +1,4 @@
+pub mod export_dialog;
 pub mod graph_panel;
 pub mod help;
 pub mod left_panel;
@@ -20,5 +21,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
     if state.show_help {
         help::render(frame, frame.area());
+    }
+
+    if state.show_export_dialog {
+        export_dialog::render(frame, frame.area(), state);
     }
 }
