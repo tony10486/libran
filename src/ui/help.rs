@@ -52,7 +52,7 @@ pub fn render(frame: &mut Frame, area: Rect) {
         help_line("  B", "자동 지표 조회 토글 (저자 선택 시 자동, 7일 캐시)"),
         Line::from(""),
         sub_header("내보내기 · 설정"),
-        help_line("  x", "BibTeX 내보내기"),
+        help_line("  x", "내보내기 대화상자 (인용 복사 + 파일 내보내기)"),
         help_line("  o", "API 모드 토글"),
         help_line("  q / Esc", "종료"),
         Line::from(""),
