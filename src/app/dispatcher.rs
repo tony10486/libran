@@ -317,6 +317,10 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     if state.custom_field_mode {
         return handle_custom_field_key(state, key);
     }
+    if state.show_export_dialog {
+        let key = normalize_korean_key(key);
+        return handle_export_dialog_key(state, key);
+    }
     if state.edit_mode {
         return handle_edit_key(state, key);
     }
@@ -467,7 +471,18 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('x') => {
             if !state.selected_doc_ids.is_empty() {
-                let _ = state.action_tx.try_send(AppAction::ExportRequested(ExportFormat::Bibtex));
+                state.show_export_dialog = true;
+                state.export_dialog_state.focused_section = crate::export::export_dialog_state::DialogSection::Format;
+                if let Ok(conn) = state.db.lock() {
+                    if let Some(&id) = state.selected_doc_ids.iter().next() {
+                        if let Ok(Some(doc)) = documents::get_by_id(&conn, id) {
+                            state.export_dialog_state.update_preview(&doc);
+                        }
+                    }
+                }
+                state.dirty = true;
+            } else {
+                state.set_status("선택된 문헌이 없습니다");
             }
         }
         KeyCode::Char('s') => {
@@ -1259,6 +1274,7 @@ fn is_modal_active(state: &AppState) -> bool {
         || state.api_key_input_mode
         || state.custom_field_mode
         || state.show_help
+        || state.show_export_dialog
 }
 
 fn compute_body_rect(state: &AppState) -> Rect {
@@ -1925,10 +1941,7 @@ fn handle_export(state: &mut AppState, format: ExportFormat) {
                 let home = directories::BaseDirs::new()
                     .map(|d| d.home_dir().to_path_buf())
                     .unwrap_or_else(|| std::path::PathBuf::from("."));
-                let filename = match format {
-                    ExportFormat::Bibtex => "export.bib",
-                    ExportFormat::CslJson => "export.json",
-                };
+                let filename = format!("export.{}", format.file_extension());
                 let export_path = home.join(filename);
 
                 match std::fs::File::create(&export_path) {
@@ -1950,6 +1963,121 @@ fn handle_export(state: &mut AppState, format: ExportFormat) {
             Err(msg) => state.set_status(&msg),
         }
     }
+}
+
+fn handle_export_dialog_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.show_export_dialog = false;
+            state.dirty = true;
+        }
+        KeyCode::Tab => {
+            state.export_dialog_state.tab_next();
+            update_dialog_preview(state);
+            state.dirty = true;
+        }
+        KeyCode::BackTab => {
+            state.export_dialog_state.tab_prev();
+            update_dialog_preview(state);
+            state.dirty = true;
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            state.export_dialog_state.cursor_down();
+            update_dialog_preview(state);
+            state.dirty = true;
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            state.export_dialog_state.cursor_up();
+            update_dialog_preview(state);
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            handle_clipboard_copy(state);
+        }
+        KeyCode::Char('e') => {
+            let format = state.export_dialog_state.selected_format;
+            state.show_export_dialog = false;
+            handle_export(state, format);
+        }
+        _ => {}
+    }
+    false
+}
+
+fn update_dialog_preview(state: &mut AppState) {
+    if let Ok(conn) = state.db.lock() {
+        if let Some(&id) = state.selected_doc_ids.iter().next() {
+            if let Ok(Some(doc)) = documents::get_by_id(&conn, id) {
+                state.export_dialog_state.update_preview(&doc);
+            }
+        }
+    }
+}
+
+fn handle_clipboard_copy(state: &mut AppState) {
+    use crate::citation::text::render_citation;
+
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            let docs: Vec<Document> = state
+                .selected_doc_ids
+                .iter()
+                .filter_map(|id| documents::get_by_id(&conn, *id).ok().flatten())
+                .collect();
+
+            if docs.is_empty() {
+                None
+            } else {
+                let style = state.export_dialog_state.selected_style;
+                let lang = state.export_dialog_state.selected_language;
+                let mode = state.export_dialog_state.display_mode;
+
+                let mut text = String::new();
+                for doc in &docs {
+                    if let Ok(citation) = render_citation(doc, style, lang, mode) {
+                        text.push_str(&citation);
+                        text.push('\n');
+                    }
+                }
+                Some((text, docs.len()))
+            }
+        } else {
+            None
+        }
+    };
+
+    match result {
+        None => state.set_status("내보낼 문헌을 찾을 수 없습니다"),
+        Some((text, count)) => {
+            match copy_to_clipboard(&text) {
+                Ok(()) => state.set_status(&format!("✓ 클립보드에 복사됨 ({}건)", count)),
+                Err(_) => {
+                    let home = directories::BaseDirs::new()
+                        .map(|d| d.home_dir().to_path_buf())
+                        .unwrap_or_else(|| std::path::PathBuf::from("."));
+                    let libran_dir = home.join(".libran");
+                    let _ = std::fs::create_dir_all(&libran_dir);
+                    let path = libran_dir.join("clipboard.txt");
+                    match std::fs::write(&path, &text) {
+                        Ok(()) => state.set_status(&format!(
+                            "클립보드 실패, 파일에 저장: {}",
+                            path.display()
+                        )),
+                        Err(e) => state.set_status(&format!("복사 실패: {}", e)),
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| anyhow::anyhow!("Clipboard init failed: {}", e))?;
+    clipboard
+        .set_text(text)
+        .map_err(|e| anyhow::anyhow!("Clipboard set failed: {}", e))?;
+    Ok(())
 }
 
 fn handle_update_document(state: &mut AppState, _id: i64, doc: Box<documents::Document>) {
