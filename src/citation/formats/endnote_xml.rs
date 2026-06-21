@@ -152,13 +152,10 @@ fn pages_from(doc: &Document) -> Option<String> {
 
 fn write_styled_text<W: Write>(w: &mut Writer<W>, tag: &str, text: &str) -> Result<()> {
     w.write_event(Event::Start(BytesStart::new(tag)))?;
-    let mut style = BytesStart::new("style");
-    style.push_attribute(("face", "normal"));
-    style.push_attribute(("font", "default"));
-    style.push_attribute(("size", "100%"));
-    w.write_event(Event::Start(style))?;
+    w.get_mut()
+        .write_all(b"<style face=\"normal\" font=\"default\" size=\"100%\">")?;
     w.write_event(Event::Text(BytesText::new(text)))?;
-    w.write_event(Event::End(BytesEnd::new("style")))?;
+    w.get_mut().write_all(b"</style>")?;
     w.write_event(Event::End(BytesEnd::new(tag)))?;
     Ok(())
 }
@@ -195,6 +192,7 @@ mod tests {
         let mut buf = Vec::new();
         export_endnote_xml(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let output = String::from_utf8(buf).unwrap();
+        println!("OUTPUT:\n{output}");
 
         // Then the XML declares journal article ref-type 17
         assert!(

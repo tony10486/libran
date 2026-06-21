@@ -75,11 +75,9 @@ fn write_analytic<W: Write>(w: &mut Writer<W>, doc: &Document) -> Result<()> {
 fn write_monogr<W: Write>(w: &mut Writer<W>, doc: &Document, is_article: bool) -> Result<()> {
     w.write_event(Event::Start(BytesStart::new("monogr")))?;
 
-    if !is_article {
-        if let Some(authors) = &doc.authors {
-            for author in split_authors(authors) {
-                write_author(w, &author)?;
-            }
+    if !is_article && let Some(authors) = &doc.authors {
+        for author in split_authors(authors) {
+            write_author(w, &author)?;
         }
     }
 
@@ -108,25 +106,18 @@ fn write_monogr<W: Write>(w: &mut Writer<W>, doc: &Document, is_article: bool) -
     }
     w.write_event(Event::End(BytesEnd::new("imprint")))?;
 
-    if !is_article {
-        if let Some(edition) = &doc.edition {
-            write_text_element(w, "edition", edition)?;
-        }
+    if !is_article && let Some(edition) = &doc.edition {
+        write_text_element(w, "edition", edition)?;
     }
 
     if let Some(volume) = &doc.volume {
-        write_bibl_scope(w, "volume", volume, None, None)?;
+        write_bibl_scope(w, "volume", volume)?;
     }
     if let Some(issue) = &doc.issue {
-        write_bibl_scope(w, "issue", issue, None, None)?;
+        write_bibl_scope(w, "issue", issue)?;
     }
     if let Some(start) = &doc.page_start {
-        if let Some(end) = &doc.page_end {
-            let content = format!("{start}-{end}");
-            write_bibl_scope(w, "page", &content, Some(start), Some(end))?;
-        } else {
-            write_bibl_scope(w, "page", start, Some(start), None)?;
-        }
+        write_page_bibl_scope(w, start, doc.page_end.as_deref())?;
     }
 
     if let Some(isbn) = &doc.isbn {
@@ -197,19 +188,32 @@ fn write_bibl_scope<W: Write>(
     w: &mut Writer<W>,
     unit: &str,
     content: &str,
-    from: Option<&str>,
-    to: Option<&str>,
 ) -> Result<()> {
     let mut elem = BytesStart::new("biblScope");
     elem.push_attribute(("unit", unit));
-    if let Some(from) = from {
-        elem.push_attribute(("from", from));
-    }
-    if let Some(to) = to {
-        elem.push_attribute(("to", to));
-    }
     w.write_event(Event::Start(elem))?;
     w.write_event(Event::Text(BytesText::new(content)))?;
+    w.write_event(Event::End(BytesEnd::new("biblScope")))?;
+    Ok(())
+}
+
+fn write_page_bibl_scope<W: Write>(
+    w: &mut Writer<W>,
+    start: &str,
+    end: Option<&str>,
+) -> Result<()> {
+    let mut elem = BytesStart::new("biblScope");
+    elem.push_attribute(("unit", "page"));
+    elem.push_attribute(("from", start));
+    if let Some(end) = end {
+        elem.push_attribute(("to", end));
+    }
+    w.write_event(Event::Start(elem))?;
+    let content = match end {
+        Some(end) => format!("{start}-{end}"),
+        None => start.to_string(),
+    };
+    w.write_event(Event::Text(BytesText::new(&content)))?;
     w.write_event(Event::End(BytesEnd::new("biblScope")))?;
     Ok(())
 }
