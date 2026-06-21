@@ -265,18 +265,16 @@ mod tests {
     }
 
     #[test]
-    fn test_format_cursor_skips_unimplemented() {
+    fn test_format_cursor_cycles_through_all() {
         let mut state = ExportDialogState::new();
         assert_eq!(state.selected_format, ExportFormat::Bibtex);
         state.cursor_down();
-        assert_eq!(state.selected_format, ExportFormat::CslJson);
+        assert_eq!(state.selected_format, ExportFormat::Bookmarks);
         state.cursor_down();
-        assert_eq!(state.selected_format, ExportFormat::Csv);
-        state.cursor_down();
-        assert_eq!(state.selected_format, ExportFormat::Mods);
-        state.cursor_down();
-        assert_eq!(state.selected_format, ExportFormat::Ris);
-        state.cursor_down();
+        assert_eq!(state.selected_format, ExportFormat::Cff);
+        state.cursor_up();
+        assert_eq!(state.selected_format, ExportFormat::Bookmarks);
+        state.cursor_up();
         assert_eq!(state.selected_format, ExportFormat::Bibtex);
     }
 

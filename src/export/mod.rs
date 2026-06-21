@@ -6,12 +6,36 @@ pub mod export_dialog_state;
 
 pub fn export(documents: &[Document], format: ExportFormat, writer: &mut impl Write) -> Result<()> {
     match format {
+        ExportFormat::BibliontologyRdf => {
+            crate::citation::formats::bibliontology_rdf::export_bibliontology_rdf(documents, writer)
+        }
         ExportFormat::Bibtex => crate::citation::bibtex::export_bibtex(documents, writer),
+        ExportFormat::Bookmarks => crate::citation::formats::bookmarks::export_bookmarks(documents, writer),
+        ExportFormat::Cff => crate::citation::formats::cff::export_cff(documents, writer),
+        ExportFormat::CffReferences => {
+            crate::citation::formats::cff::export_cff_references(documents, writer)
+        }
+        ExportFormat::Coins => crate::citation::formats::coins::export_coins(documents, writer),
         ExportFormat::CslJson => crate::citation::csl_json::export_csl_json(documents, writer),
-        ExportFormat::Ris => crate::citation::formats::ris::export_ris(documents, writer),
         ExportFormat::Csv => crate::citation::formats::csv_export::export_csv(documents, writer),
+        ExportFormat::EndnoteXml => {
+            crate::citation::formats::endnote_xml::export_endnote_xml(documents, writer)
+        }
         ExportFormat::Mods => crate::citation::formats::mods::export_mods(documents, writer),
-        _ => anyhow::bail!("{} format not yet implemented", format.format_name()),
+        ExportFormat::ReferBibix => {
+            crate::citation::formats::refer_bibix::export_refer_bibix(documents, writer)
+        }
+        ExportFormat::RefworksTagged => {
+            crate::citation::formats::refworks_tagged::export_refworks_tagged(documents, writer)
+        }
+        ExportFormat::Ris => crate::citation::formats::ris::export_ris(documents, writer),
+        ExportFormat::EvernoteExport => {
+            crate::citation::formats::evernote::export_evernote(documents, writer)
+        }
+        ExportFormat::Tei => crate::citation::formats::tei::export_tei(documents, writer),
+        ExportFormat::WikidataQuickStatements => {
+            crate::citation::formats::wikidata_qs::export_wikidata_qs(documents, writer)
+        }
     }
 }
 
@@ -107,13 +131,36 @@ impl ExportFormat {
 
     /// Returns true for formats implemented in the current phase.
     pub fn is_implemented(&self) -> bool {
-        matches!(
-            self,
-            ExportFormat::Bibtex
-                | ExportFormat::CslJson
-                | ExportFormat::Ris
-                | ExportFormat::Csv
-                | ExportFormat::Mods
-        )
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_formats_are_implemented() {
+        for format in ExportFormat::all() {
+            assert!(
+                format.is_implemented(),
+                "{:?} should be implemented",
+                format
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_formats_have_unique_extensions_and_names() {
+        let all = ExportFormat::all();
+        assert_eq!(all.len(), 16, "should have 16 formats");
+
+        let mut extensions = std::collections::HashSet::new();
+        let mut names = std::collections::HashSet::new();
+        for format in all {
+            extensions.insert(format.file_extension());
+            names.insert(format.format_name());
+        }
+        assert_eq!(names.len(), 16, "all format names should be unique");
     }
 }
