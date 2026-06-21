@@ -249,9 +249,6 @@ fn looks_like_initial(s: &str) -> bool {
         return false;
     }
     let words: Vec<&str> = s.split_whitespace().collect();
-    if words.is_empty() {
-        return false;
-    }
     let non_et: Vec<&&str> = words
         .iter()
         .filter(|w| {
@@ -586,31 +583,6 @@ mod tests {
             "should find authors from comma-separated list with 'and': {authors:?}"
         );
         assert!(authors.iter().any(|a| a.contains("Katsura") || a.contains("Morita")));
-    }
-
-    #[test]
-    fn diag_katsura1971() {
-        let path = std::path::PathBuf::from("tmp/katsura1971.pdf");
-        if !path.exists() {
-            return;
-        }
-        let text = crate::pdf::text::extract_text(&path).expect("extract_text");
-        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        eprintln!("=== katsura1971: {} non-empty lines ===", lines.len());
-        for (i, line) in lines.iter().take(5).enumerate() {
-            eprintln!("  L{}: {:?}", i, &line[..line.len().min(150)]);
-        }
-        let abstract_idx = crate::pdf::heuristic::find_abstract_marker_pub(&lines);
-        eprintln!("  abstract_marker_idx: {:?}", abstract_idx);
-        let authors = guess_authors(&text);
-        eprintln!("  guess_authors: {:?}", authors);
-
-        let meta = crate::pdf::metadata::extract_metadata(&path).expect("extract_metadata");
-        eprintln!("  lopdf authors: {:?}", meta.authors);
-        eprintln!("  lopdf title: {:?}", meta.title);
-
-        let full_meta = crate::pdf::process_file(&path).expect("process_file");
-        eprintln!("  final authors: {:?}", full_meta.authors);
     }
 
     #[test]
