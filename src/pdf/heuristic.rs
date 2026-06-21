@@ -6,7 +6,7 @@ static SECTION_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 const SKIP_MARKERS: &[&str] = &[
-    "abstract", "keywords", "introduction", "university", "institute",
+    "abstract", "keywords", "university", "institute",
     "department", "email", "www.", "http", "@", "arxiv:", "received",
     "accepted", "published", "this article", "this paper", "this work",
     "journal", "proceedings", "conference", "vol.", "volume", "pp.",
@@ -119,6 +119,12 @@ fn find_abstract_marker(lines: &[&str]) -> Option<usize> {
         {
             return Some(i);
         }
+        if lower == "keywords"
+            || lower.starts_with("keywords:")
+            || lower.starts_with("keywords ")
+        {
+            return Some(i);
+        }
     }
     None
 }
@@ -128,8 +134,17 @@ pub fn find_abstract_marker_pub(lines: &[&str]) -> Option<usize> {
     find_abstract_marker(lines)
 }
 
+/// Public wrapper for debug/testing.
+pub fn is_title_candidate_pub(trimmed: &str) -> bool {
+    is_title_candidate(trimmed)
+}
+
 fn is_title_candidate(trimmed: &str) -> bool {
     if trimmed.len() < 10 || trimmed.len() > 200 {
+        return false;
+    }
+
+    if trimmed.contains('\t') {
         return false;
     }
 
@@ -243,6 +258,23 @@ mod tests {
     fn test_find_abstract_marker_colon() {
         let lines = vec!["Title", "Abstract:", "Text"];
         assert_eq!(find_abstract_marker(&lines), Some(1));
+    }
+
+    #[test]
+    fn test_find_abstract_marker_keywords() {
+        let lines = vec!["Title", "Some author line", "Keywords: graph, network", "Body"];
+        assert_eq!(find_abstract_marker(&lines), Some(2));
+    }
+
+    #[test]
+    fn test_guess_title_rejects_doi_string() {
+        let text = "doi:10.1016/j.socnet.2004.11.009\nA Real Paper Title About Networks\nKeywords: networks\n";
+        let result = guess_title(text);
+        assert!(result.is_some());
+        assert!(
+            !result.as_ref().unwrap().contains("doi:"),
+            "should not return DOI as title: {result:?}"
+        );
     }
 
     #[test]

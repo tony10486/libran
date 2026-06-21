@@ -257,6 +257,19 @@ CREATE TABLE IF NOT EXISTS document_series (
 
 CREATE INDEX IF NOT EXISTS idx_doc_series_series ON document_series(series_id);
 CREATE INDEX IF NOT EXISTS idx_doc_series_doc ON document_series(document_id);
+
+CREATE TABLE IF NOT EXISTS document_custom_fields (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id     INTEGER NOT NULL,
+    field_key       TEXT NOT NULL,
+    field_value     TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    UNIQUE (document_id, field_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_fields_doc ON document_custom_fields(document_id);
 ";
 
 pub fn create_tables(conn: &Connection) -> Result<()> {

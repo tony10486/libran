@@ -333,12 +333,8 @@ pub fn list_authors(conn: &Connection, min_count: usize) -> Result<Vec<(String, 
     let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     for row in rows {
         let authors = row?;
-        for raw in authors.split(';') {
-            let name = raw.trim();
-            if name.is_empty() {
-                continue;
-            }
-            *counts.entry(normalize_nfc(name).to_string()).or_insert(0) += 1;
+        for name in split_authors(&authors) {
+            *counts.entry(normalize_nfc(&name).to_string()).or_insert(0) += 1;
         }
     }
     drop(stmt);
@@ -349,4 +345,28 @@ pub fn list_authors(conn: &Connection, min_count: usize) -> Result<Vec<(String, 
         .collect();
     out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     Ok(out)
+}
+
+pub fn split_authors(authors: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    for seg in authors.split(';') {
+        let seg = seg.trim();
+        if seg.is_empty() {
+            continue;
+        }
+        let lower = seg.to_lowercase();
+        if let Some(pos) = lower.find(" and ") {
+            let before = seg[..pos].trim();
+            let after = seg[pos + 5..].trim();
+            if !before.is_empty() {
+                result.push(before.to_string());
+            }
+            if !after.is_empty() {
+                result.push(after.to_string());
+            }
+        } else {
+            result.push(seg.to_string());
+        }
+    }
+    result
 }

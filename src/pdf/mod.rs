@@ -61,21 +61,25 @@ pub fn process_file(path: &Path) -> Result<RawMetadata> {
             metadata.arxiv_id = extract_arxiv_from_filename(path);
         }
 
-        if metadata.title.is_none() {
-            metadata.title = heuristic::guess_title(&text);
-        }
+        let has_identifier = metadata.doi.is_some() || metadata.arxiv_id.is_some();
 
-        if metadata.authors.is_empty() {
-            metadata.authors = authors::guess_authors(&text);
-        }
-
-        if metadata.journal.is_none() || metadata.pub_year.is_none() {
-            let (journal, year) = journal::extract_journal_and_year(&text);
-            if metadata.journal.is_none() {
-                metadata.journal = journal;
+        if !has_identifier {
+            if metadata.title.is_none() {
+                metadata.title = heuristic::guess_title(&text);
             }
-            if metadata.pub_year.is_none() {
-                metadata.pub_year = year;
+
+            if metadata.authors.is_empty() {
+                metadata.authors = authors::guess_authors(&text);
+            }
+
+            if metadata.journal.is_none() || metadata.pub_year.is_none() {
+                let (journal, year) = journal::extract_journal_and_year(&text);
+                if metadata.journal.is_none() {
+                    metadata.journal = journal;
+                }
+                if metadata.pub_year.is_none() {
+                    metadata.pub_year = year;
+                }
             }
         }
     }

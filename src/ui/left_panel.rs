@@ -178,13 +178,22 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
                         Style::default().fg(Color::Gray),
                     )
                 };
-                items.push(ListItem::new(Line::from(vec![
+                let mut spans = vec![
                     Span::raw("    "),
                     Span::styled(icon, icon_style),
                     Span::raw(" "),
                     Span::styled(name.clone(), name_style),
                     Span::styled(format!(" ({})", count), theme::dim_style()),
-                ])));
+                ];
+                if let Some(m) = state.author_metrics.get(name) {
+                    if let Some(h) = m.h_index {
+                        spans.push(Span::styled(
+                            format!(" h={}", h),
+                            Style::default().fg(Color::Green),
+                        ));
+                    }
+                }
+                items.push(ListItem::new(Line::from(spans)));
             }
         }
 

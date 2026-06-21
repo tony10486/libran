@@ -147,6 +147,16 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     lines.push(field_line("연도", &doc.pub_year.map(|y| y.to_string()).unwrap_or_else(|| "—".to_string())));
     lines.push(Line::from(""));
     lines.push(field_line("DOI", doc.doi.as_deref().unwrap_or("—")));
+    if let Some(ref doi) = doc.doi {
+        if !doi.is_empty() {
+            let url = format!("https://doi.org/{}", doi);
+            let hyperlink = format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\ {}", url, doi, url);
+            lines.push(Line::from(vec![
+                Span::styled("         ", theme::dim_style()),
+                Span::raw(hyperlink),
+            ]));
+        }
+    }
     lines.push(Line::from(""));
     lines.push(field_line("arXiv", doc.arxiv_id.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
@@ -199,6 +209,19 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
         }
     } else {
         lines.push(Line::from(vec![Span::styled("  초록 없음", theme::dim_style())]));
+    }
+
+    if !state.custom_fields.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled("  ─── 추가 필드 ───", theme::dim_style())]));
+        lines.push(Line::from(""));
+        for (_field_id, key, value) in &state.custom_fields {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:6} ", key), theme::label_style()),
+                Span::styled(value.clone(), Style::default().fg(Color::Gray)),
+            ]));
+            lines.push(Line::from(""));
+        }
     }
 
     let para = Paragraph::new(lines).style(style).wrap(Wrap { trim: false });

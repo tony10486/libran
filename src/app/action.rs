@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crossterm::event::KeyEvent;
 
+use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 use crate::api::ApiMode;
 use crate::export::ExportFormat;
 use crate::pdf::RawMetadata;
@@ -67,6 +68,21 @@ pub enum AppAction {
     DeleteProject(i64),
 
     SelectAuthor(Option<String>),
+
+    FetchAuthorMetrics { name: String },
+    AuthorMetricsFetched { name: String, metrics: Box<AuthorMetrics> },
+    AuthorMetricsFailed { name: String, reason: String },
+    SetMetricsBackend(MetricsBackend),
+    RegisterApiKey(String),
+    ShowMetricsOverlay { name: String },
+    CloseMetricsOverlay,
+
+    LookupByDoi { doc_id: i64 },
+
+    SelectUdc(Option<String>),
+
+    AddCustomField { doc_id: i64, key: String, value: String },
+    DeleteCustomField { doc_id: i64, field_id: i64 },
 }
 
 #[derive(Clone, Debug, PartialEq)]

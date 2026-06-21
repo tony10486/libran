@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::AppState;
@@ -87,6 +87,18 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     if state.rating_mode {
         render_rating_overlay(frame, area, state);
     }
+    if state.confirm_delete_mode {
+        render_confirm_delete_overlay(frame, area, state);
+    }
+    if state.show_metrics_overlay {
+        render_author_metrics_overlay(frame, area, state);
+    }
+    if state.api_key_input_mode {
+        render_api_key_input_overlay(frame, area, state);
+    }
+    if state.custom_field_mode {
+        render_custom_field_overlay(frame, area, state);
+    }
 }
 
 fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -96,6 +108,11 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
         (
             format!("👤 {}", name),
             Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+        )
+    } else if let Some(ref notation) = state.active_udc_notation {
+        (
+            format!("▤ UDC {}", notation),
+            Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
         )
     } else if let Some(s) =
         state.series.iter().find(|s| s.id == state.active_series_id)
@@ -430,6 +447,285 @@ fn render_rating_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(para, overlay);
 }
 
+fn render_confirm_delete_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let popup = centered_rect(55, 30, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red))
+        .title(Span::styled(
+            " 문헌 삭제 ",
+            Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let title_display: String = state
+        .delete_confirm_title
+        .chars()
+        .take(60)
+        .collect();
+    let title_display = if state.delete_confirm_title.chars().count() > 60 {
+        format!("{}…", title_display)
+    } else {
+        title_display
+    };
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  이 문헌을 삭제하시겠습니까?",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
+                    .bg(Color::Black),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  › ", Style::default().fg(Color::Red).bg(Color::Black)),
+            Span::styled(
+                title_display,
+                Style::default().fg(Color::Yellow).bg(Color::Black),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  Y/Enter",
+                Style::default().fg(Color::Green).bg(Color::Black),
+            ),
+            Span::styled(" 예   ", Style::default().fg(Color::Gray).bg(Color::Black)),
+            Span::styled(
+                "N/Esc",
+                Style::default().fg(Color::Cyan).bg(Color::Black),
+            ),
+            Span::styled(
+                " 아니오",
+                Style::default().fg(Color::Gray).bg(Color::Black),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  S",
+                Style::default().fg(Color::Magenta).bg(Color::Black),
+            ),
+            Span::styled(
+                " 앞으로 확인 없이 삭제",
+                Style::default().fg(Color::DarkGray).bg(Color::Black),
+            ),
+        ]),
+    ];
+
+    let para = Paragraph::new(lines).style(Style::default().fg(Color::Gray).bg(Color::Black));
+    frame.render_widget(para, inner);
+}
+
+fn render_author_metrics_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let popup = centered_rect(60, 40, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(Span::styled(
+            " 연구자 지표 ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let metrics = state.author_metrics.get(&state.metrics_overlay_name);
+    let lines = if let Some(m) = metrics {
+        vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    "  이름:  ",
+                    Style::default().fg(Color::Yellow).bg(Color::Black),
+                ),
+                Span::styled(
+                    m.name.clone(),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD)
+                        .bg(Color::Black),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    "  h-index:   ",
+                    Style::default().fg(Color::Yellow).bg(Color::Black),
+                ),
+                Span::styled(
+                    m.h_index.map_or("—".to_string(), |v| v.to_string()),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD)
+                        .bg(Color::Black),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "  i10-index: ",
+                    Style::default().fg(Color::Yellow).bg(Color::Black),
+                ),
+                Span::styled(
+                    m.i10_index.map_or("—".to_string(), |v| v.to_string()),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD)
+                        .bg(Color::Black),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "  논문 수:   ",
+                    Style::default().fg(Color::Yellow).bg(Color::Black),
+                ),
+                Span::styled(
+                    m.works_count.map_or("—".to_string(), |v| v.to_string()),
+                    Style::default().fg(Color::White).bg(Color::Black),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "  총 인용:   ",
+                    Style::default().fg(Color::Yellow).bg(Color::Black),
+                ),
+                Span::styled(
+                    m.cited_by_count.map_or("—".to_string(), |v| v.to_string()),
+                    Style::default().fg(Color::White).bg(Color::Black),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    "  출처: ",
+                    Style::default().fg(Color::DarkGray).bg(Color::Black),
+                ),
+                Span::styled(
+                    m.source.display_name().to_string(),
+                    Style::default().fg(Color::Magenta).bg(Color::Black),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    "  Esc/Enter",
+                    Style::default().fg(Color::Cyan).bg(Color::Black),
+                ),
+                Span::styled(
+                    " 닫기",
+                    Style::default().fg(Color::DarkGray).bg(Color::Black),
+                ),
+            ]),
+        ]
+    } else {
+        vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  지표를 불러오는 중...",
+                Style::default().fg(Color::Yellow).bg(Color::Black),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Esc 닫기",
+                Style::default().fg(Color::Cyan).bg(Color::Black),
+            )),
+        ]
+    };
+
+    let para = Paragraph::new(lines).style(Style::default().fg(Color::Gray).bg(Color::Black));
+    frame.render_widget(para, inner);
+}
+
+fn render_api_key_input_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let popup = centered_rect(60, 35, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .title(Span::styled(
+            " OpenAlex API 키 등록 ",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let display_key: String = state
+        .api_key_input
+        .chars()
+        .map(|c| if c.is_whitespace() { c } else { '*' })
+        .collect();
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  키: ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+                    .bg(Color::Black),
+            ),
+            Span::styled(
+                display_key,
+                Style::default().fg(Color::White).bg(Color::Black),
+            ),
+            Span::styled("▎", Style::default().fg(Color::Magenta)),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  openalex.org/settings/api에서 무료 키 발급",
+            Style::default().fg(Color::DarkGray).bg(Color::Black),
+        )]),
+        Line::from(vec![Span::styled(
+            "  비워두면 Semantic Scholar(키 불필요)로 전환",
+            Style::default().fg(Color::DarkGray).bg(Color::Black),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  Enter",
+                Style::default().fg(Color::Cyan).bg(Color::Black),
+            ),
+            Span::styled(
+                " 등록   ",
+                Style::default().fg(Color::DarkGray).bg(Color::Black),
+            ),
+            Span::styled(
+                "Esc",
+                Style::default().fg(Color::Cyan).bg(Color::Black),
+            ),
+            Span::styled(
+                " 취소",
+                Style::default().fg(Color::DarkGray).bg(Color::Black),
+            ),
+        ]),
+    ];
+
+    let para = Paragraph::new(lines).style(Style::default().fg(Color::Gray).bg(Color::Black));
+    frame.render_widget(para, inner);
+}
+
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -448,4 +744,54 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+fn render_custom_field_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let popup = centered_rect(60, 30, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(Span::styled(
+            " 추가 필드 ",
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+
+    let key_line = if state.custom_field_editing_key {
+        Line::from(vec![
+            Span::styled(" 키   : ", Style::default().fg(Color::Yellow)),
+            Span::styled(&state.custom_field_key, Style::default().fg(Color::White)),
+            Span::styled("█", Style::default().fg(Color::White)),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(" 키   : ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&state.custom_field_key, Style::default().fg(Color::Gray)),
+        ])
+    };
+
+    let value_line = if !state.custom_field_editing_key {
+        Line::from(vec![
+            Span::styled(" 값   : ", Style::default().fg(Color::Yellow)),
+            Span::styled(&state.custom_field_value, Style::default().fg(Color::White)),
+            Span::styled("█", Style::default().fg(Color::White)),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(" 값   : ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&state.custom_field_value, Style::default().fg(Color::Gray)),
+        ])
+    };
+
+    let hint = Line::from(vec![Span::styled(
+        " [Tab] 키/값 전환  [Enter] 저장  [Esc] 취소",
+        Style::default().fg(Color::DarkGray),
+    )]);
+
+    let para = Paragraph::new(vec![Line::from(""), key_line, Line::from(""), value_line, Line::from(""), hint])
+        .block(block)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(para, popup);
 }

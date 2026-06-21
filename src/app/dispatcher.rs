@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
+use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 use crate::citation::generate_citation_key;
 use crate::citation::cache;
 use crate::citation::entry;
@@ -31,7 +32,18 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
         AppAction::DragDetected(path) => handle_drag(state, path),
         AppAction::MetadataExtracted(meta, original_path) => handle_metadata(state, meta, original_path),
         AppAction::MetadataSaved(id) => {
-            if state.api_mode.allows_api_calls() {
+            let has_identifier = {
+                if let Ok(conn) = state.db.lock() {
+                    if let Ok(Some(doc)) = documents::get_by_id(&conn, id) {
+                        doc.doi.is_some() || doc.arxiv_id.is_some()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+            if state.api_mode.allows_api_calls() && has_identifier {
                 let doc_opt = {
                     if let Ok(conn) = state.db.lock() {
                         documents::get_by_id(&conn, id).ok().flatten()
@@ -41,14 +53,16 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
                 };
                 if let Some(doc) = doc_opt {
                     try_api_lookup(state.action_tx.clone(), state.api_mode.clone(), &doc);
+                    state.set_status("API 조회 중...");
                 }
+            } else {
+                state.finish_processing("문헌 추가 완료");
             }
             state.reload_documents();
-            state.finish_processing("문헌 추가 완료");
         }
         AppAction::ApiLookupSuccess(meta, doc_id) => apply_api_metadata(state, meta, doc_id),
-        AppAction::ApiLookupFailed(msg) => state.set_status(&format!("API 실패: {}", msg)),
-        AppAction::ApiLookupSkipped(msg) => state.set_status(&msg),
+        AppAction::ApiLookupFailed(msg) => state.finish_processing(&format!("API 실패: {}", msg)),
+        AppAction::ApiLookupSkipped(msg) => state.finish_processing(&msg),
         AppAction::ToggleApiMode => {
             state.cycle_api_mode();
             state.set_status(&format!("API 모드: {}", state.api_mode.as_str()));
@@ -184,6 +198,45 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
         }
         AppAction::DeleteProject(project_id) => handle_delete_project(state, project_id),
         AppAction::SelectAuthor(author) => handle_select_author(state, author),
+        AppAction::FetchAuthorMetrics { name } => handle_fetch_author_metrics(state, name),
+        AppAction::AuthorMetricsFetched { name, metrics } => {
+            handle_author_metrics_fetched(state, name, *metrics)
+        }
+        AppAction::AuthorMetricsFailed { name, reason } => {
+            state.set_status(&format!("지표 조회 실패 ({}): {}", name, reason));
+        }
+        AppAction::SetMetricsBackend(backend) => handle_set_metrics_backend(state, backend),
+        AppAction::RegisterApiKey(key) => handle_register_api_key(state, key),
+        AppAction::ShowMetricsOverlay { name } => {
+            state.show_metrics_overlay = true;
+            state.metrics_overlay_name = name;
+            state.dirty = true;
+        }
+        AppAction::CloseMetricsOverlay => {
+            state.show_metrics_overlay = false;
+            state.metrics_overlay_name.clear();
+            state.dirty = true;
+        }
+        AppAction::LookupByDoi { doc_id } => {
+            if state.api_mode.allows_api_calls() {
+                let doc_opt = {
+                    if let Ok(conn) = state.db.lock() {
+                        documents::get_by_id(&conn, doc_id).ok().flatten()
+                    } else {
+                        None
+                    }
+                };
+                if let Some(doc) = doc_opt {
+                    state.start_processing("CrossRef로 메타데이터 조회 중...");
+                    try_api_lookup(state.action_tx.clone(), state.api_mode.clone(), &doc);
+                }
+            } else {
+                state.set_status("API 모드가 오프라인입니다 (o 키로 전환)");
+            }
+        }
+        AppAction::SelectUdc(notation) => handle_select_udc(state, notation),
+        AppAction::AddCustomField { doc_id, key, value } => handle_add_custom_field(state, doc_id, key, value),
+        AppAction::DeleteCustomField { doc_id, field_id } => handle_delete_custom_field(state, doc_id, field_id),
     }
     false
 }
@@ -249,6 +302,18 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     }
     if state.author_search_mode {
         return handle_author_search_key(state, key);
+    }
+    if state.confirm_delete_mode {
+        return handle_confirm_delete_key(state, key);
+    }
+    if state.api_key_input_mode {
+        return handle_api_key_input_key(state, key);
+    }
+    if state.show_metrics_overlay {
+        return handle_metrics_overlay_key(state, key);
+    }
+    if state.custom_field_mode {
+        return handle_custom_field_key(state, key);
     }
     if state.edit_mode {
         return handle_edit_key(state, key);
@@ -341,6 +406,60 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 state.set_status("먼저 연구자 섹션을 펼치세요 (Enter)");
             }
         }
+        KeyCode::Char('H') => {
+            let author_name = state.active_author.clone().or_else(|| {
+                if state.active_panel == PanelFocus::Left && state.authors_expanded {
+                    let filtered = filtered_authors(state);
+                    let authors_start = count_authors_section_start(state);
+                    let header_offset = if state.author_search_mode { 2 } else { 1 };
+                    let list_start = authors_start + header_offset;
+                    if state.tree_cursor >= list_start {
+                        let idx = state.tree_cursor - list_start;
+                        filtered.get(idx).map(|(n, _)| n.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            });
+            if let Some(name) = author_name {
+                if state.metrics_backend.requires_api_key()
+                    && state.openalex_api_key.as_deref().unwrap_or("").is_empty()
+                {
+                    state.set_status("OpenAlex API 키가 필요합니다 (K 키로 등록)");
+                } else {
+                    state.set_status(&format!("{} 지표 조회 중...", name));
+                    let _ = state.action_tx.try_send(AppAction::FetchAuthorMetrics { name });
+                }
+            } else {
+                state.set_status("연구자를 먼저 선택하세요 (왼쪽 패널 Enter)");
+            }
+        }
+        KeyCode::Char('K') => {
+            state.api_key_input_mode = true;
+            state.api_key_input.clear();
+            state.set_status("OpenAlex API 키 입력 후 Enter (비워두면 백엔드 전환만)");
+            state.dirty = true;
+        }
+        KeyCode::Char('B') => {
+            state.auto_fetch_metrics = !state.auto_fetch_metrics;
+            let enabled = state.auto_fetch_metrics;
+            if let Ok(conn) = state.db.lock() {
+                let val = if enabled { "true" } else { "false" };
+                let _ = conn.execute(
+                    "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
+                     VALUES ('auto_fetch_metrics', ?1, datetime('now'))",
+                    rusqlite::params![val],
+                );
+            }
+            state.set_status(if enabled {
+                "자동 지표 조회 켜짐 (저자 선택 시 자동 조회, 갱신 주기 7일)"
+            } else {
+                "자동 지표 조회 꺼짐"
+            });
+            state.dirty = true;
+        }
         KeyCode::Char('o') => {
             let _ = state.action_tx.try_send(AppAction::ToggleApiMode);
         }
@@ -359,9 +478,30 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('d') => {
             if state.active_panel == PanelFocus::Right
-                && let Some(doc) = state.documents.get(state.list_cursor)
+                && let Some(doc) = state.documents.get(state.list_cursor).cloned()
                     && let Some(id) = doc.id {
-                        let _ = state.action_tx.try_send(AppAction::DeleteDocument(id));
+                        if state.skip_delete_confirm {
+                            let _ = state.action_tx.try_send(AppAction::DeleteDocument(id));
+                        } else {
+                            state.confirm_delete_mode = true;
+                            state.delete_confirm_doc_id = Some(id);
+                            state.delete_confirm_title = doc.title.clone();
+                            state.dirty = true;
+                        }
+                    }
+        }
+        KeyCode::Char('D') => {
+            if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor).cloned()
+                    && let Some(id) = doc.id {
+                        if !state.api_mode.allows_api_calls() {
+                            state.set_status("API 모드가 오프라인입니다 (o 키로 전환)");
+                        } else if doc.doi.is_none() && doc.arxiv_id.is_none() {
+                            state.set_status("DOI 또는 arXiv ID가 없습니다");
+                        } else {
+                            state.start_processing("CrossRef로 메타데이터 조회 중...");
+                            let _ = state.action_tx.try_send(AppAction::LookupByDoi { doc_id: id });
+                        }
                     }
         }
         KeyCode::Char('e') => {
@@ -430,6 +570,10 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 }
                 state.dirty = true;
             }
+        }
+        KeyCode::Char(c) if c.is_ascii_digit() && state.active_panel == PanelFocus::Left => {
+            let notation = c.to_string();
+            let _ = state.action_tx.try_send(AppAction::SelectUdc(Some(notation)));
         }
         _ => {}
     }
@@ -525,20 +669,22 @@ fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.dirty = true;
         }
         KeyCode::Enter => {
-            if state.active_panel == PanelFocus::Detail {
-                state.note_mode = true;
-                state.note_input = state.current_note.clone().unwrap_or_default();
-                state.dirty = true;
-            } else {
-                state.show_detail = false;
-                state.detail_doc = None;
-                state.active_panel = PanelFocus::Right;
-                state.dirty = true;
-            }
+            state.show_detail = false;
+            state.detail_doc = None;
+            state.active_panel = PanelFocus::Right;
+            state.dirty = true;
         }
         KeyCode::Char('n') => {
             state.note_mode = true;
             state.note_input = state.current_note.clone().unwrap_or_default();
+            state.dirty = true;
+        }
+        KeyCode::Char('c') => {
+            state.custom_field_mode = true;
+            state.custom_field_key.clear();
+            state.custom_field_value.clear();
+            state.custom_field_editing_key = true;
+            state.set_status("필드 추가 (Tab: 키/값 전환, Enter: 저장)");
             state.dirty = true;
         }
         KeyCode::Char('t') => {
@@ -899,6 +1045,223 @@ fn handle_author_search_key(state: &mut AppState, key: KeyEvent) -> bool {
     false
 }
 
+fn handle_confirm_delete_key(state: &mut AppState, key: KeyEvent) -> bool {
+    let key = normalize_korean_key(key);
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Enter => {
+            if let Some(id) = state.delete_confirm_doc_id.take() {
+                let _ = state.action_tx.try_send(AppAction::DeleteDocument(id));
+            }
+            state.confirm_delete_mode = false;
+            state.delete_confirm_title.clear();
+            state.dirty = true;
+        }
+        KeyCode::Char('n') | KeyCode::Esc | KeyCode::Char('q') => {
+            state.confirm_delete_mode = false;
+            state.delete_confirm_doc_id = None;
+            state.delete_confirm_title.clear();
+            state.set_status("삭제 취소됨");
+        }
+        KeyCode::Char('s') => {
+            state.skip_delete_confirm = true;
+            if let Ok(conn) = state.db.lock() {
+                let _ = conn.execute(
+                    "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
+                     VALUES ('skip_delete_confirm', 'true', datetime('now'))",
+                    [],
+                );
+            }
+            if let Some(id) = state.delete_confirm_doc_id.take() {
+                let _ = state.action_tx.try_send(AppAction::DeleteDocument(id));
+            }
+            state.confirm_delete_mode = false;
+            state.delete_confirm_title.clear();
+            state.set_status("앞으로 삭제 시 확인하지 않습니다");
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_metrics_overlay_key(state: &mut AppState, key: KeyEvent) -> bool {
+    let key = normalize_korean_key(key);
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
+            state.show_metrics_overlay = false;
+            state.metrics_overlay_name.clear();
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_api_key_input_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.api_key_input_mode = false;
+            state.api_key_input.clear();
+            state.set_status("준비됨");
+        }
+        KeyCode::Enter => {
+            let key_input = state.api_key_input.clone();
+            state.api_key_input_mode = false;
+            state.api_key_input.clear();
+            let _ = state.action_tx.try_send(AppAction::RegisterApiKey(key_input));
+        }
+        KeyCode::Backspace => {
+            state.api_key_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.api_key_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_fetch_author_metrics(state: &mut AppState, name: String) {
+    if !state.api_mode.allows_api_calls() {
+        state.set_status("오프라인 모드입니다 (o 키로 전환)");
+        return;
+    }
+    if let Some(existing) = state.author_metrics.get(&name) {
+        state.show_metrics_overlay = true;
+        state.metrics_overlay_name = name.clone();
+        state.set_status(&format!(
+            "캐시된 지표: {} (h={}, 출처: {})",
+            existing.name,
+            existing.h_index.unwrap_or(0),
+            existing.source.display_name()
+        ));
+        state.dirty = true;
+        return;
+    }
+
+    let backend = state.metrics_backend;
+    let max_age = state.metrics_refresh_interval_days;
+    let cached_metrics = {
+        if let Ok(conn) = state.db.lock() {
+            crate::api::metrics::get_cached_metrics(&conn, backend, &name, max_age)
+                .ok()
+                .flatten()
+        } else {
+            None
+        }
+    };
+    if let Some(cached) = cached_metrics {
+        state.author_metrics.insert(name.clone(), cached.clone());
+        state.show_metrics_overlay = true;
+        state.metrics_overlay_name = name.clone();
+        state.set_status(&format!(
+            "캐시된 지표: {} (h={}, 출처: {})",
+            cached.name,
+            cached.h_index.unwrap_or(0),
+            cached.source.display_name()
+        ));
+        state.dirty = true;
+        return;
+    }
+
+    let backend = state.metrics_backend;
+    let api_key = state.openalex_api_key.clone();
+    let tx = state.action_tx.clone();
+    let name_clone = name.clone();
+    let db = state.db.clone();
+    let stale_metrics = if let Ok(conn) = db.lock() {
+        crate::api::metrics::get_stale_cached_metrics(&conn, backend, &name_clone)
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+    tokio::spawn(async move {
+        match crate::api::metrics::fetch_author_metrics(backend, api_key.as_deref(), &name_clone)
+            .await
+        {
+            Ok(metrics) => {
+                if let Ok(conn) = db.lock() {
+                    let _ = crate::api::metrics::store_cached_metrics(
+                        &conn, backend, &name_clone, &metrics,
+                    );
+                }
+                let _ = tx
+                    .send(AppAction::AuthorMetricsFetched {
+                        name: name_clone,
+                        metrics: Box::new(metrics),
+                    })
+                    .await;
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                if (err_str.contains("429") || err_str.contains("제한"))
+                    && let Some(stale) = stale_metrics
+                {
+                    let _ = tx
+                        .send(AppAction::AuthorMetricsFetched {
+                            name: name_clone,
+                            metrics: Box::new(stale),
+                        })
+                        .await;
+                    return;
+                }
+                let _ = tx
+                    .send(AppAction::AuthorMetricsFailed {
+                        name: name_clone,
+                        reason: err_str,
+                    })
+                    .await;
+            }
+        }
+    });
+}
+
+fn handle_author_metrics_fetched(state: &mut AppState, name: String, metrics: AuthorMetrics) {
+    state.author_metrics.insert(name.clone(), metrics.clone());
+    state.show_metrics_overlay = true;
+    state.metrics_overlay_name = name.clone();
+    state.set_status(&format!(
+        "지표 조회 완료: {} (h={})",
+        name,
+        metrics.h_index.unwrap_or(0)
+    ));
+    state.dirty = true;
+}
+
+fn handle_set_metrics_backend(state: &mut AppState, backend: MetricsBackend) {
+    state.metrics_backend = backend;
+    if let Ok(conn) = state.db.lock() {
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
+             VALUES ('metrics_backend', ?1, datetime('now'))",
+            rusqlite::params![backend.as_str()],
+        );
+    }
+    state.set_status(&format!("지표 백엔드: {}", backend.display_name()));
+}
+
+fn handle_register_api_key(state: &mut AppState, key: String) {
+    let key_trimmed = key.trim().to_string();
+    if key_trimmed.is_empty() {
+        state.set_status("API 키가 비어 있어 백엔드를 Semantic Scholar로 전환합니다");
+        handle_set_metrics_backend(state, MetricsBackend::SemanticScholar);
+        return;
+    }
+    state.openalex_api_key = Some(key_trimmed.clone());
+    if let Ok(conn) = state.db.lock() {
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
+             VALUES ('openalex_api_key', ?1, datetime('now'))",
+            rusqlite::params![key_trimmed],
+        );
+    }
+    handle_set_metrics_backend(state, MetricsBackend::OpenAlex);
+    state.set_status("OpenAlex API 키 등록 완료");
+}
+
 fn handle_edit_key(state: &mut AppState, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
@@ -1078,6 +1441,9 @@ fn is_modal_active(state: &AppState) -> bool {
         || state.note_mode
         || state.tag_mode
         || state.rating_mode
+        || state.confirm_delete_mode
+        || state.api_key_input_mode
+        || state.custom_field_mode
         || state.show_help
 }
 
@@ -1187,12 +1553,13 @@ fn handle_mouse_click(state: &mut AppState, column: u16, row: u16) {
         let item_index = offset + rel_row / 3;
         if item_index < total {
             state.list_cursor = item_index;
-            state.show_detail = !state.show_detail;
-            if state.show_detail {
-                state.load_detail();
-                state.active_panel = PanelFocus::Detail;
-            } else {
-                state.detail_doc = None;
+            if let Some(doc) = state.documents.get(item_index) {
+                let id = doc.id.unwrap_or(0);
+                if state.selected_doc_ids.contains(&id) {
+                    state.selected_doc_ids.remove(&id);
+                } else {
+                    state.selected_doc_ids.insert(id);
+                }
             }
             state.dirty = true;
         }
@@ -1472,7 +1839,7 @@ fn parse_crossref_response(body: &str) -> Option<pdf::RawMetadata> {
         .and_then(|d| d.get("date-parts")).and_then(|d| d.as_array()).and_then(|a| a.first())
         .and_then(|a| a.as_array()).and_then(|a| a.first()).and_then(|y| y.as_i64());
     let doi = message.get("DOI").and_then(|d| d.as_str());
-    let abstract_text = message.get("abstract").and_then(|a| a.as_str());
+    let abstract_text = message.get("abstract").and_then(|a| a.as_str()).map(strip_jats_tags);
 
     Some(pdf::RawMetadata {
         title: title.map(|s| s.to_string()),
@@ -1481,10 +1848,25 @@ fn parse_crossref_response(body: &str) -> Option<pdf::RawMetadata> {
         pub_year: year,
         doi: doi.map(|s| s.to_string()),
         arxiv_id: None,
-        abstract_text: abstract_text.map(|s| s.to_string()),
+        abstract_text,
         keywords: Vec::new(),
         source: pdf::MetadataSource::Crossref,
     })
+}
+
+fn strip_jats_tags(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        if c == '<' {
+            in_tag = true;
+        } else if c == '>' {
+            in_tag = false;
+        } else if !in_tag {
+            result.push(c);
+        }
+    }
+    result.trim().to_string()
 }
 
 fn parse_crossref_search_response(body: &str) -> Option<pdf::RawMetadata> {
@@ -1604,39 +1986,85 @@ fn parse_arxiv_response(body: &str) -> Option<pdf::RawMetadata> {
 }
 
 fn apply_api_metadata(state: &mut AppState, meta: pdf::RawMetadata, doc_id: i64) {
+    let is_api_source = matches!(
+        meta.source,
+        pdf::MetadataSource::Crossref | pdf::MetadataSource::Arxiv
+    );
     let result = {
         if let Ok(conn) = state.db.lock() {
             if let Ok(Some(mut doc)) = documents::get_by_id(&conn, doc_id) {
                 let mut changed = false;
-                if (doc.title.is_empty() || doc.title == "Untitled")
-                    && let Some(ref t) = meta.title {
-                        doc.title = t.clone();
+                if is_api_source {
+                    if let Some(ref t) = meta.title {
+                        if !t.is_empty() && t != "Untitled" {
+                            doc.title = t.clone();
+                            changed = true;
+                        }
+                    }
+                    if !meta.authors.is_empty() {
+                        doc.authors = Some(meta.authors.join("; "));
                         changed = true;
                     }
-                if doc.authors.is_none() && !meta.authors.is_empty() {
-                    doc.authors = Some(meta.authors.join("; "));
-                    changed = true;
-                }
-                if doc.journal.is_none()
-                    && let Some(ref j) = meta.journal {
-                        doc.journal = Some(j.clone());
-                        changed = true;
+                    if let Some(ref j) = meta.journal {
+                        if !j.is_empty() {
+                            doc.journal = Some(j.clone());
+                            changed = true;
+                        }
                     }
-                if doc.pub_year.is_none()
-                    && let Some(y) = meta.pub_year {
+                    if let Some(y) = meta.pub_year {
                         doc.pub_year = Some(y);
                         changed = true;
                     }
-                if doc.doi.is_none()
-                    && let Some(ref d) = meta.doi {
-                        doc.doi = Some(d.clone());
+                    if let Some(ref d) = meta.doi {
+                        if doc.doi.is_none() {
+                            doc.doi = Some(d.clone());
+                            changed = true;
+                        }
+                    }
+                    if let Some(ref a) = meta.abstract_text {
+                        if !a.is_empty() {
+                            doc.abstract_text = Some(a.clone());
+                            changed = true;
+                        }
+                    }
+                } else {
+                    if (doc.title.is_empty() || doc.title == "Untitled")
+                        && let Some(ref t) = meta.title {
+                            doc.title = t.clone();
+                            changed = true;
+                        }
+                    let authors_empty = doc.authors.as_deref().map_or(true, |a| a.trim().is_empty());
+                    let authors_look_wrong = doc.authors.as_deref().map_or(false, |a| {
+                        let a = a.trim();
+                        !a.contains(' ') && a.len() <= 20
+                    });
+                    if !meta.authors.is_empty()
+                        && (authors_empty || authors_look_wrong)
+                    {
+                        doc.authors = Some(meta.authors.join("; "));
                         changed = true;
                     }
-                if doc.abstract_text.is_none()
-                    && let Some(ref a) = meta.abstract_text {
-                        doc.abstract_text = Some(a.clone());
-                        changed = true;
-                    }
+                    if (doc.journal.is_none() || doc.journal.as_deref().map_or(true, |j| j.trim().is_empty()))
+                        && let Some(ref j) = meta.journal {
+                            doc.journal = Some(j.clone());
+                            changed = true;
+                        }
+                    if doc.pub_year.is_none()
+                        && let Some(y) = meta.pub_year {
+                            doc.pub_year = Some(y);
+                            changed = true;
+                        }
+                    if doc.doi.is_none()
+                        && let Some(ref d) = meta.doi {
+                            doc.doi = Some(d.clone());
+                            changed = true;
+                        }
+                    if (doc.abstract_text.is_none() || doc.abstract_text.as_deref().map_or(true, |a| a.trim().is_empty()))
+                        && let Some(ref a) = meta.abstract_text {
+                            doc.abstract_text = Some(a.clone());
+                            changed = true;
+                        }
+                }
                 if changed {
                     match documents::update(&conn, &doc) {
                         Ok(()) => Some(Ok(())),
@@ -1656,10 +2084,20 @@ fn apply_api_metadata(state: &mut AppState, meta: pdf::RawMetadata, doc_id: i64)
     match result {
         Some(Ok(())) => {
             state.reload_documents();
-            state.set_status("API 메타데이터 보강 완료");
+            if state.show_detail
+                && state
+                    .detail_doc
+                    .as_ref()
+                    .and_then(|d| d.id)
+                    .map(|d_id| d_id == doc_id)
+                    .unwrap_or(false)
+            {
+                state.load_detail();
+            }
+            state.finish_processing("API 메타데이터 보강 완료");
         }
-        Some(Err(msg)) => state.set_status(&format!("API 저장 실패: {}", msg)),
-        None => state.set_status("API: 보강할 필드 없음"),
+        Some(Err(msg)) => state.finish_processing(&format!("API 저장 실패: {}", msg)),
+        None => state.finish_processing("API: 보강할 필드 없음"),
     }
 }
 
@@ -1698,6 +2136,7 @@ fn handle_search_filter(state: &mut AppState, term: String) {
 fn handle_select_project(state: &mut AppState, project_id: Option<i64>) {
     state.active_project_id = project_id;
     state.active_author = None;
+    state.active_udc_notation = None;
     if let Some(pid) = project_id {
         let docs = {
             if let Ok(conn) = state.db.lock() {
@@ -1826,6 +2265,7 @@ fn handle_create_series(state: &mut AppState, name: String) {
 fn handle_select_series(state: &mut AppState, series_id: Option<i64>) {
     state.active_series_id = series_id;
     state.active_author = None;
+    state.active_udc_notation = None;
     if let Some(sid) = series_id {
         let docs = {
             if let Ok(conn) = state.db.lock() {
@@ -1860,6 +2300,7 @@ fn handle_select_author(state: &mut AppState, author: Option<String>) {
     state.active_author = author.clone();
     state.active_project_id = None;
     state.active_series_id = None;
+    state.active_udc_notation = None;
     if let Some(ref name) = author {
         let conn = state.db.lock();
         if let Ok(conn) = conn {
@@ -1871,8 +2312,9 @@ fn handle_select_author(state: &mut AppState, author: Option<String>) {
                     d.authors
                         .as_deref()
                         .map(|a| {
-                            a.split(';')
-                                .any(|seg| crate::db::fts_query::normalize_nfc(seg.trim()) == norm_name)
+                            documents::split_authors(a)
+                                .iter()
+                                .any(|seg| crate::db::fts_query::normalize_nfc(seg) == norm_name)
                         })
                         .unwrap_or(false)
                 })
@@ -1881,6 +2323,24 @@ fn handle_select_author(state: &mut AppState, author: Option<String>) {
             state.documents = filtered;
             state.document_count = count;
             state.list_cursor = 0;
+
+            if state.auto_fetch_metrics
+                && state.api_mode.allows_api_calls()
+                && !state.author_metrics.contains_key(name)
+            {
+                let backend = state.metrics_backend;
+                let max_age = state.metrics_refresh_interval_days;
+                let has_fresh = crate::api::metrics::get_cached_metrics(&conn, backend, name, max_age)
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if !has_fresh {
+                    let name_for_fetch = name.clone();
+                    let _ = state.action_tx.try_send(AppAction::FetchAuthorMetrics {
+                        name: name_for_fetch,
+                    });
+                }
+            }
         }
     } else {
         state.reload_documents();
@@ -2257,6 +2717,18 @@ pub const UDC_TOP_LEVEL_TUPLES: &[(&str, &str)] = &[
 
 pub const EDIT_FIELD_NAMES: &[&str] = EDIT_FIELDS;
 
+pub fn count_authors_section_start(state: &AppState) -> usize {
+    let mut count = 1; // "프로젝트" header
+    count += state.projects.len().max(1);
+    count += 1; // spacer
+    if state.series_grouping_enabled {
+        count += 1; // "시리즈" header
+        count += state.series.len().max(1);
+        count += 1; // spacer
+    }
+    count
+}
+
 fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
     state.start_processing(&format!("인용 추출 중 (doc {})...", doc_id));
     let db = state.db.clone();
@@ -2544,4 +3016,122 @@ fn handle_navigate_graph(state: &mut AppState, direction: GraphDirection) {
         gs.focus_next(step);
         state.dirty = true;
     }
+}
+
+fn handle_select_udc(state: &mut AppState, notation: Option<String>) {
+    state.active_udc_notation = notation.clone();
+    state.active_project_id = None;
+    state.active_author = None;
+    state.active_series_id = None;
+    if let Some(ref notation) = notation {
+        state.expanded_nodes.insert(notation.clone());
+        if let Ok(conn) = state.db.lock() {
+            let all = documents::list_all(&conn).unwrap_or_default();
+            let filtered: Vec<Document> = all.into_iter().filter(|d| {
+                if let Ok(Some(node_id)) = crate::classification::scheme::get_node_id(&conn, "udc", notation) {
+                    conn.query_row(
+                        "SELECT COUNT(*) FROM document_classifications WHERE document_id = ?1 AND node_id = ?2",
+                        rusqlite::params![d.id.unwrap_or(0), node_id],
+                        |row| row.get::<_, i64>(0),
+                    ).unwrap_or(0) > 0
+                } else {
+                    false
+                }
+            }).collect();
+            let count = filtered.len();
+            state.documents = filtered;
+            state.document_count = count;
+            state.list_cursor = 0;
+        }
+        state.set_status(&format!("UDC {} 분류 문헌", notation));
+    } else {
+        state.reload_documents();
+    }
+    state.dirty = true;
+}
+
+fn handle_add_custom_field(state: &mut AppState, doc_id: i64, key: String, value: String) {
+    if key.trim().is_empty() {
+        state.set_status("필드 키를 입력하세요");
+        return;
+    }
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::custom_fields::add_field(&conn, doc_id, key.trim(), value.trim())
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            state.load_detail();
+            state.set_status("커스텀 필드 추가됨");
+        }
+        Err(e) => state.set_status(&format!("필드 추가 실패: {}", e)),
+    }
+    state.dirty = true;
+}
+
+fn handle_delete_custom_field(state: &mut AppState, doc_id: i64, field_id: i64) {
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            crate::db::custom_fields::delete_field(&conn, doc_id, field_id)
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            state.load_detail();
+            state.set_status("커스텀 필드 삭제됨");
+        }
+        Err(e) => state.set_status(&format!("필드 삭제 실패: {}", e)),
+    }
+    state.dirty = true;
+}
+
+fn handle_custom_field_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.custom_field_mode = false;
+            state.custom_field_key.clear();
+            state.custom_field_value.clear();
+            state.custom_field_editing_key = false;
+            state.dirty = true;
+        }
+        KeyCode::Tab => {
+            state.custom_field_editing_key = !state.custom_field_editing_key;
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
+            let key = state.custom_field_key.clone();
+            let value = state.custom_field_value.clone();
+            state.custom_field_mode = false;
+            state.custom_field_key.clear();
+            state.custom_field_value.clear();
+            state.custom_field_editing_key = false;
+            let _ = state.action_tx.try_send(AppAction::AddCustomField { doc_id, key, value });
+        }
+        KeyCode::Backspace => {
+            if state.custom_field_editing_key {
+                state.custom_field_key.pop();
+            } else {
+                state.custom_field_value.pop();
+            }
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            if state.custom_field_editing_key {
+                if c.is_ascii_graphic() || c == ' ' {
+                    state.custom_field_key.push(c);
+                }
+            } else {
+                state.custom_field_value.push(c);
+            }
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
 }

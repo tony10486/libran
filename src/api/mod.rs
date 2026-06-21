@@ -1,16 +1,17 @@
 pub mod arxiv;
 pub mod cache;
 pub mod crossref;
+pub mod metrics;
 pub mod rate_limiter;
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub enum ApiMode {
+    #[default]
     IdentifierOnly,
     ManualSearch,
     AutoFallback,
-    #[default]
     FullyOffline,
 }
 

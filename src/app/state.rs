@@ -1,7 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use tokio::sync::mpsc;
 
+use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 use crate::api::ApiMode;
 use crate::config::AppConfig;
 use crate::db::documents::Document;
@@ -67,6 +68,7 @@ pub struct AppState {
 
     pub active_project_id: Option<i64>,
     pub active_author: Option<String>,
+    pub active_udc_notation: Option<String>,
     pub is_processing: bool,
     pub status_text: String,
     pub api_mode: ApiMode,
@@ -109,6 +111,30 @@ pub struct AppState {
     pub authors_expanded: bool,
     pub author_search_mode: bool,
     pub author_search_input: String,
+
+    // ── Delete confirmation dialog ──
+    pub confirm_delete_mode: bool,
+    pub delete_confirm_doc_id: Option<i64>,
+    pub delete_confirm_title: String,
+    pub skip_delete_confirm: bool,
+
+    // ── Author metrics (h-index, i10-index) ──
+    pub metrics_backend: MetricsBackend,
+    pub openalex_api_key: Option<String>,
+    pub author_metrics: std::collections::HashMap<String, AuthorMetrics>,
+    pub show_metrics_overlay: bool,
+    pub metrics_overlay_name: String,
+    pub api_key_input_mode: bool,
+    pub api_key_input: String,
+    pub auto_fetch_metrics: bool,
+    pub metrics_refresh_interval_days: u32,
+
+    // ── Custom metadata fields ──
+    pub custom_fields: Vec<(i64, String, String)>,
+    pub custom_field_mode: bool,
+    pub custom_field_key: String,
+    pub custom_field_value: String,
+    pub custom_field_editing_key: bool,
 }
 
 impl AppState {
@@ -117,6 +143,11 @@ impl AppState {
         let similarity_config = SimilarityConfig::load();
         let udc_tree = load_udc_tree_from_db(&db);
         let series_grouping_enabled = load_series_grouping_enabled(&db);
+        let skip_delete_confirm = load_skip_delete_confirm(&db);
+        let metrics_backend = load_metrics_backend(&db);
+        let openalex_api_key = load_openalex_api_key(&db);
+        let auto_fetch_metrics = load_auto_fetch_metrics(&db);
+        let metrics_refresh_interval_days = load_metrics_refresh_interval_days(&db);
         AppState {
             db,
             config,
@@ -150,6 +181,7 @@ impl AppState {
             tree_cursor: 0,
             active_project_id: None,
             active_author: None,
+            active_udc_notation: None,
             is_processing: false,
             status_text: "준비됨".to_string(),
             api_mode,
@@ -179,6 +211,24 @@ impl AppState {
             authors_expanded: false,
             author_search_mode: false,
             author_search_input: String::new(),
+            confirm_delete_mode: false,
+            delete_confirm_doc_id: None,
+            delete_confirm_title: String::new(),
+            skip_delete_confirm,
+            metrics_backend,
+            openalex_api_key,
+            author_metrics: HashMap::new(),
+            show_metrics_overlay: false,
+            metrics_overlay_name: String::new(),
+            api_key_input_mode: false,
+            api_key_input: String::new(),
+            auto_fetch_metrics,
+            metrics_refresh_interval_days,
+            custom_fields: Vec::new(),
+            custom_field_mode: false,
+            custom_field_key: String::new(),
+            custom_field_value: String::new(),
+            custom_field_editing_key: false,
         }
     }
 
@@ -257,9 +307,15 @@ impl AppState {
             if let Ok(conn) = self.db.lock() {
                 self.current_note = crate::db::notes::get(&conn, doc_id).ok().flatten();
                 self.current_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                self.custom_fields = crate::db::custom_fields::list_fields(&conn, doc_id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|f| (f.id, f.key, f.value))
+                    .collect();
             } else {
                 self.current_note = None;
                 self.current_tags = Vec::new();
+                self.custom_fields = Vec::new();
             }
         }
     }
@@ -340,4 +396,83 @@ fn load_series_grouping_enabled(db: &DbConn) -> bool {
         return v.as_deref() == Some("true");
     }
     false
+}
+
+fn load_skip_delete_confirm(db: &DbConn) -> bool {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'skip_delete_confirm'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        return v.as_deref() == Some("true");
+    }
+    false
+}
+
+fn load_metrics_backend(db: &DbConn) -> MetricsBackend {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'metrics_backend'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        return v
+            .as_deref()
+            .map(MetricsBackend::parse)
+            .unwrap_or(MetricsBackend::SemanticScholar);
+    }
+    MetricsBackend::SemanticScholar
+}
+
+fn load_openalex_api_key(db: &DbConn) -> Option<String> {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'openalex_api_key'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        return v.filter(|s| !s.is_empty());
+    }
+    None
+}
+
+fn load_auto_fetch_metrics(db: &DbConn) -> bool {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'auto_fetch_metrics'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        return v.as_deref() == Some("true");
+    }
+    false
+}
+
+fn load_metrics_refresh_interval_days(db: &DbConn) -> u32 {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'metrics_refresh_interval_days'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(s) = v {
+            if let Ok(days) = s.parse::<u32>() {
+                if days > 0 {
+                    return days;
+                }
+            }
+        }
+    }
+    7
 }

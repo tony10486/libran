@@ -38,7 +38,7 @@ impl Default for AppConfig {
         let libran_dir = home.join(".libran");
 
         AppConfig {
-            api_mode: ApiMode::FullyOffline,
+            api_mode: ApiMode::IdentifierOnly,
             user_email: None,
             file_storage_policy: FileStoragePolicy::CopyToLibrary,
             library_path: libran_dir.join("library"),
@@ -91,11 +91,11 @@ impl AppConfig {
         s.push_str("# Libran 설정 파일\n");
         s.push_str("# '#'로 시작하는 줄은 주석입니다. 값을 변경한 후 프로그램을 재시작하세요.\n\n");
 
-        s.push_str("# API 모드: fully_offline | identifier_only | auto_fallback | manual_search\n");
-        s.push_str("#   fully_offline:    모든 온라인 조회를 끕니다.\n");
-        s.push_str("#   identifier_only:  DOI/arXiv ID로만 조회합니다.\n");
-        s.push_str("#   auto_fallback:    Crossref/arXiv에 자동 조회 후 실패 시 오프라인으로 동작합니다.\n");
-        s.push_str("#   manual_search:    수동 검색 모드.\n");
+        s.push_str("# API 모드: IdentifierOnly | AutoFallback | ManualSearch | FullyOffline\n");
+        s.push_str("#   IdentifierOnly:  DOI/arXiv ID가 있을 때만 API 조회합니다. (기본값)\n");
+        s.push_str("#   AutoFallback:    식별자가 없으면 제목으로 Crossref 검색까지 시도합니다.\n");
+        s.push_str("#   ManualSearch:    수동 검색 모드.\n");
+        s.push_str("#   FullyOffline:    모든 온라인 조회를 끕니다.\n");
         s.push_str(&format!("api_mode = \"{}\"\n\n", api_mode_serde_name(&self.api_mode)));
 
         s.push_str("# CrossRef polite 요청에 사용할 이메일 (선택). 비워두면 익명 요청을 보냅니다.\n");

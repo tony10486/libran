@@ -40,6 +40,7 @@ fn test_schema_creation() -> Result<()> {
         "citation_relations",
         "series",
         "document_series",
+        "document_custom_fields",
     ] {
         assert!(tables.contains(&expected.to_string()), "missing table: {}", expected);
     }

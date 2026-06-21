@@ -1,3 +1,4 @@
+pub mod custom_fields;
 pub mod documents;
 pub mod facets;
 pub mod fts_query;
