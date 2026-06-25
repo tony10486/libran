@@ -16,8 +16,17 @@ use crate::export::{export, ExportFormat};
 use crate::pdf;
 use crate::similarity::scoring::{compute_scores, DocumentFeatures};
 use crate::storage::library;
+use crate::ui::help;
 
 use super::action::{AppAction, GraphDirection};
+use super::author_merge_handler;
+use super::bookmark_handler;
+use super::bulk_import_handler;
+use super::forward_citations_handler;
+use super::import_handler;
+use super::reading_handler;
+use super::saved_search_handler;
+use super::stats_handler;
 use super::api_metadata::*;
 use super::custom_fields_handler::*;
 use super::graph_state::GraphState;
@@ -239,6 +248,30 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
         AppAction::SelectUdc(notation) => handle_select_udc(state, notation),
         AppAction::AddCustomField { doc_id, key, value } => handle_add_custom_field(state, doc_id, key, value),
         AppAction::DeleteCustomField { doc_id, field_id } => handle_delete_custom_field(state, doc_id, field_id),
+        AppAction::OpenExternalViewer { doc_id } => handle_open_external(state, doc_id),
+        AppAction::OpenExternalViewerResult { success: _, message } => handle_open_external_result(state, &message),
+        AppAction::ToggleReadingStatus { doc_id } => reading_handler::handle_toggle_reading_status(state, doc_id),
+        AppAction::SaveCurrentSearch => saved_search_handler::handle_save_current_search(state),
+        AppAction::SaveCurrentSearchNamed { name } => saved_search_handler::handle_save_current_search_named(state, name),
+        AppAction::SelectSavedSearch { search_id } => saved_search_handler::handle_select_saved_search(state, search_id),
+        AppAction::DeleteSavedSearch { search_id } => saved_search_handler::handle_delete_saved_search(state, search_id),
+        AppAction::ToggleStatsDashboard => stats_handler::handle_toggle_stats_dashboard(state),
+        AppAction::ExtractBookmarks { doc_id } => bookmark_handler::handle_extract_bookmarks(state, doc_id),
+        AppAction::BookmarksExtracted { doc_id, bookmarks } => bookmark_handler::handle_bookmarks_extracted(state, doc_id, bookmarks),
+        AppAction::BookmarkExtractionFailed { doc_id, reason } => bookmark_handler::handle_bookmark_extraction_failed(state, doc_id, reason),
+        AppAction::StartBulkImport => bulk_import_handler::handle_start_bulk_import(state),
+        AppAction::BulkImportSubmitted(input) => bulk_import_handler::handle_bulk_import_submitted(state, input),
+        AppAction::BulkImportResult { success_count, fail_count, message } => bulk_import_handler::handle_bulk_import_result(state, success_count, fail_count, message),
+        AppAction::StartFileImport => import_handler::handle_start_file_import(state),
+        AppAction::FileImportSubmitted(path) => import_handler::handle_file_import_submitted(state, path),
+        AppAction::FileImportResult { count, message } => import_handler::handle_file_import_result(state, count, message),
+        AppAction::FetchForwardCitations { doc_id } => forward_citations_handler::handle_fetch_forward_citations(state, doc_id),
+        AppAction::ForwardCitationsFetched { doc_id, count } => forward_citations_handler::handle_forward_citations_fetched(state, doc_id, count),
+        AppAction::ForwardCitationsFailed { doc_id, reason } => forward_citations_handler::handle_forward_citations_failed(state, doc_id, reason),
+        AppAction::StartAuthorMerge => author_merge_handler::handle_start_author_merge(state),
+        AppAction::AuthorMergeSourceEntered(source) => author_merge_handler::handle_author_merge_source_entered(state, source),
+        AppAction::AuthorMergeCanonicalEntered { source, canonical } => author_merge_handler::handle_author_merge_canonical_entered(state, source, canonical),
+        AppAction::AuthorMergeResult { success, message } => author_merge_handler::handle_author_merge_result(state, success, message),
     }
     false
 }
@@ -272,8 +305,33 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
 
     // Input modes: pass raw key (Korean text should be entered as-is)
     if state.show_help {
-        state.show_help = false;
-        state.dirty = true;
+        let key = normalize_korean_key(key);
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+                state.show_help = false;
+                state.help_page = 0;
+                state.dirty = true;
+            }
+            KeyCode::Tab
+            | KeyCode::Right
+            | KeyCode::Char('n')
+            | KeyCode::Char('l')
+            | KeyCode::PageDown
+            | KeyCode::Char(' ') => {
+                state.help_page = (state.help_page + 1) % help::TOTAL_PAGES;
+                state.dirty = true;
+            }
+            KeyCode::BackTab
+            | KeyCode::Left
+            | KeyCode::Char('p')
+            | KeyCode::Char('h')
+            | KeyCode::PageUp => {
+                state.help_page =
+                    (state.help_page + help::TOTAL_PAGES - 1) % help::TOTAL_PAGES;
+                state.dirty = true;
+            }
+            _ => {}
+        }
         return false;
     }
 
@@ -333,6 +391,26 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     if state.rating_mode {
         return handle_rating_key(state, key);
     }
+    if state.save_search_mode {
+        return handle_save_search_key(state, key);
+    }
+    if state.bulk_import_mode {
+        return handle_bulk_import_key(state, key);
+    }
+    if state.file_import_mode {
+        return handle_file_import_key(state, key);
+    }
+    if state.author_merge_mode {
+        return handle_author_merge_key(state, key);
+    }
+    if state.show_stats {
+        let key = normalize_korean_key(key);
+        return handle_stats_overlay_key(state, key);
+    }
+    if state.settings_panel_mode {
+        let key = normalize_korean_key(key);
+        return crate::ui::settings_panel::handle_key(state, key);
+    }
     if state.show_detail {
         let key = normalize_korean_key(key);
         return handle_detail_key(state, key);
@@ -363,6 +441,7 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('?') => {
             state.show_help = true;
+            state.help_page = 0;
             state.dirty = true;
         }
         KeyCode::Char('a') => {
@@ -468,6 +547,24 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('o') => {
             let _ = state.action_tx.try_send(AppAction::ToggleApiMode);
+        }
+        KeyCode::Char('+') => {
+            state.resize_left_panel(2);
+        }
+        KeyCode::Char('-') => {
+            state.resize_left_panel(-2);
+        }
+        KeyCode::Char('=') => {
+            state.reset_left_panel();
+        }
+        KeyCode::Char(',') => {
+            state.settings_panel_mode = true;
+            state.settings_panel = Some(crate::ui::settings_panel::SettingsPanelState {
+                cursor: 0,
+                editing: false,
+                edit_input: String::new(),
+            });
+            state.dirty = true;
         }
         KeyCode::Char('x') => {
             if !state.selected_doc_ids.is_empty() {
@@ -592,6 +689,42 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             let notation = c.to_string();
             let _ = state.action_tx.try_send(AppAction::SelectUdc(Some(notation)));
         }
+        KeyCode::Char('p') => {
+            if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor)
+                    && let Some(id) = doc.id {
+                        let _ = state.action_tx.try_send(AppAction::OpenExternalViewer { doc_id: id });
+                    }
+        }
+        KeyCode::Char('u') => {
+            if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor)
+                    && let Some(id) = doc.id {
+                        let _ = state.action_tx.try_send(AppAction::ToggleReadingStatus { doc_id: id });
+                    }
+        }
+        KeyCode::Char('v') => {
+            let _ = state.action_tx.try_send(AppAction::SaveCurrentSearch);
+        }
+        KeyCode::Char('i') => {
+            let _ = state.action_tx.try_send(AppAction::ToggleStatsDashboard);
+        }
+        KeyCode::Char('w') => {
+            let _ = state.action_tx.try_send(AppAction::StartBulkImport);
+        }
+        KeyCode::Char('I') => {
+            let _ = state.action_tx.try_send(AppAction::StartFileImport);
+        }
+        KeyCode::Char('F') => {
+            if state.active_panel == PanelFocus::Right
+                && let Some(doc) = state.documents.get(state.list_cursor)
+                    && let Some(id) = doc.id {
+                        let _ = state.action_tx.try_send(AppAction::FetchForwardCitations { doc_id: id });
+                    }
+        }
+        KeyCode::Char('E') => {
+            let _ = state.action_tx.try_send(AppAction::StartAuthorMerge);
+        }
         _ => {}
     }
     false
@@ -715,6 +848,9 @@ fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('?') => {
             state.show_help = !state.show_help;
+            if state.show_help {
+                state.help_page = 0;
+            }
             state.dirty = true;
         }
         KeyCode::Tab | KeyCode::Right => cycle_panel(state, true),
@@ -726,6 +862,26 @@ fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('j') | KeyCode::Down => move_cursor_down(state),
         KeyCode::Char('k') | KeyCode::Up => move_cursor_up(state),
+        KeyCode::Char('p') => {
+            if let Some(id) = state.detail_doc.as_ref().and_then(|d| d.id) {
+                let _ = state.action_tx.try_send(AppAction::OpenExternalViewer { doc_id: id });
+            }
+        }
+        KeyCode::Char('u') => {
+            if let Some(id) = state.detail_doc.as_ref().and_then(|d| d.id) {
+                let _ = state.action_tx.try_send(AppAction::ToggleReadingStatus { doc_id: id });
+            }
+        }
+        KeyCode::Char('b') => {
+            if let Some(id) = state.detail_doc.as_ref().and_then(|d| d.id) {
+                let _ = state.action_tx.try_send(AppAction::ExtractBookmarks { doc_id: id });
+            }
+        }
+        KeyCode::Char('F') => {
+            if let Some(id) = state.detail_doc.as_ref().and_then(|d| d.id) {
+                let _ = state.action_tx.try_send(AppAction::FetchForwardCitations { doc_id: id });
+            }
+        }
         _ => {}
     }
     false
@@ -823,6 +979,137 @@ fn handle_rating_key(state: &mut AppState, key: KeyEvent) -> bool {
             state.dirty = true;
         }
         _ => {}
+    }
+    false
+}
+
+fn handle_save_search_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.save_search_mode = false;
+            state.save_search_input.clear();
+            state.set_status("취소됨");
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            let name = state.save_search_input.trim().to_string();
+            if name.is_empty() {
+                state.set_status("이름을 입력하세요");
+            } else {
+                let _ = state.action_tx.try_send(AppAction::SaveCurrentSearchNamed { name });
+            }
+        }
+        KeyCode::Backspace => {
+            state.save_search_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.save_search_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_bulk_import_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.bulk_import_mode = false;
+            state.bulk_import_input.clear();
+            state.set_status("취소됨");
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            let input = state.bulk_import_input.clone();
+            let _ = state.action_tx.try_send(AppAction::BulkImportSubmitted(input));
+        }
+        KeyCode::Backspace => {
+            state.bulk_import_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.bulk_import_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_file_import_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.file_import_mode = false;
+            state.file_import_input.clear();
+            state.set_status("취소됨");
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            let path = state.file_import_input.trim().to_string();
+            if path.is_empty() {
+                state.set_status("파일 경로를 입력하세요");
+            } else {
+                let _ = state.action_tx.try_send(AppAction::FileImportSubmitted(path));
+            }
+        }
+        KeyCode::Backspace => {
+            state.file_import_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.file_import_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_author_merge_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc => {
+            state.author_merge_mode = false;
+            state.author_merge_phase = 0;
+            state.author_merge_source.clear();
+            state.author_merge_input.clear();
+            state.set_status("취소됨");
+            state.dirty = true;
+        }
+        KeyCode::Enter => {
+            let input = state.author_merge_input.trim().to_string();
+            if input.is_empty() {
+                state.set_status("저자명을 입력하세요");
+                return false;
+            }
+            if state.author_merge_phase == 1 {
+                let _ = state.action_tx.try_send(AppAction::AuthorMergeSourceEntered(input));
+            } else {
+                let source = state.author_merge_source.clone();
+                let _ = state.action_tx.try_send(AppAction::AuthorMergeCanonicalEntered { source, canonical: input });
+            }
+        }
+        KeyCode::Backspace => {
+            state.author_merge_input.pop();
+            state.dirty = true;
+        }
+        KeyCode::Char(c) => {
+            state.author_merge_input.push(c);
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_stats_overlay_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('i') | KeyCode::Char('q') => {
+            let _ = state.action_tx.try_send(AppAction::ToggleStatsDashboard);
+        }
+        _ => {
+            let _ = state.action_tx.try_send(AppAction::ToggleStatsDashboard);
+        }
     }
     false
 }
@@ -1275,6 +1562,7 @@ fn is_modal_active(state: &AppState) -> bool {
         || state.custom_field_mode
         || state.show_help
         || state.show_export_dialog
+        || state.settings_panel_mode
 }
 
 fn compute_body_rect(state: &AppState) -> Rect {
@@ -1299,7 +1587,7 @@ fn compute_right_panel_rect(state: &AppState) -> Rect {
     } else {
         let split = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(32), Constraint::Length(1), Constraint::Min(1)])
+            .constraints([Constraint::Length(state.left_panel_width), Constraint::Length(1), Constraint::Min(1)])
             .split(body);
         split[2]
     }
@@ -1312,9 +1600,9 @@ fn compute_left_panel_rect(state: &AppState) -> Option<Rect> {
     let body = compute_body_rect(state);
     let split = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(32), Constraint::Length(1), Constraint::Min(1)])
-        .split(body);
-    Some(split[0])
+            .constraints([Constraint::Length(state.left_panel_width), Constraint::Length(1), Constraint::Min(1)])
+            .split(body);
+        Some(split[0])
 }
 
 fn compute_list_offset(cursor: usize, visible_items: usize, total_items: usize) -> usize {
@@ -2297,13 +2585,14 @@ pub fn count_tree_nodes(state: &AppState) -> usize {
     count
 }
 
-pub const UDC_TOP_LEVEL_STRS: &[&str] = &["0", "1", "2", "3", "5", "6", "7", "8", "9"];
+pub const UDC_TOP_LEVEL_STRS: &[&str] = &["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 pub const UDC_TOP_LEVEL_TUPLES: &[(&str, &str)] = &[
     ("0", "총류"),
     ("1", "철학"),
     ("2", "종교"),
     ("3", "사회과학"),
+    ("4", "(Vacant)"),
     ("5", "자연과학"),
     ("6", "응용과학"),
     ("7", "예술"),
@@ -2395,6 +2684,67 @@ fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
             }
         }
     });
+}
+
+fn handle_open_external(state: &mut AppState, doc_id: i64) {
+    state.start_processing("PDF 여는 중...");
+    let db = state.db.clone();
+    let tx = state.action_tx.clone();
+    let viewer_command = state.config.viewer_command.clone();
+
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || -> std::result::Result<(), String> {
+            let file_path = {
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                documents::get_by_id(&conn, doc_id)
+                    .map_err(|e| e.to_string())?
+                    .and_then(|d| d.file_path)
+                    .ok_or_else(|| "파일 경로가 없습니다".to_string())?
+            };
+
+            let path = std::path::Path::new(&file_path);
+            if !library::check_file_exists(path) {
+                return Err(format!("파일을 찾을 수 없습니다: {}", file_path));
+            }
+
+            match &viewer_command {
+                Some(parts) if !parts.is_empty() => {
+                    let (exe, args) = parts.split_first().unwrap();
+                    let mut cmd = std::process::Command::new(exe);
+                    for arg in args {
+                        cmd.arg(arg.replace("%p", &file_path));
+                    }
+                    cmd.spawn().map_err(|e| e.to_string())?;
+                }
+                _ => {
+                    open::that(path).map_err(|e| e.to_string())?;
+                }
+            }
+            Ok(())
+        })
+        .await;
+
+        let action = match result {
+            Ok(Ok(())) => AppAction::OpenExternalViewerResult {
+                success: true,
+                message: "PDF 열기 완료".to_string(),
+            },
+            Ok(Err(m)) => AppAction::OpenExternalViewerResult {
+                success: false,
+                message: format!("PDF 열기 실패: {}", m),
+            },
+            Err(e) => AppAction::OpenExternalViewerResult {
+                success: false,
+                message: format!("PDF 열기 실패: 태스크 오류: {}", e),
+            },
+        };
+        let _ = tx.send(action).await;
+    });
+}
+
+fn handle_open_external_result(state: &mut AppState, message: &str) {
+    state.finish_processing(message);
+    state.dirty = true;
 }
 
 fn handle_start_manual_citation_entry(state: &mut AppState, doc_id: i64) {

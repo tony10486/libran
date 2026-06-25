@@ -3,6 +3,7 @@ pub mod cache;
 pub mod crossref;
 pub mod http_client;
 pub mod metrics;
+pub mod openalex_forward;
 pub mod rate_limiter;
 
 use serde::{Deserialize, Serialize};

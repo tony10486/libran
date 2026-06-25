@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
 use ratatui::Frame;
@@ -15,12 +15,12 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let highlight = if focused {
         theme::focus_style()
     } else {
-        Style::default().bg(Color::Black).fg(Color::DarkGray)
+        Style::default().bg(theme::bg()).fg(theme::dim())
     };
 
     let list = List::default()
         .items(items)
-        .style(Style::default().fg(Color::Gray).bg(Color::Black))
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()))
         .highlight_style(highlight);
 
     let mut list_state = ListState::default();
@@ -39,7 +39,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
         Span::raw("  "),
         Span::styled("프로젝트", theme::header_style()),
         Span::raw(" "),
-        Span::styled("────────────────────", Style::default().fg(Color::DarkGray)),
+        Span::styled("────────────────────", Style::default().fg(theme::divider())),
     ])));
 
     if state.projects.is_empty() {
@@ -58,14 +58,14 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             let (icon, icon_style, name_style) = if is_active {
                 (
                     "▣",
-                    Style::default().fg(Color::Yellow),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme::selected()),
+                    Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
                 )
             } else {
                 (
                     "□",
-                    Style::default().fg(Color::DarkGray),
-                    Style::default().fg(Color::Gray),
+                    Style::default().fg(theme::dim()),
+                    Style::default().fg(theme::fg()),
                 )
             };
             items.push(ListItem::new(Line::from(vec![
@@ -86,7 +86,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             Span::raw("  "),
             Span::styled("시리즈", theme::header_style()),
             Span::raw(" "),
-            Span::styled("────────────────────", Style::default().fg(Color::DarkGray)),
+            Span::styled("────────────────────", Style::default().fg(theme::divider())),
         ])));
 
         if state.series.is_empty() {
@@ -105,14 +105,14 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
                 let (icon, icon_style, name_style) = if is_active {
                     (
                         "≡",
-                        Style::default().fg(Color::Yellow),
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                        Style::default().fg(theme::selected()),
+                        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
                     )
                 } else {
                     (
                         "≡",
-                        Style::default().fg(Color::DarkGray),
-                        Style::default().fg(Color::Gray),
+                        Style::default().fg(theme::dim()),
+                        Style::default().fg(theme::fg()),
                     )
                 };
                 items.push(ListItem::new(Line::from(vec![
@@ -132,20 +132,20 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
         let arrow = if state.authors_expanded { "▾" } else { "▸" };
         items.push(ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled(arrow, Style::default().fg(Color::DarkGray)),
+            Span::styled(arrow, Style::default().fg(theme::divider())),
             Span::raw(" "),
             Span::styled("연구자별 보기", theme::header_style()),
             Span::raw(" "),
-            Span::styled("────────", Style::default().fg(Color::DarkGray)),
+            Span::styled("────────", Style::default().fg(theme::divider())),
         ])));
 
         if state.authors_expanded {
             if state.author_search_mode {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("    "),
-                    Span::styled("검색: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                    Span::styled(state.author_search_input.clone(), Style::default().fg(Color::White)),
-                    Span::styled("▎", Style::default().fg(Color::Cyan)),
+                    Span::styled("검색: ", Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)),
+                    Span::styled(state.author_search_input.clone(), Style::default().fg(theme::focus_fg())),
+                    Span::styled("▎", Style::default().fg(theme::accent_primary())),
                 ])));
             }
 
@@ -159,7 +159,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             if filtered.is_empty() && !state.author_search_input.is_empty() {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("      "),
-                    Span::styled("일치하는 연구자가 없습니다", Style::default().fg(Color::DarkGray)),
+                    Span::styled("일치하는 연구자가 없습니다", Style::default().fg(theme::dim())),
                 ])));
             }
 
@@ -168,14 +168,14 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
                 let (icon, icon_style, name_style) = if is_active {
                     (
                         "◆",
-                        Style::default().fg(Color::Yellow),
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                        Style::default().fg(theme::selected()),
+                        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
                     )
                 } else {
                     (
                         "·",
-                        Style::default().fg(Color::DarkGray),
-                        Style::default().fg(Color::Gray),
+                        Style::default().fg(theme::dim()),
+                        Style::default().fg(theme::fg()),
                     )
                 };
                 let mut spans = vec![
@@ -189,7 +189,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
                     if let Some(h) = m.h_index {
                         spans.push(Span::styled(
                             format!(" h={}", h),
-                            Style::default().fg(Color::Green),
+                            Style::default().fg(theme::key()),
                         ));
                     }
                 }
@@ -220,10 +220,10 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
 
         items.push(ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled(arrow, Style::default().fg(Color::DarkGray)),
+            Span::styled(arrow, Style::default().fg(theme::divider())),
             Span::raw(" "),
             Span::styled(format!("{:<3} ", notation), theme::code_style()),
-            Span::styled(*label, Style::default().fg(Color::Gray)),
+            Span::styled(*label, Style::default().fg(theme::fg())),
             count_span,
         ])));
 
@@ -242,12 +242,12 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
 
                     items.push(ListItem::new(Line::from(vec![
                         Span::raw("      "),
-                        Span::styled(child_arrow, Style::default().fg(Color::DarkGray)),
+                        Span::styled(child_arrow, Style::default().fg(theme::divider())),
                         Span::raw(" "),
                         Span::styled(format!("{:<5} ", child_notation), theme::code_style()),
-                        Span::styled(child_notation.as_str(), Style::default().fg(Color::Gray)),
+                        Span::styled(child_notation.as_str(), Style::default().fg(theme::fg())),
                         Span::raw(" "),
-                        Span::styled(child_label.as_str(), Style::default().fg(Color::Gray)),
+                        Span::styled(child_label.as_str(), Style::default().fg(theme::fg())),
                         child_count_span,
                     ])));
                 }
@@ -276,7 +276,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             items.push(ListItem::new(Line::from(vec![
                 Span::raw("  ▸ "),
                 Span::styled(format!("{:<8} ", notation), theme::code_style()),
-                Span::styled(*label, Style::default().fg(Color::Gray)),
+                Span::styled(*label, Style::default().fg(theme::fg())),
                 count_span,
             ])));
         }
@@ -347,6 +347,7 @@ const UDC_TOP_LEVEL: &[(&str, &str)] = &[
     ("1", "철학·심리학"),
     ("2", "종교"),
     ("3", "사회과학"),
+    ("4", "(Vacant)·빈 분류"),
     ("5", "자연과학"),
     ("6", "응용과학"),
     ("7", "예술·레크리에이션"),

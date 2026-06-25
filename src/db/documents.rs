@@ -32,6 +32,8 @@ pub struct Document {
     pub issn: Option<String>,
     pub url: Option<String>,
     pub accessed_date: Option<String>,
+    pub reading_status: Option<String>,
+    pub reading_progress: Option<i64>,
 }
 
 impl Default for Document {
@@ -63,6 +65,8 @@ impl Default for Document {
             issn: None,
             url: None,
             accessed_date: None,
+            reading_status: None,
+            reading_progress: None,
         }
     }
 }
@@ -104,7 +108,7 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
 
 pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date
+        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, reading_status, reading_progress
          FROM documents WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -136,6 +140,8 @@ pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
             issn: row.get(23)?,
             url: row.get(24)?,
             accessed_date: row.get(25)?,
+            reading_status: row.get(26)?,
+            reading_progress: row.get(27)?,
         }))
     } else {
         Ok(None)
@@ -171,12 +177,14 @@ macro_rules! doc_from_row {
             issn: $row.get(23)?,
             url: $row.get(24)?,
             accessed_date: $row.get(25)?,
+            reading_status: $row.get(26)?,
+            reading_progress: $row.get(27)?,
         }
     };
 }
 
 const DOCUMENT_COLS: &str =
-    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date";
+    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, reading_status, reading_progress";
 
 pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
@@ -269,6 +277,22 @@ pub fn update_rating(conn: &Connection, id: i64, rating: Option<i64>) -> Result<
     conn.execute(
         "UPDATE documents SET rating = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
         params![rating, id],
+    )?;
+    Ok(())
+}
+
+pub fn update_reading_status(conn: &Connection, id: i64, status: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE documents SET reading_status = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+        params![status, id],
+    )?;
+    Ok(())
+}
+
+pub fn update_reading_progress(conn: &Connection, id: i64, progress: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE documents SET reading_progress = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+        params![progress, id],
     )?;
     Ok(())
 }

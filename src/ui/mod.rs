@@ -5,6 +5,8 @@ pub mod left_panel;
 pub mod layout;
 pub mod right_panel;
 pub mod search_bar;
+pub mod settings_panel;
+pub mod stats_panel;
 pub mod status_bar;
 pub mod theme;
 
@@ -20,10 +22,20 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
 
     if state.show_help {
-        help::render(frame, frame.area());
+        help::render(frame, frame.area(), state.help_page);
     }
 
     if state.show_export_dialog {
         export_dialog::render(frame, frame.area(), state);
+    }
+
+    if state.show_stats {
+        if let Some(ref stats) = state.library_stats {
+            stats_panel::render(frame, frame.area(), state, stats);
+        }
+    }
+
+    if state.settings_panel_mode {
+        settings_panel::render(frame, frame.area(), state);
     }
 }

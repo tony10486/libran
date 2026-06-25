@@ -1,38 +1,39 @@
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
 use crate::app::AppState;
+use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
     let sort_active = state.is_similarity_sorted();
 
     let mut spans = vec![
         Span::raw(" "),
-        Span::styled(&state.status_text, Style::default().fg(Color::Gray).bg(Color::Black)),
+        Span::styled(&state.status_text, Style::default().fg(theme::fg()).bg(theme::bg())),
     ];
 
     if sort_active {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)));
+        spans.push(Span::styled("│", Style::default().fg(theme::divider()).bg(theme::bg())));
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
             "▣ 유사도 정렬",
-            Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD).bg(Color::Black),
+            Style::default().fg(theme::tag()).add_modifier(Modifier::BOLD).bg(theme::bg()),
         ));
     }
 
     if state.is_processing {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(Color::Black)));
+        spans.push(Span::styled("│", Style::default().fg(theme::divider()).bg(theme::bg())));
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
             "처리 중...",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(theme::selected())
                 .add_modifier(Modifier::BOLD)
-                .bg(Color::Black),
+                .bg(theme::bg()),
         ));
     }
 
@@ -63,15 +64,15 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
         }
         spans.push(Span::styled(
             *key,
-            Style::default().fg(Color::Cyan).bg(Color::Black),
+            Style::default().fg(theme::accent_primary()).bg(theme::bg()),
         ));
         spans.push(Span::raw(" "));
         spans.push(Span::styled(
             *label,
-            Style::default().fg(Color::DarkGray).bg(Color::Black),
+            Style::default().fg(theme::dim()).bg(theme::bg()),
         ));
     }
 
-    let footer = Paragraph::new(Line::from(spans)).style(Style::default().fg(Color::Gray).bg(Color::Black));
+    let footer = Paragraph::new(Line::from(spans)).style(Style::default().fg(theme::fg()).bg(theme::bg()));
     frame.render_widget(footer, area);
 }

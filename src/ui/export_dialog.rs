@@ -1,11 +1,12 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::AppState;
 use crate::citation::text::styles::{CitationLanguage, CitationStyle, DisplayMode};
+use crate::ui::theme;
 use crate::export::ExportFormat;
 use crate::export::export_dialog_state::DialogSection;
 
@@ -41,7 +42,7 @@ fn render_title(frame: &mut Frame, area: Rect) {
     let line = Line::from(vec![Span::styled(
         "  내보내기 / Export",
         Style::default()
-            .fg(Color::Cyan)
+            .fg(theme::accent_primary())
             .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
     )]);
     frame.render_widget(Paragraph::new(vec![Line::from(""), line]), area);
@@ -68,9 +69,9 @@ fn render_format_section(
         .collect::<Vec<_>>();
 
     let style = if focused {
-        Style::default().fg(Color::Cyan).bg(Color::Black)
+        Style::default().fg(theme::accent_primary()).bg(theme::bg())
     } else {
-        Style::default().fg(Color::Gray).bg(Color::Black)
+        Style::default().fg(theme::fg()).bg(theme::bg())
     };
 
     frame.render_widget(Paragraph::new(lines).style(style), area);
@@ -97,9 +98,9 @@ fn render_style_section(
         .collect::<Vec<_>>();
 
     let style = if focused {
-        Style::default().fg(Color::Cyan).bg(Color::Black)
+        Style::default().fg(theme::accent_primary()).bg(theme::bg())
     } else {
-        Style::default().fg(Color::Gray).bg(Color::Black)
+        Style::default().fg(theme::fg()).bg(theme::bg())
     };
 
     frame.render_widget(Paragraph::new(lines).style(style), area);
@@ -134,9 +135,9 @@ fn render_language_display_section(
         .collect::<Vec<_>>();
 
     let lang_style = if lang_focused {
-        Style::default().fg(Color::Cyan).bg(Color::Black)
+        Style::default().fg(theme::accent_primary()).bg(theme::bg())
     } else {
-        Style::default().fg(Color::Gray).bg(Color::Black)
+        Style::default().fg(theme::fg()).bg(theme::bg())
     };
 
     frame.render_widget(Paragraph::new(lang_lines).style(lang_style), cols[0]);
@@ -158,9 +159,9 @@ fn render_language_display_section(
             .collect::<Vec<_>>();
 
         let display_style = if display_focused {
-            Style::default().fg(Color::Cyan).bg(Color::Black)
+            Style::default().fg(theme::accent_primary()).bg(theme::bg())
         } else {
-            Style::default().fg(Color::Gray).bg(Color::Black)
+            Style::default().fg(theme::fg()).bg(theme::bg())
         };
 
         frame.render_widget(Paragraph::new(display_lines).style(display_style), cols[1]);
@@ -169,16 +170,16 @@ fn render_language_display_section(
             Line::from(""),
             Line::from(Span::styled(
                 "  ▸ 표시 (Display)",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme::dim()),
             )),
             Line::from(""),
             Line::from(Span::styled(
                 "  (비활성 — 노트 기반 스타일만)",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme::dim()),
             )),
         ];
         frame.render_widget(
-            Paragraph::new(lines).style(Style::default().bg(Color::Black)),
+            Paragraph::new(lines).style(Style::default().bg(theme::bg())),
             cols[1],
         );
     }
@@ -192,18 +193,18 @@ fn render_preview(
     let lines = vec![
         Line::from(Span::styled(
             "  ── 미리보기 (Preview) ──",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED),
+            Style::default().fg(theme::accent_primary()).add_modifier(Modifier::UNDERLINED),
         )),
         Line::from(""),
         Line::from(Span::styled(
             dialog.preview_text.clone(),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme::selected()),
         )),
     ];
 
     frame.render_widget(
         Paragraph::new(lines)
-            .style(Style::default().bg(Color::Black))
+            .style(Style::default().bg(theme::bg()))
             .wrap(Wrap { trim: false }),
         area,
     );
@@ -211,14 +212,14 @@ fn render_preview(
 
 fn render_footer(frame: &mut Frame, area: Rect) {
     let line = Line::from(vec![
-        Span::styled("  Enter", Style::default().fg(Color::Cyan)),
-        Span::styled(" 복사  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("e", Style::default().fg(Color::Cyan)),
-        Span::styled(" 내보내기  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("Tab", Style::default().fg(Color::Cyan)),
-        Span::styled(" 다음  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("Esc", Style::default().fg(Color::Cyan)),
-        Span::styled(" 취소", Style::default().fg(Color::DarkGray)),
+        Span::styled("  Enter", Style::default().fg(theme::accent_primary())),
+        Span::styled(" 복사  ", Style::default().fg(theme::dim())),
+        Span::styled("e", Style::default().fg(theme::accent_primary())),
+        Span::styled(" 내보내기  ", Style::default().fg(theme::dim())),
+        Span::styled("Tab", Style::default().fg(theme::accent_primary())),
+        Span::styled(" 다음  ", Style::default().fg(theme::dim())),
+        Span::styled("Esc", Style::default().fg(theme::accent_primary())),
+        Span::styled(" 취소", Style::default().fg(theme::dim())),
     ]);
     frame.render_widget(Paragraph::new(vec![Line::from(""), line]), area);
 }
@@ -226,10 +227,10 @@ fn render_footer(frame: &mut Frame, area: Rect) {
 fn header_line(name: &str, focused: bool) -> Line<'static> {
     let style = if focused {
         Style::default()
-            .fg(Color::Cyan)
+            .fg(theme::accent_primary())
             .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::UNDERLINED)
+        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::UNDERLINED)
     };
     Line::from(Span::styled(format!("  ▸ {}", name), style))
 }
@@ -269,13 +270,13 @@ fn build_section_items<T: Copy + PartialEq>(
             let marker = if implemented { "" } else { " (미구현)" };
 
             let style = if !implemented {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme::dim())
             } else if focused && is_current {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)
             } else if is_current {
-                Style::default().fg(Color::Yellow)
+                Style::default().fg(theme::selected())
             } else {
-                Style::default().fg(Color::Gray)
+                Style::default().fg(theme::fg())
             };
 
             Line::from(Span::styled(format!("{}{}{}", prefix, name, marker), style))

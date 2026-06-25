@@ -1,11 +1,12 @@
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Table, Row as TableRow, Cell};
 use ratatui::Frame;
 
 use crate::app::AppState;
 use crate::citation::graph::RenderMode;
+use crate::ui::theme;
 use crate::citation::MatchStatus;
 use petgraph::visit::EdgeRef;
 
@@ -24,14 +25,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
 fn render_empty(frame: &mut Frame, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
+        .border_style(Style::default().fg(theme::dim()))
         .title(" 인용 그래프 ")
-        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let msg = Paragraph::new("g 키로 그래프 생성")
-        .style(Style::default().fg(Color::DarkGray).bg(Color::Black));
+        .style(Style::default().fg(theme::dim()).bg(theme::bg()));
     frame.render_widget(msg, inner);
 }
 
@@ -42,12 +43,12 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(theme::accent_primary()))
         .title(Span::styled(
             format!(" 인용 그래프 ({} 노드, {} 에지){} ", node_count, edge_count, cache_tag),
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
         ))
-        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -60,7 +61,7 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
     if layout.node_positions.is_empty() {
         lines.push(Line::from(Span::styled(
             "  그래프에 노드가 없습니다",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::dim()),
         )));
     } else {
         let max_row = layout.node_positions.iter().map(|p| p.row).max().unwrap_or(0) as usize;
@@ -78,11 +79,11 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             let is_high_cite = node.citation_count >= 3;
 
             let label_style = if is_focused {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)
             } else if is_high_cite {
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                Style::default().fg(theme::title_fg()).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Gray)
+                Style::default().fg(theme::fg())
             };
 
             let label_text = if node.citation_count >= 3 {
@@ -104,7 +105,7 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             if node.citation_count > 0 && !is_high_cite {
                 spans.push(Span::styled(
                     format!("({})", node.citation_count),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme::dim()),
                 ));
             }
         }
@@ -127,28 +128,28 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
         if let Some((doc_id, label, cite_count)) = focused_info {
             let label_owned = label.clone();
             lines.push(Line::from(vec![
-                Span::styled("  포커스: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(label_owned, Style::default().fg(Color::Yellow)),
-                Span::styled(format!(" (id:{}, 인용:{}건)", doc_id, cite_count), Style::default().fg(Color::DarkGray)),
+                Span::styled("  포커스: ", Style::default().fg(theme::dim())),
+                Span::styled(label_owned, Style::default().fg(theme::selected())),
+                Span::styled(format!(" (id:{}, 인용:{}건)", doc_id, cite_count), Style::default().fg(theme::dim())),
             ]));
         }
     }
 
     let help = Line::from(vec![
-        Span::styled(" [g]", Style::default().fg(Color::Cyan)),
-        Span::styled("생성 ", Style::default().fg(Color::DarkGray)),
-        Span::styled("[G]", Style::default().fg(Color::Cyan)),
-        Span::styled("새로고침 ", Style::default().fg(Color::DarkGray)),
-        Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
-        Span::styled("표모드 ", Style::default().fg(Color::DarkGray)),
-        Span::styled("[h/j/k/l]", Style::default().fg(Color::Cyan)),
-        Span::styled("이동 ", Style::default().fg(Color::DarkGray)),
-        Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-        Span::styled("돌아가기", Style::default().fg(Color::DarkGray)),
+        Span::styled(" [g]", Style::default().fg(theme::accent_primary())),
+        Span::styled("생성 ", Style::default().fg(theme::dim())),
+        Span::styled("[G]", Style::default().fg(theme::accent_primary())),
+        Span::styled("새로고침 ", Style::default().fg(theme::dim())),
+        Span::styled("[Tab]", Style::default().fg(theme::accent_primary())),
+        Span::styled("표모드 ", Style::default().fg(theme::dim())),
+        Span::styled("[h/j/k/l]", Style::default().fg(theme::accent_primary())),
+        Span::styled("이동 ", Style::default().fg(theme::dim())),
+        Span::styled("[Esc]", Style::default().fg(theme::accent_primary())),
+        Span::styled("돌아가기", Style::default().fg(theme::dim())),
     ]);
     lines.push(help);
 
-    let para = Paragraph::new(lines).style(Style::default().fg(Color::Gray).bg(Color::Black));
+    let para = Paragraph::new(lines).style(Style::default().fg(theme::fg()).bg(theme::bg()));
     frame.render_widget(para, inner);
 }
 
@@ -159,21 +160,21 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(theme::accent_primary()))
         .title(Span::styled(
             format!(" 인용 그래프 표 ({}, {}){} ", node_count, edge_count, cache_tag),
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
         ))
-        .style(Style::default().fg(Color::Gray).bg(Color::Black));
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     let header = TableRow::new(vec![
-        Cell::from("인용 문헌").style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Cell::from("피인용 문헌").style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Cell::from("매치").style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Cell::from("신뢰도").style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Cell::from("인용 문헌").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
+        Cell::from("피인용 문헌").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
+        Cell::from("매치").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
+        Cell::from("신뢰도").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
     ]);
 
     let mut rows: Vec<TableRow> = Vec::new();
@@ -193,9 +194,9 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
             || gs.focused_node == Some(edge_ref.target().index());
 
         let row_style = if is_focused {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Gray)
+            Style::default().fg(theme::fg())
         };
 
         let status_label = match_status_label(&edge_ref.weight().match_status);
@@ -215,8 +216,8 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
 
     let table = Table::new(rows, [Constraint::Length(20), Constraint::Length(20), Constraint::Length(10), Constraint::Length(8)])
         .header(header)
-        .style(Style::default().fg(Color::Gray).bg(Color::Black))
-        .block(Block::default().style(Style::default().fg(Color::Gray).bg(Color::Black)));
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()))
+        .block(Block::default().style(Style::default().fg(theme::fg()).bg(theme::bg())));
 
     frame.render_widget(table, inner);
 }

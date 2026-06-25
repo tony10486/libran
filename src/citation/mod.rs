@@ -1,4 +1,5 @@
 pub mod bibtex;
+pub mod bibtex_parser;
 pub mod cache;
 pub mod csl_json;
 pub mod entry;

@@ -1,4 +1,5 @@
 pub mod authors;
+pub mod bookmarks;
 pub mod heuristic;
 pub mod identifiers;
 pub mod journal;

@@ -30,6 +30,8 @@ fn standard_test_document() -> Document {
         accessed_date: Some("2024-01-15".to_string()),
         file_path: None,
         file_hash: None,
+        reading_status: None,
+        reading_progress: None,
     }
 }
 

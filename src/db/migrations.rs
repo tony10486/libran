@@ -213,6 +213,40 @@ pub fn run(conn: &Connection) -> Result<()> {
         set_version(conn, 9)?;
     }
 
+    if version < 10 {
+        // Migration 10: reading status, saved searches, author aliases
+        let _ = conn.execute(
+            "ALTER TABLE documents ADD COLUMN reading_status TEXT NOT NULL DEFAULT 'unread'",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE documents ADD COLUMN reading_progress INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS saved_searches (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT NOT NULL UNIQUE,
+                fts_query       TEXT,
+                filters_json    TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_searches_name ON saved_searches(name);
+
+            CREATE TABLE IF NOT EXISTS author_aliases (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                alias_name              TEXT NOT NULL UNIQUE,
+                canonical_author_name   TEXT,
+                openalex_id             TEXT,
+                created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_author_aliases_alias ON author_aliases(alias_name);
+            CREATE INDEX IF NOT EXISTS idx_author_aliases_canonical ON author_aliases(canonical_author_name);",
+        )?;
+        set_version(conn, 10)?;
+    }
+
     Ok(())
 }
 

@@ -55,6 +55,8 @@ async fn main() -> Result<()> {
 
     let (action_tx, mut action_rx) = mpsc::channel::<AppAction>(256);
 
+    ui::theme::init_theme(ui::theme::Theme::from_config(&config.theme));
+
     let mut state = AppState::new(db_conn, config, action_tx.clone());
     state.init_classification();
     state.reload_projects();

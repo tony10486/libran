@@ -12,6 +12,7 @@ use crate::db::series::Series;
 use crate::db::DbConn;
 use crate::similarity::scoring::{DocumentScore, UdcTree};
 use crate::similarity::SimilarityConfig;
+use crate::ui::settings_panel::SettingsPanelState;
 
 use super::action::AppAction;
 use super::graph_state::GraphState;
@@ -39,6 +40,7 @@ pub struct AppState {
     pub list_cursor: usize,
     pub selected_doc_ids: HashSet<i64>,
     pub show_help: bool,
+    pub help_page: usize,
 
     pub search_mode: bool,
     pub search_input: String,
@@ -90,6 +92,8 @@ pub struct AppState {
     pub bibtex_import_input: String,
 
     pub terminal_size: (u16, u16),
+    pub left_panel_width: u16,
+    pub glyph_set: String,
 
     // ── Note editing ──
     pub note_mode: bool,
@@ -138,15 +142,47 @@ pub struct AppState {
 
     pub show_export_dialog: bool,
     pub export_dialog_state: crate::export::export_dialog_state::ExportDialogState,
+
+    // ── Saved searches (G) ──
+    pub saved_searches: Vec<crate::db::saved_searches::SavedSearch>,
+    pub save_search_mode: bool,
+    pub save_search_input: String,
+
+    // ── Statistics dashboard (I) ──
+    pub show_stats: bool,
+    pub library_stats: Option<crate::db::stats::LibraryStats>,
+
+    // ── PDF bookmarks (J) ──
+    pub current_bookmarks: Vec<(String, i64)>,
+
+    // ── Bulk DOI import (C) ──
+    pub bulk_import_mode: bool,
+    pub bulk_import_input: String,
+
+    // ── File import (F) ──
+    pub file_import_mode: bool,
+    pub file_import_input: String,
+
+    // ── Author merge (E) ──
+    pub author_merge_mode: bool,
+    pub author_merge_phase: u8,
+    pub author_merge_source: String,
+    pub author_merge_input: String,
+
+    // ── Settings panel (,) ──
+    pub settings_panel_mode: bool,
+    pub settings_panel: Option<SettingsPanelState>,
 }
 
 impl AppState {
     pub fn new(db: DbConn, config: AppConfig, action_tx: mpsc::Sender<AppAction>) -> Self {
         let api_mode = config.api_mode.clone();
+        let glyph_set = config.glyph_set.clone();
         let similarity_config = SimilarityConfig::load();
         let udc_tree = load_udc_tree_from_db(&db);
         let series_grouping_enabled = load_series_grouping_enabled(&db);
         let skip_delete_confirm = load_skip_delete_confirm(&db);
+        let left_panel_width = load_left_panel_width(&db);
         let metrics_backend = load_metrics_backend(&db);
         let openalex_api_key = load_openalex_api_key(&db);
         let auto_fetch_metrics = load_auto_fetch_metrics(&db);
@@ -165,6 +201,7 @@ impl AppState {
             list_cursor: 0,
             selected_doc_ids: HashSet::new(),
             show_help: false,
+        help_page: 0,
             search_mode: false,
             search_input: String::new(),
             add_file_mode: false,
@@ -202,6 +239,8 @@ impl AppState {
             bibtex_import_mode: false,
             bibtex_import_input: String::new(),
             terminal_size: (80, 24),
+            left_panel_width,
+            glyph_set,
             note_mode: false,
             note_input: String::new(),
             current_note: None,
@@ -235,6 +274,22 @@ impl AppState {
             custom_field_editing_key: false,
             show_export_dialog: false,
             export_dialog_state,
+            saved_searches: Vec::new(),
+            save_search_mode: false,
+            save_search_input: String::new(),
+            show_stats: false,
+            library_stats: None,
+            current_bookmarks: Vec::new(),
+            bulk_import_mode: false,
+            bulk_import_input: String::new(),
+            file_import_mode: false,
+            file_import_input: String::new(),
+    author_merge_mode: false,
+    author_merge_phase: 0,
+    author_merge_source: String::new(),
+    author_merge_input: String::new(),
+            settings_panel_mode: false,
+            settings_panel: None,
         }
     }
 
@@ -306,6 +361,14 @@ impl AppState {
         self.dirty = true;
     }
 
+    pub fn reload_saved_searches(&mut self) {
+        if let Ok(conn) = self.db.lock()
+            && let Ok(searches) = crate::db::saved_searches::list(&conn) {
+                self.saved_searches = searches;
+            }
+        self.dirty = true;
+    }
+
     pub fn load_detail(&mut self) {
         if let Some(doc) = self.documents.get(self.list_cursor) {
             self.detail_doc = Some(doc.clone());
@@ -336,13 +399,37 @@ impl AppState {
     }
 
     pub fn cycle_api_mode(&mut self) {
-        self.api_mode = match self.api_mode {
-            ApiMode::FullyOffline => ApiMode::IdentifierOnly,
-            ApiMode::IdentifierOnly => ApiMode::AutoFallback,
-            ApiMode::AutoFallback => ApiMode::FullyOffline,
-            ApiMode::ManualSearch => ApiMode::AutoFallback,
+        self.api_mode = if self.api_mode.allows_api_calls() {
+            ApiMode::FullyOffline
+        } else {
+            ApiMode::IdentifierOnly
         };
         self.config.api_mode = self.api_mode.clone();
+        self.dirty = true;
+    }
+
+    pub fn resize_left_panel(&mut self, delta: i16) {
+        let max = ((self.terminal_size.0 as f32) * 0.4) as u16;
+        let max = max.max(20);
+        let new = (self.left_panel_width as i16 + delta).clamp(20, max as i16) as u16;
+        self.left_panel_width = new;
+        if let Ok(conn) = self.db.lock() {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('left_panel_width', ?1, datetime('now'))",
+                rusqlite::params![new.to_string()],
+            );
+        }
+        self.dirty = true;
+    }
+
+    pub fn reset_left_panel(&mut self) {
+        self.left_panel_width = 28;
+        if let Ok(conn) = self.db.lock() {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('left_panel_width', ?1, datetime('now'))",
+                rusqlite::params!["28".to_string()],
+            );
+        }
         self.dirty = true;
     }
 
@@ -416,6 +503,24 @@ fn load_skip_delete_confirm(db: &DbConn) -> bool {
         return v.as_deref() == Some("true");
     }
     false
+}
+
+fn load_left_panel_width(db: &DbConn) -> u16 {
+    if let Ok(conn) = db.lock() {
+        let v: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = 'left_panel_width'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(s) = v {
+            if let Ok(n) = s.parse::<u16>() {
+                return n.clamp(20, 60);
+            }
+        }
+    }
+    28
 }
 
 fn load_metrics_backend(db: &DbConn) -> MetricsBackend {

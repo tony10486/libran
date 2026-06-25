@@ -83,6 +83,47 @@ pub enum AppAction {
 
     AddCustomField { doc_id: i64, key: String, value: String },
     DeleteCustomField { doc_id: i64, field_id: i64 },
+
+    OpenExternalViewer { doc_id: i64 },
+    OpenExternalViewerResult { success: bool, message: String },
+
+    // ── Reading status (H) ──
+    ToggleReadingStatus { doc_id: i64 },
+
+    // ── Saved searches (G) ──
+    SaveCurrentSearch,
+    SaveCurrentSearchNamed { name: String },
+    SelectSavedSearch { search_id: i64 },
+    DeleteSavedSearch { search_id: i64 },
+
+    // ── Statistics dashboard (I) ──
+    ToggleStatsDashboard,
+
+    // ── PDF bookmarks (J) ──
+    ExtractBookmarks { doc_id: i64 },
+    BookmarksExtracted { doc_id: i64, bookmarks: Vec<(String, i64)> },
+    BookmarkExtractionFailed { doc_id: i64, reason: String },
+
+    // ── Bulk DOI import (C) ──
+    StartBulkImport,
+    BulkImportSubmitted(String),
+    BulkImportResult { success_count: usize, fail_count: usize, message: String },
+
+    // ── File import (F) ──
+    StartFileImport,
+    FileImportSubmitted(String),
+    FileImportResult { count: usize, message: String },
+
+    // ── Forward citations (B) ──
+    FetchForwardCitations { doc_id: i64 },
+    ForwardCitationsFetched { doc_id: i64, count: i64 },
+    ForwardCitationsFailed { doc_id: i64, reason: String },
+
+    // ── Author merge (E) ──
+    StartAuthorMerge,
+    AuthorMergeSourceEntered(String),
+    AuthorMergeCanonicalEntered { source: String, canonical: String },
+    AuthorMergeResult { success: bool, message: String },
 }
 
 #[derive(Clone, Debug, PartialEq)]

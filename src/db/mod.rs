@@ -1,3 +1,4 @@
+pub mod author_aliases;
 pub mod custom_fields;
 pub mod documents;
 pub mod facets;
@@ -5,9 +6,11 @@ pub mod fts_query;
 pub mod migrations;
 pub mod notes;
 pub mod projects;
+pub mod saved_searches;
 pub mod schema;
 pub mod search;
 pub mod series;
+pub mod stats;
 
 #[cfg(test)]
 mod test_support;
