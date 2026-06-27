@@ -1,4 +1,5 @@
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Span;
 use std::env;
 use std::sync::RwLock;
 
@@ -8,7 +9,7 @@ use crate::config::{ColorConfig, ThemeConfig};
 
 // ── Theme struct ──────────────────────────────────────────────
 
-/// Central theme with 18 semantic color slots.
+/// Central theme with 21 semantic color slots.
 /// All colors are stored as `Color::Rgb` on truecolor terminals,
 /// or `Color::Indexed` (quantized) on 256-color terminals.
 /// Named colors (`Color::Cyan`, `Color::Black`, etc.) are never used
@@ -16,10 +17,12 @@ use crate::config::{ColorConfig, ThemeConfig};
 #[derive(Clone, Copy)]
 pub struct Theme {
     pub bg: Color,
+    /// Slightly lighter than bg — used for left panel and overlays.
+    pub surface: Color,
     pub fg: Color,
-    /// Slate RGB(148,163,184) — replaces Cyan. Used for headers, labels, structure.
+    /// Blue RGB(107,155,210) — used for headers, labels, UDC codes, structure.
     pub accent_primary: Color,
-    /// White — used for brand/active emphasis with BOLD.
+    /// Lavender RGB(184,169,212) — used for brand/active emphasis and tags.
     pub accent_secondary: Color,
     pub dim: Color,
     pub divider: Color,
@@ -52,25 +55,26 @@ impl Theme {
             }
         };
         Theme {
-            bg: rgb(0, 0, 0),
-            fg: rgb(128, 128, 128),
-            accent_primary: rgb(148, 163, 184),
-            accent_secondary: rgb(255, 255, 255),
-            dim: rgb(85, 85, 85),
-            divider: rgb(85, 85, 85),
-            selected: rgb(205, 205, 0),
-            focus_bg: rgb(50, 50, 50),
-            focus_fg: rgb(255, 255, 255),
-            title: rgb(255, 255, 255),
+            bg: rgb(22, 22, 22),
+            surface: rgb(28, 28, 28),
+            fg: rgb(200, 200, 200),
+            accent_primary: rgb(107, 155, 210),
+            accent_secondary: rgb(184, 169, 212),
+            dim: rgb(128, 128, 128),
+            divider: rgb(50, 50, 50),
+            selected: rgb(126, 184, 138),
+            focus_bg: rgb(38, 38, 38),
+            focus_fg: rgb(200, 200, 200),
+            title: rgb(200, 200, 200),
             meta: rgb(128, 128, 128),
-            key: rgb(0, 205, 0),
-            tag: rgb(205, 0, 205),
-            udc: rgb(0, 0, 205),
-            error: rgb(205, 0, 0),
-            warning: rgb(205, 133, 0),
-            code: rgb(205, 205, 0),
-            success: rgb(0, 205, 0),
-            search_bg: rgb(48, 48, 48),
+            key: rgb(126, 184, 138),
+            tag: rgb(184, 169, 212),
+            udc: rgb(107, 155, 210),
+            error: rgb(200, 140, 150),
+            warning: rgb(212, 166, 87),
+            code: rgb(107, 155, 210),
+            success: rgb(126, 184, 138),
+            search_bg: rgb(28, 28, 28),
             force_bg: true,
         }
     }
@@ -78,11 +82,7 @@ impl Theme {
     /// Returns the configured bg color if `force_bg` is true,
     /// otherwise `Color::Reset` (terminal default).
     pub fn bg_color(&self) -> Color {
-        if self.force_bg {
-            self.bg
-        } else {
-            Color::Reset
-        }
+        if self.force_bg { self.bg } else { Color::Reset }
     }
 
     /// Build a Theme from ThemeConfig, filling unset slots with defaults.
@@ -94,7 +94,11 @@ impl Theme {
             match opt {
                 Some(cc) => match cc.to_rgb() {
                     Some((r, g, b)) => {
-                        if tc { Color::Rgb(r, g, b) } else { quantize_to_256(r, g, b) }
+                        if tc {
+                            Color::Rgb(r, g, b)
+                        } else {
+                            quantize_to_256(r, g, b)
+                        }
                     }
                     None => default,
                 },
@@ -103,6 +107,7 @@ impl Theme {
         };
         Theme {
             bg: resolve(&cfg.bg.color, default.bg),
+            surface: resolve(&cfg.surface, default.surface),
             force_bg: cfg.bg.force,
             fg: resolve(&cfg.fg, default.fg),
             accent_primary: resolve(&cfg.accent_primary, default.accent_primary),
@@ -254,6 +259,9 @@ pub fn brand_style() -> Style {
 pub fn bg() -> Color {
     theme().bg_color()
 }
+pub fn surface() -> Color {
+    theme().surface
+}
 pub fn fg() -> Color {
     theme().fg
 }
@@ -309,6 +317,24 @@ pub fn search_bg() -> Color {
     theme().search_bg
 }
 
+pub fn surface_style() -> Style {
+    let t = theme();
+    Style::default().fg(t.fg).bg(t.surface)
+}
+
+/// Build a single-line progress bar using `━` (filled) and `─` (unfilled).
+/// The filled portion uses `color`, the unfilled portion uses the dim color.
+/// `pct` is clamped to 0..=100. Returns a vector of Spans ready to embed in a Line.
+pub fn progress_bar_spans(pct: u8, len: usize, color: Color) -> Vec<Span<'static>> {
+    let pct = pct.min(100);
+    let filled = (pct as usize * len / 100).min(len);
+    let t = theme();
+    vec![
+        Span::styled("━".repeat(filled), Style::default().fg(color)),
+        Span::styled("─".repeat(len - filled), Style::default().fg(t.dim)),
+    ]
+}
+
 // ── Truecolor detection + 256-color fallback ──────────────────
 
 fn detect_truecolor() -> bool {
@@ -356,11 +382,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn theme_default_has_slate_accent() {
+    fn theme_default_has_blue_accent() {
         let t = Theme::default();
-        // On truecolor terminals, accent_primary should be Slate RGB
         if detect_truecolor() {
-            assert_eq!(t.accent_primary, Color::Rgb(148, 163, 184));
+            assert_eq!(t.accent_primary, Color::Rgb(107, 155, 210));
         }
     }
 

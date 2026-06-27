@@ -75,9 +75,7 @@ impl CitationStyle {
     pub fn is_notes_based(&self) -> bool {
         matches!(
             self,
-            Self::Chicago18NotesBib
-                | Self::Chicago18ShortenedNotesBib
-                | Self::Mhra4thNotes
+            Self::Chicago18NotesBib | Self::Chicago18ShortenedNotesBib | Self::Mhra4thNotes
         )
     }
 

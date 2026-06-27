@@ -12,30 +12,25 @@ pub struct ReferenceEntry {
     pub journal: Option<String>,
 }
 
-static DOI_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"10\.\d{4,9}/[^\s,;]+").expect("DOI regex compile")
-});
+static DOI_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"10\.\d{4,9}/[^\s,;]+").expect("DOI regex compile"));
 
-static ARXIV_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?:arXiv:)?(\d{4}\.\d{4,5}(?:v\d+)?)").expect("arXiv regex compile")
-});
+static ARXIV_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?:arXiv:)?(\d{4}\.\d{4,5}(?:v\d+)?)").expect("arXiv regex compile"));
 
-static YEAR_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b(19|20)\d{2}\b").expect("year regex compile")
-});
+static YEAR_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b(19|20)\d{2}\b").expect("year regex compile"));
 
 static REF_SECTION_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?is)^(?:references|bibliography|참고문헌|literaturverzeichnis)\s*$")
         .expect("ref section regex compile")
 });
 
-static NUM_BRACKET_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\s*\[(\d+)\]").expect("numbered bracket regex compile")
-});
+static NUM_BRACKET_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\s*\[(\d+)\]").expect("numbered bracket regex compile"));
 
-static NUM_DOT_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\s*(\d+)\.\s+").expect("numbered dot regex compile")
-});
+static NUM_DOT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\s*(\d+)\.\s+").expect("numbered dot regex compile"));
 
 static TITLE_QUOTED_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"[\""\u{201c}\u{201d}]([^\""\u{201c}\u{201d}]+)[\""\u{201c}\u{201d}]"#)
@@ -44,7 +39,9 @@ static TITLE_QUOTED_RE: Lazy<Regex> = Lazy::new(|| {
 
 pub fn detect_reference_section(text: &str) -> Option<&str> {
     let lines: Vec<&str> = text.lines().collect();
-    let start = lines.iter().position(|line| REF_SECTION_RE.is_match(line))?;
+    let start = lines
+        .iter()
+        .position(|line| REF_SECTION_RE.is_match(line))?;
     let body_start = start + 1;
     if body_start >= lines.len() {
         return None;
@@ -73,8 +70,7 @@ pub fn split_reference_entries(section_text: &str) -> Vec<String> {
             continue;
         }
 
-        let is_new_entry = NUM_BRACKET_RE.is_match(trimmed)
-            || NUM_DOT_RE.is_match(trimmed);
+        let is_new_entry = NUM_BRACKET_RE.is_match(trimmed) || NUM_DOT_RE.is_match(trimmed);
 
         if is_new_entry && !current.is_empty() {
             entries.push(current.trim().to_string());
@@ -95,13 +91,13 @@ pub fn split_reference_entries(section_text: &str) -> Vec<String> {
 }
 
 pub fn parse_single_reference(text: &str) -> ReferenceEntry {
-    let doi = DOI_RE
-        .find(text)
-        .map(|m| m.as_str().trim_end_matches(|c: char| c == '.' || c == ',').to_string());
+    let doi = DOI_RE.find(text).map(|m| {
+        m.as_str()
+            .trim_end_matches(|c: char| c == '.' || c == ',')
+            .to_string()
+    });
 
-    let arxiv_id = ARXIV_RE
-        .captures(text)
-        .map(|caps| caps[1].to_string());
+    let arxiv_id = ARXIV_RE.captures(text).map(|caps| caps[1].to_string());
 
     let title = TITLE_QUOTED_RE
         .captures(text)

@@ -61,6 +61,7 @@ impl Default for BgConfig {
 #[serde(default)]
 pub struct ThemeConfig {
     pub bg: BgConfig,
+    pub surface: Option<ColorConfig>,
     pub fg: Option<ColorConfig>,
     pub accent_primary: Option<ColorConfig>,
     pub accent_secondary: Option<ColorConfig>,
@@ -81,6 +82,15 @@ pub struct ThemeConfig {
     pub search_bg: Option<ColorConfig>,
 }
 
+/// 커스텀 내보내기 형식 설정.
+/// 템플릿 플레이스홀더: {title}, {authors}, {year}, {doi}, {journal}, {abstract}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ExportFormatConfig {
+    pub name: String,
+    pub file_extension: String,
+    pub template: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -97,6 +107,7 @@ pub struct AppConfig {
     pub viewer_command: Option<Vec<String>>,
     pub glyph_set: String,
     pub theme: ThemeConfig,
+    pub custom_export_formats: Vec<ExportFormatConfig>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -128,6 +139,7 @@ impl Default for AppConfig {
             viewer_command: None,
             glyph_set: "circles".to_string(),
             theme: ThemeConfig::default(),
+            custom_export_formats: Vec::new(),
         }
     }
 }
@@ -176,9 +188,14 @@ impl AppConfig {
         s.push_str("#   AutoFallback:    식별자가 없으면 제목으로 Crossref 검색까지 시도합니다.\n");
         s.push_str("#   ManualSearch:    수동 검색 모드.\n");
         s.push_str("#   FullyOffline:    모든 온라인 조회를 끕니다.\n");
-        s.push_str(&format!("api_mode = \"{}\"\n\n", api_mode_serde_name(&self.api_mode)));
+        s.push_str(&format!(
+            "api_mode = \"{}\"\n\n",
+            api_mode_serde_name(&self.api_mode)
+        ));
 
-        s.push_str("# CrossRef polite 요청에 사용할 이메일 (선택). 비워두면 익명 요청을 보냅니다.\n");
+        s.push_str(
+            "# CrossRef polite 요청에 사용할 이메일 (선택). 비워두면 익명 요청을 보냅니다.\n",
+        );
         match &self.user_email {
             Some(e) => s.push_str(&format!("user_email = \"{}\"\n\n", e)),
             None => s.push_str("user_email = \"\"\n\n"),
@@ -188,13 +205,24 @@ impl AppConfig {
         s.push_str("#   copy_to_library:  PDF를 library_path로 복사합니다.\n");
         s.push_str("#   reference_only:   원본 위치에 링크만 걸어 둡니다.\n");
         s.push_str("#   copy_and_trash:   복사 후 원본을 휴지통으로 보냅니다.\n");
-        s.push_str(&format!("file_storage_policy = \"{}\"\n\n", storage_policy_serde_name(&self.file_storage_policy)));
+        s.push_str(&format!(
+            "file_storage_policy = \"{}\"\n\n",
+            storage_policy_serde_name(&self.file_storage_policy)
+        ));
 
         s.push_str("# PDF 라이브러리 경로 (절대 경로).\n");
-        s.push_str(&format!("library_path = \"{}\"\n\n", self.library_path.display()));
+        s.push_str(&format!(
+            "library_path = \"{}\"\n\n",
+            self.library_path.display()
+        ));
 
-        s.push_str("# 인용 키 생성 모드: author_year | author_year_title | author_year_hash | custom\n");
-        s.push_str(&format!("citation_key_mode = \"{}\"\n\n", citation_key_mode_serde_name(&self.citation_key_mode)));
+        s.push_str(
+            "# 인용 키 생성 모드: author_year | author_year_title | author_year_hash | custom\n",
+        );
+        s.push_str(&format!(
+            "citation_key_mode = \"{}\"\n\n",
+            citation_key_mode_serde_name(&self.citation_key_mode)
+        ));
 
         s.push_str("# 인용 키 커스텀 템플릿 (citation_key_mode = \"custom\"일 때만 사용).\n");
         match &self.citation_key_template {
@@ -206,8 +234,11 @@ impl AppConfig {
         s.push_str(&format!("primary_scheme = \"{}\"\n\n", self.primary_scheme));
 
         s.push_str("# 활성화된 분류 체계 목록.\n");
-        let schemes: Vec<String> = self.enabled_schemes.iter()
-            .map(|s| format!("\"{}\"", s)).collect();
+        let schemes: Vec<String> = self
+            .enabled_schemes
+            .iter()
+            .map(|s| format!("\"{}\"", s))
+            .collect();
         s.push_str(&format!("enabled_schemes = [{}]\n\n", schemes.join(", ")));
 
         s.push_str("# 분류 라벨 언어: en | ko 등.\n");
@@ -222,8 +253,7 @@ impl AppConfig {
         s.push_str("# 비워두면 시스템 기본 연결 프로그램 사용 (macOS: open, Windows: 등록된 PDF 앱, Linux: xdg-open)\n");
         match &self.viewer_command {
             Some(parts) if !parts.is_empty() => {
-                let items: Vec<String> = parts.iter()
-                    .map(|p| format!("\"{}\"", p)).collect();
+                let items: Vec<String> = parts.iter().map(|p| format!("\"{}\"", p)).collect();
                 s.push_str(&format!("viewer_command = [{}]\n", items.join(", ")));
             }
             _ => s.push_str("viewer_command = []\n"),
@@ -234,6 +264,22 @@ impl AppConfig {
         s.push_str("#   ballot:  ☐ ⊡ ☒  (EAW-N, CJK 터미널에서 안전)\n");
         s.push_str(&format!("glyph_set = \"{}\"\n", self.glyph_set));
 
+        s.push_str("\n# 커스텀 내보내기 형식 (선택).\n");
+        s.push_str("# 템플릿 플레이스홀더: {title} {authors} {year} {doi} {journal} {abstract}\n");
+        if self.custom_export_formats.is_empty() {
+            s.push_str("# [[custom_export_formats]]\n");
+            s.push_str("# name = \"my_format\"\n");
+            s.push_str("# file_extension = \"txt\"\n");
+            s.push_str("# template = \"{title} ({year}). {doi}\"\n");
+        } else {
+            for fmt in &self.custom_export_formats {
+                s.push_str("[[custom_export_formats]]\n");
+                s.push_str(&format!("name = \"{}\"\n", fmt.name));
+                s.push_str(&format!("file_extension = \"{}\"\n", fmt.file_extension));
+                s.push_str(&format!("template = \"{}\"\n", fmt.template));
+            }
+        }
+
         s.push_str("\n# UI 테마 (선택). 각 색상을 #RRGGBB 형식으로 지정.\n");
         s.push_str("# 지정하지 않은 색상은 기본값 사용. bg.force=true 면 터미널 테마 무시.\n\n");
 
@@ -241,7 +287,9 @@ impl AppConfig {
         s.push_str(&format!("force = {}\n", self.theme.bg.force));
         match &self.theme.bg.color {
             Some(cc) => match cc.to_rgb() {
-                Some((r, g, b)) => s.push_str(&format!("color = \"#{:02X}{:02X}{:02X}\"\n", r, g, b)),
+                Some((r, g, b)) => {
+                    s.push_str(&format!("color = \"#{:02X}{:02X}{:02X}\"\n", r, g, b))
+                }
                 None => s.push_str("# color = \"#000000\"\n"),
             },
             None => s.push_str("# color = \"#000000\"\n"),
@@ -250,8 +298,18 @@ impl AppConfig {
         s.push_str("\n[theme]\n");
         let color_fields: &[(&str, &Option<ColorConfig>, &str, &str)] = &[
             ("fg", &self.theme.fg, "#808080", ""),
-            ("accent_primary", &self.theme.accent_primary, "#94A3B8", "# Slate (Cyan 대체)"),
-            ("accent_secondary", &self.theme.accent_secondary, "#FFFFFF", "# White BOLD (브랜드)"),
+            (
+                "accent_primary",
+                &self.theme.accent_primary,
+                "#94A3B8",
+                "# Slate (Cyan 대체)",
+            ),
+            (
+                "accent_secondary",
+                &self.theme.accent_secondary,
+                "#FFFFFF",
+                "# White BOLD (브랜드)",
+            ),
             ("dim", &self.theme.dim, "#555555", ""),
             ("divider", &self.theme.divider, "#555555", ""),
             ("selected", &self.theme.selected, "#CDCD00", "# Yellow"),

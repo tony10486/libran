@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::db::fts_query::{build_search_plan, escape_like, normalize_nfc, SearchPlan};
+use crate::db::fts_query::{SearchPlan, build_search_plan, escape_like, normalize_nfc};
 
 pub struct FacetCount {
     pub scheme_code: String,
@@ -84,7 +84,9 @@ fn build_facet_query(has_project: bool, search_plan: Option<&SearchPlan>) -> Str
     );
 
     if has_project {
-        sql.push_str(" AND d.id IN (SELECT document_id FROM project_documents WHERE project_id = ?1)");
+        sql.push_str(
+            " AND d.id IN (SELECT document_id FROM project_documents WHERE project_id = ?1)",
+        );
     }
 
     if let Some(plan) = search_plan {
@@ -121,7 +123,9 @@ fn build_facet_query(has_project: bool, search_plan: Option<&SearchPlan>) -> Str
         }
     }
 
-    sql.push_str(" GROUP BY cs.code, cn.notation, cn.pref_label ORDER BY cnt DESC, cn.notation ASC");
+    sql.push_str(
+        " GROUP BY cs.code, cn.notation, cn.pref_label ORDER BY cnt DESC, cn.notation ASC",
+    );
     sql
 }
 

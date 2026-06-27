@@ -21,6 +21,7 @@ pub struct RawMetadata {
     pub abstract_text: Option<String>,
     pub keywords: Vec<String>,
     pub source: MetadataSource,
+    pub body_text: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -54,6 +55,8 @@ pub fn process_file(path: &Path) -> Result<RawMetadata> {
     }
 
     if let Ok(text) = text::extract_text(path) {
+        metadata.body_text = Some(text.clone());
+
         let ids = identifiers::search_academic_identifiers(&text);
         metadata.doi = ids.doi;
         metadata.arxiv_id = ids.arxiv_id;
@@ -96,9 +99,8 @@ fn extract_arxiv_from_filename(path: &Path) -> Option<String> {
     use once_cell::sync::Lazy;
     use regex::Regex;
 
-    static ARXIV_FILE_RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(\d{4}\.\d{4,5}(?:v\d+)?)").unwrap()
-    });
+    static ARXIV_FILE_RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(\d{4}\.\d{4,5}(?:v\d+)?)").unwrap());
 
     let filename = path.file_name()?.to_string_lossy();
     let caps = ARXIV_FILE_RE.captures(&filename)?;
@@ -108,13 +110,6 @@ fn extract_arxiv_from_filename(path: &Path) -> Option<String> {
 fn extract_title_from_filename(path: &Path) -> Option<String> {
     let stem = path.file_stem()?.to_string_lossy();
     let cleaned = stem.replace(['_', '-'], " ");
-    let title = cleaned
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if title.is_empty() {
-        None
-    } else {
-        Some(title)
-    }
+    let title = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    if title.is_empty() { None } else { Some(title) }
 }

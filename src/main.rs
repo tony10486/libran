@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-use libran::app::{dispatcher, AppAction, AppState};
+use libran::app::{AppAction, AppState, dispatcher};
 use libran::config::AppConfig;
 use libran::db;
 use libran::terminal;
@@ -133,31 +133,29 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
             }
             path.map(AppAction::DragDetected)
         }
-        crossterm::event::Event::Mouse(mouse) => {
-            match mouse.kind {
-                MouseEventKind::Moved => {
-                    if mouse.row == LAST_HOVER_ROW.swap(mouse.row, Ordering::Relaxed) {
-                        None
-                    } else {
-                        Some(AppAction::MouseHover {
-                            column: mouse.column,
-                            row: mouse.row,
-                        })
-                    }
-                }
-                MouseEventKind::Down(MouseButton::Left) => {
-                    LAST_HOVER_ROW.store(mouse.row, Ordering::Relaxed);
-                    Some(AppAction::MouseClick {
+        crossterm::event::Event::Mouse(mouse) => match mouse.kind {
+            MouseEventKind::Moved => {
+                if mouse.row == LAST_HOVER_ROW.swap(mouse.row, Ordering::Relaxed) {
+                    None
+                } else {
+                    Some(AppAction::MouseHover {
                         column: mouse.column,
                         row: mouse.row,
                     })
                 }
-                _ => {
-                    debug!("마우스 이벤트: {:?}", mouse);
-                    None
-                }
             }
-        }
+            MouseEventKind::Down(MouseButton::Left) => {
+                LAST_HOVER_ROW.store(mouse.row, Ordering::Relaxed);
+                Some(AppAction::MouseClick {
+                    column: mouse.column,
+                    row: mouse.row,
+                })
+            }
+            _ => {
+                debug!("마우스 이벤트: {:?}", mouse);
+                None
+            }
+        },
         crossterm::event::Event::FocusGained => {
             debug!("포커스 획득");
             None
@@ -169,7 +167,10 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
         crossterm::event::Event::Resize(w, h) => {
             debug!("리사이즈: {}x{}", w, h);
             LAST_HOVER_ROW.store(u16::MAX, Ordering::Relaxed);
-            Some(AppAction::TerminalResize { width: *w, height: *h })
+            Some(AppAction::TerminalResize {
+                width: *w,
+                height: *h,
+            })
         }
     }
 }

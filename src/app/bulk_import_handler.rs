@@ -1,7 +1,7 @@
+use crate::api;
+use crate::app::AppState;
 use crate::app::action::AppAction;
 use crate::app::api_metadata;
-use crate::app::AppState;
-use crate::api;
 use crate::db::documents;
 use crate::pdf;
 
@@ -34,13 +34,18 @@ pub fn handle_bulk_import_submitted(state: &mut AppState, input: String) {
         let mut success = 0usize;
         let mut fail = 0usize;
         let mut errors: Vec<String> = Vec::new();
+        let mut dup_warnings: Vec<String> = Vec::new();
 
         for line in &lines {
             // Determine if it's a DOI or arXiv ID
             let is_arxiv = line.starts_with("arXiv:")
                 || line.len() <= 20
                     && (line.contains('.')
-                        && line.split('.').next().map(|p| p.len() == 4).unwrap_or(false));
+                        && line
+                            .split('.')
+                            .next()
+                            .map(|p| p.len() == 4)
+                            .unwrap_or(false));
 
             let meta_result = if is_arxiv {
                 fetch_arxiv_meta(&line).await
@@ -85,7 +90,18 @@ pub fn handle_bulk_import_submitted(state: &mut AppState, input: String) {
                             source: Some("bulk_import".to_string()),
                             ..Default::default()
                         };
-                        documents::insert(&conn, &new_doc)
+                        if let Ok(dups) = documents::find_duplicates(&conn, &new_doc)
+                            && !dups.is_empty()
+                        {
+                            dup_warnings.push(format!("{}: 유사 문헌 {}건", line, dups.len()));
+                        }
+                        let result = documents::insert(&conn, &new_doc);
+                        if let Ok(id) = result
+                            && let Some(ref body) = doc.body_text
+                        {
+                            let _ = crate::db::documents_body::store(&conn, id, body);
+                        }
+                        result
                     };
 
                     match insert_result {
@@ -106,15 +122,23 @@ pub fn handle_bulk_import_submitted(state: &mut AppState, input: String) {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
 
-        let message = if errors.is_empty() {
+        let message = if errors.is_empty() && dup_warnings.is_empty() {
             format!("{}/{} 건 가져오기 완료", success, total)
-        } else {
+        } else if dup_warnings.is_empty() {
             format!(
                 "{}/{} 건 성공, {} 건 실패: {}",
                 success,
                 total,
                 fail,
                 errors.first().map(|s| s.as_str()).unwrap_or("")
+            )
+        } else {
+            format!(
+                "{}/{} 건 성공, {} 건 실패, 유사 문헌 경고: {}",
+                success,
+                total,
+                fail,
+                dup_warnings.join("; ")
             )
         };
 
@@ -140,13 +164,11 @@ pub fn handle_bulk_import_result(
 }
 
 async fn fetch_doi_meta(doi: &str) -> Result<pdf::RawMetadata, String> {
-    let client =
-        api::crossref::create_polite_http_client(None).map_err(|e| e.to_string())?;
+    let client = api::crossref::create_polite_http_client(None).map_err(|e| e.to_string())?;
     let body = api::crossref::fetch_by_doi(&client, doi)
         .await
         .map_err(|e| e.to_string())?;
-    api_metadata::parse_crossref_response(&body)
-        .ok_or_else(|| "CrossRef 파싱 실패".to_string())
+    api_metadata::parse_crossref_response(&body).ok_or_else(|| "CrossRef 파싱 실패".to_string())
 }
 
 async fn fetch_arxiv_meta(arxiv_id: &str) -> Result<pdf::RawMetadata, String> {
@@ -155,6 +177,5 @@ async fn fetch_arxiv_meta(arxiv_id: &str) -> Result<pdf::RawMetadata, String> {
     let body = api::arxiv::fetch_by_arxiv_id(&client, id)
         .await
         .map_err(|e| e.to_string())?;
-    api_metadata::parse_arxiv_response(&body)
-        .ok_or_else(|| "arXiv 파싱 실패".to_string())
+    api_metadata::parse_arxiv_response(&body).ok_or_else(|| "arXiv 파싱 실패".to_string())
 }

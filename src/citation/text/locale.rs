@@ -183,17 +183,37 @@ mod tests {
     #[test]
     fn test_all_terms_have_all_languages() {
         let all_terms = [
-            Term::EtAl, Term::And, Term::Accessed, Term::In,
-            Term::Edition, Term::EditionShort, Term::Volume, Term::VolumeShort,
-            Term::Issue, Term::IssueShort, Term::Page, Term::PageShort,
-            Term::NoDate, Term::NoDateShort, Term::Editor, Term::EditorShort,
-            Term::Translator, Term::TranslatorShort, Term::Ibid, Term::Forthcoming,
-            Term::Anonymous, Term::OpenQuote, Term::CloseQuote,
-            Term::OpenInnerQuote, Term::CloseInnerQuote,
+            Term::EtAl,
+            Term::And,
+            Term::Accessed,
+            Term::In,
+            Term::Edition,
+            Term::EditionShort,
+            Term::Volume,
+            Term::VolumeShort,
+            Term::Issue,
+            Term::IssueShort,
+            Term::Page,
+            Term::PageShort,
+            Term::NoDate,
+            Term::NoDateShort,
+            Term::Editor,
+            Term::EditorShort,
+            Term::Translator,
+            Term::TranslatorShort,
+            Term::Ibid,
+            Term::Forthcoming,
+            Term::Anonymous,
+            Term::OpenQuote,
+            Term::CloseQuote,
+            Term::OpenInnerQuote,
+            Term::CloseInnerQuote,
         ];
         let all_langs = [
-            CitationLanguage::English, CitationLanguage::Korean,
-            CitationLanguage::Japanese, CitationLanguage::Chinese,
+            CitationLanguage::English,
+            CitationLanguage::Korean,
+            CitationLanguage::Japanese,
+            CitationLanguage::Chinese,
         ];
         for &t in &all_terms {
             for &l in &all_langs {

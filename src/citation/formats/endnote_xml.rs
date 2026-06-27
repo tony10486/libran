@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::writer::Writer;
@@ -210,11 +210,15 @@ mod tests {
         );
         // And volume, number (issue), pages, and DOI are present
         assert!(
-            output.contains("<volume><style face=\"normal\" font=\"default\" size=\"100%\">42</style></volume>"),
+            output.contains(
+                "<volume><style face=\"normal\" font=\"default\" size=\"100%\">42</style></volume>"
+            ),
             "missing volume: {output}"
         );
         assert!(
-            output.contains("<number><style face=\"normal\" font=\"default\" size=\"100%\">7</style></number>"),
+            output.contains(
+                "<number><style face=\"normal\" font=\"default\" size=\"100%\">7</style></number>"
+            ),
             "missing number (issue): {output}"
         );
         assert!(

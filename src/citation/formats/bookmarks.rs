@@ -1,7 +1,5 @@
-use crate::citation::text::{
-    render_citation, CitationLanguage, CitationStyle, DisplayMode,
-};
-use crate::db::documents::{split_authors, Document};
+use crate::citation::text::{CitationLanguage, CitationStyle, DisplayMode, render_citation};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 
@@ -98,7 +96,10 @@ mod tests {
         let mut buf = Vec::new();
         export_bookmarks(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("<!DOCTYPE NETSCAPE-Bookmark-file-1>"), "missing DOCTYPE: {out}");
+        assert!(
+            out.contains("<!DOCTYPE NETSCAPE-Bookmark-file-1>"),
+            "missing DOCTYPE: {out}"
+        );
         assert!(
             out.contains("HREF=\"https://doi.org/10.1234/test\""),
             "missing DOI URL: {out}"
@@ -135,6 +136,9 @@ mod tests {
         let mut buf = Vec::new();
         export_bookmarks(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(!out.contains("No URL Paper"), "should skip doc without URL: {out}");
+        assert!(
+            !out.contains("No URL Paper"),
+            "should skip doc without URL: {out}"
+        );
     }
 }

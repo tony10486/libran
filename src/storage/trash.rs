@@ -29,7 +29,10 @@ pub fn move_to_trash(path: &Path) -> Result<()> {
 #[cfg(target_os = "windows")]
 pub fn move_to_trash(path: &Path) -> Result<()> {
     let trash_dir = directories::BaseDirs::new()
-        .map(|d| d.home_dir().join("AppData/Local/Microsoft/Windows/RecycleBin"))
+        .map(|d| {
+            d.home_dir()
+                .join("AppData/Local/Microsoft/Windows/RecycleBin")
+        })
         .unwrap_or_else(|| Path::new("C:/RecycleBin").to_path_buf());
     if !trash_dir.exists() {
         std::fs::create_dir_all(&trash_dir)?;

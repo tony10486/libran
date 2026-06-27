@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 
@@ -79,7 +79,10 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("CREATE"), "missing CREATE: {out}");
         assert!(out.contains("LAST\tP31\tQ13442814"), "missing P31: {out}");
-        assert!(out.contains("P1476\ten:\"Deep Learning\""), "missing P1476: {out}");
+        assert!(
+            out.contains("P1476\ten:\"Deep Learning\""),
+            "missing P1476: {out}"
+        );
         assert!(
             out.contains("P2093\t\"Smith, John\"\tP1545\t\"1\""),
             "missing first author: {out}"
@@ -109,7 +112,10 @@ mod tests {
         let mut buf = Vec::new();
         export_wikidata_qs(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("P818\t\"2301.12345\""), "missing arXiv P818: {out}");
+        assert!(
+            out.contains("P818\t\"2301.12345\""),
+            "missing arXiv P818: {out}"
+        );
     }
 
     #[test]

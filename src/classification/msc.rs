@@ -55,7 +55,9 @@ impl ClassificationScheme for MscScheme {
         if notation.is_empty() {
             return false;
         }
-        notation.chars().all(|c| c.is_ascii_digit() || c == '-' || c == 'X' || c == 'x' || c.is_ascii_alphabetic())
+        notation.chars().all(|c| {
+            c.is_ascii_digit() || c == '-' || c == 'X' || c == 'x' || c.is_ascii_alphabetic()
+        })
     }
 }
 
@@ -95,7 +97,11 @@ const TOP_LEVEL: &[(&str, &str, Option<&str>)] = &[
     ("45", "Integral equations", None),
     ("46", "Functional analysis", None),
     ("47", "Operator theory", None),
-    ("49", "Calculus of variations and optimal control; optimization", None),
+    (
+        "49",
+        "Calculus of variations and optimal control; optimization",
+        None,
+    ),
     ("51", "Geometry", None),
     ("52", "Convex and discrete geometry", None),
     ("53", "Differential geometry", None),
@@ -118,7 +124,11 @@ const TOP_LEVEL: &[(&str, &str, Option<&str>)] = &[
     ("85", "Astronomy and astrophysics", None),
     ("86", "Geophysics", None),
     ("90", "Operations research, mathematical programming", None),
-    ("91", "Game theory, economics, social and behavioral sciences", None),
+    (
+        "91",
+        "Game theory, economics, social and behavioral sciences",
+        None,
+    ),
     ("92", "Biology and other natural sciences", None),
     ("94", "Information and communication, circuits", None),
     ("97", "Mathematics education", None),

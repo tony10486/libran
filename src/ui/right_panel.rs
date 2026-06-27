@@ -1,11 +1,13 @@
+use std::str::FromStr;
+
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
-use ratatui::Frame;
 
-use crate::app::state::PanelFocus;
 use crate::app::AppState;
+use crate::app::state::PanelFocus;
 use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -14,93 +16,134 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let highlight = if focused {
         theme::focus_style()
     } else {
-        Style::default().bg(theme::search_bg())
+        Style::default().bg(theme::bg())
     };
 
     let is_sort_mode = state.is_similarity_sorted();
 
-    let items: Vec<ListItem> = if state.documents.is_empty() {
+    let docs = if state.queue_view {
+        &state.queue
+    } else {
+        &state.documents
+    };
+
+    let header = if state.queue_view {
+        " 읽기 큐 (Q: 추가, R: 제거, J/K: 순서 변경, Y: 종료) "
+    } else {
+        ""
+    };
+
+    let items: Vec<ListItem> = if docs.is_empty() {
         vec![ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled("문헌이 없습니다. PDF 파일을 드래그하여 추가하세요.", theme::dim_style()),
+            Span::styled(
+                if state.queue_view {
+                    "읽기 큐가 비어 있습니다. Q 키로 문헌을 추가하세요."
+                } else {
+                    "문헌이 없습니다. PDF 파일을 드래그하여 추가하세요."
+                },
+                theme::dim_style(),
+            ),
         ]))]
     } else {
-        state.documents.iter().map(|doc| {
-            let selected = state.selected_doc_ids.contains(&doc.id.unwrap_or(0));
+        docs.iter()
+            .map(|doc| {
+                let selected = state.selected_doc_ids.contains(&doc.id.unwrap_or(0));
 
-            let (unread_g, reading_g, read_g) = match state.glyph_set.as_str() {
-                "ballot" => ("☐ ", "⊡ ", "☒ "),
-                _ => ("○ ", "◐ ", "● "),
-            };
-            let (marker, marker_color) = match (selected, doc.reading_status.as_deref()) {
-                (true, Some("read")) => (read_g, theme::selected()),
-                (true, Some("reading")) => (reading_g, theme::selected()),
-                (true, _) => (unread_g, theme::selected()),
-                (false, Some("read")) => (read_g, theme::dim()),
-                (false, Some("reading")) => (reading_g, theme::dim()),
-                (false, _) => (unread_g, theme::dim()),
-            };
+                let (unread_g, reading_g, read_g) = match state.glyph_set.as_str() {
+                    "ballot" => ("☐", "⊡", "☒"),
+                    _ => ("○", "◐", "✓"),
+                };
+                let (marker, marker_color) = match (selected, doc.reading_status.as_deref()) {
+                    (true, Some("read")) => (read_g, theme::success()),
+                    (true, Some("reading")) => (reading_g, theme::warning()),
+                    (true, _) => (unread_g, theme::dim()),
+                    (false, Some("read")) => (read_g, theme::success()),
+                    (false, Some("reading")) => (reading_g, theme::warning()),
+                    (false, _) => (unread_g, theme::dim()),
+                };
 
-            let authors = doc.authors.as_deref().unwrap_or("저자 불명");
-            let year = doc.pub_year.map(|y| y.to_string()).unwrap_or_else(|| "n.d.".to_string());
-            let doi = doc.doi.as_deref().unwrap_or("");
-            let key = doc.citation_key.as_deref().unwrap_or("");
+                let authors = doc.authors.as_deref().unwrap_or("저자 불명");
+                let year = doc
+                    .pub_year
+                    .map(|y| y.to_string())
+                    .unwrap_or_else(|| "n.d.".to_string());
+                let doi = doc.doi.as_deref().unwrap_or("");
+                let key = doc.citation_key.as_deref().unwrap_or("");
 
-            let score_str = if is_sort_mode {
-                if let Some(score) = state.similarity_scores.iter()
-                    .find(|s| s.document_id == doc.id.unwrap_or(0))
-                {
-                    if doc.id == state.similarity_ref_doc_id {
-                        " [기준]".to_string()
-                    } else if score.total_score > 0.0 {
-                        format!(" [{:.1}]", score.total_score)
+                let score_str = if is_sort_mode {
+                    if let Some(score) = state
+                        .similarity_scores
+                        .iter()
+                        .find(|s| s.document_id == doc.id.unwrap_or(0))
+                    {
+                        if doc.id == state.similarity_ref_doc_id {
+                            " [기준]".to_string()
+                        } else if score.total_score > 0.0 {
+                            format!(" [{:.1}]", score.total_score)
+                        } else {
+                            String::new()
+                        }
                     } else {
                         String::new()
                     }
                 } else {
                     String::new()
-                }
-            } else {
-                String::new()
-            };
+                };
 
-            let rating_str = match doc.rating {
-                Some(r) if (1..=5).contains(&r) => {
-                    format!(" {}", "★".repeat(r as usize) + &"☆".repeat(5 - r as usize))
-                }
-                _ => String::new(),
-            };
+                let rating_str = match doc.rating {
+                    Some(r) if (1..=5).contains(&r) => {
+                        format!(" {}", "★".repeat(r as usize) + &"☆".repeat(5 - r as usize))
+                    }
+                    _ => String::new(),
+                };
 
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled(marker, Style::default().fg(marker_color)),
-                    Span::styled(doc.title.clone(), theme::title_style()),
-                    if !rating_str.is_empty() {
-                        Span::styled(rating_str, Style::default().fg(theme::selected()))
-                    } else {
-                        Span::raw("")
-                    },
-                    if score_str.starts_with(" [기준]") {
-                        Span::styled(score_str, Style::default().fg(theme::accent_primary()))
-                    } else if score_str.starts_with(" [") {
-                        Span::styled(score_str, Style::default().fg(theme::selected()))
-                    } else {
-                        Span::raw("")
-                    },
-                ]),
-                Line::from(vec![
-                    Span::raw("    "),
-                    Span::styled(authors.to_string(), theme::meta_style()),
-                    Span::raw("  "),
-                    Span::styled(year.clone(), theme::meta_style()),
-                    Span::raw("  "),
-                    Span::styled(doi.to_string(), theme::meta_style()),
-                    Span::raw("  "),
-                    Span::styled(format!("[{}]", key), theme::key_style()),
-                ]),
-                Line::from(""),
-            ])
-        }).collect()
+                let progress_str = match doc.reading_progress {
+                    Some(p) if p > 0 => format!(" {}%", p),
+                    _ => String::new(),
+                };
+
+                ListItem::new(vec![
+                    Line::from(vec![
+                        Span::styled(
+                            format!("{} ", marker),
+                            Style::default()
+                                .fg(marker_color)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(doc.title.clone(), theme::title_style()),
+                        if !rating_str.is_empty() {
+                            Span::styled(rating_str, Style::default().fg(theme::warning()))
+                        } else {
+                            Span::raw("")
+                        },
+                        if !progress_str.is_empty() {
+                            Span::styled(progress_str, Style::default().fg(theme::accent_primary()))
+                        } else {
+                            Span::raw("")
+                        },
+                        if score_str.starts_with(" [기준]") {
+                            Span::styled(score_str, Style::default().fg(theme::accent_primary()))
+                        } else if score_str.starts_with(" [") {
+                            Span::styled(score_str, Style::default().fg(theme::selected()))
+                        } else {
+                            Span::raw("")
+                        },
+                    ]),
+                    Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(authors.to_string(), theme::meta_style()),
+                        Span::raw("  "),
+                        Span::styled(year.clone(), theme::meta_style()),
+                        Span::raw("  "),
+                        Span::styled(doi.to_string(), theme::meta_style()),
+                        Span::raw("  "),
+                        Span::styled(format!("[{}]", key), theme::key_style()),
+                    ]),
+                    Line::from(""),
+                ])
+            })
+            .collect()
     };
 
     let list = List::default()
@@ -109,11 +152,29 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         .highlight_style(highlight);
 
     let mut list_state = ListState::default();
-    if !state.documents.is_empty() && state.list_cursor < state.documents.len() {
+    if !docs.is_empty() && state.list_cursor < docs.len() {
         list_state.select(Some(state.list_cursor));
     }
 
-    frame.render_stateful_widget(list, area, &mut list_state);
+    if state.queue_view && !header.is_empty() {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(1)])
+            .split(area);
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![Span::styled(
+                header,
+                Style::default()
+                    .fg(theme::accent_primary())
+                    .add_modifier(Modifier::BOLD),
+            )]))
+            .style(Style::default().bg(theme::bg())),
+            chunks[0],
+        );
+        frame.render_stateful_widget(list, chunks[1], &mut list_state);
+    } else {
+        frame.render_stateful_widget(list, area, &mut list_state);
+    }
 }
 
 pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -143,20 +204,24 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let (unread_g, reading_g, read_g) = match state.glyph_set.as_str() {
         "ballot" => ("☐", "⊡", "☒"),
-        _ => ("○", "◐", "●"),
+        _ => ("○", "◐", "✓"),
     };
-    let status_glyph = match doc.reading_status.as_deref() {
-        Some("read") => read_g,
-        Some("reading") => reading_g,
-        _ => unread_g,
+    let (status_glyph, status_color) = match doc.reading_status.as_deref() {
+        Some("read") => (read_g, theme::success()),
+        Some("reading") => (reading_g, theme::warning()),
+        _ => (unread_g, theme::dim()),
     };
 
     let mut lines: Vec<Line> = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled("  제목   ", theme::label_style()),
-            Span::styled(status_glyph.to_string(), Style::default().fg(theme::selected())),
-            Span::raw(" "),
+            Span::styled(
+                format!("{} ", status_glyph),
+                Style::default()
+                    .fg(status_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(doc.title.clone(), theme::title_style()),
         ]),
         Line::from(""),
@@ -167,7 +232,12 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     lines.push(Line::from(""));
     lines.push(field_line("학회", doc.conference.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
-    lines.push(field_line("연도", &doc.pub_year.map(|y| y.to_string()).unwrap_or_else(|| "—".to_string())));
+    lines.push(field_line(
+        "연도",
+        &doc.pub_year
+            .map(|y| y.to_string())
+            .unwrap_or_else(|| "—".to_string()),
+    ));
     lines.push(Line::from(""));
     lines.push(field_line("DOI", doc.doi.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
@@ -175,8 +245,42 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     lines.push(Line::from(""));
     lines.push(field_line("키", doc.citation_key.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
-    lines.push(field_line("파일 (p로 열기)", doc.file_path.as_deref().unwrap_or("—")));
+    lines.push(field_line(
+        "파일 (p로 열기)",
+        doc.file_path.as_deref().unwrap_or("—"),
+    ));
     lines.push(Line::from(""));
+
+    if !state.current_attachments.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("  첨부   ", theme::label_style()),
+            Span::styled(
+                format!("{}개", state.current_attachments.len()),
+                Style::default().fg(theme::fg()),
+            ),
+        ]));
+        for att in &state.current_attachments {
+            let type_label = match att.attachment_type.as_str() {
+                "supplementary" => "보충",
+                "dataset" => "데이터",
+                _ => "기타",
+            };
+            let label_part = att
+                .label
+                .as_deref()
+                .filter(|l| !l.is_empty())
+                .map(|l| format!(" — {}", l))
+                .unwrap_or_default();
+            lines.push(Line::from(vec![
+                Span::raw("    "),
+                Span::styled(
+                    format!("[{}] {}{}", type_label, att.file_path, label_part),
+                    Style::default().fg(theme::dim()),
+                ),
+            ]));
+        }
+        lines.push(Line::from(""));
+    }
 
     let reading_label = match doc.reading_status.as_deref() {
         Some("reading") => "읽는 중",
@@ -185,12 +289,19 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     };
     lines.push(field_line("읽음 상태 (u)", reading_label));
     lines.push(Line::from(""));
+    let progress_val = doc.reading_progress.unwrap_or(0);
+    lines.push(field_line("진행률 (>/<)", &format!("{}%", progress_val)));
+    lines.push(Line::from(""));
     lines.push(field_line("출처", doc.source.as_deref().unwrap_or("—")));
     lines.push(Line::from(""));
 
     let rating_display = match doc.rating {
         Some(r) if (1..=5).contains(&r) => {
-            format!("{} ({}점)", "★".repeat(r as usize) + &"☆".repeat(5 - r as usize), r)
+            format!(
+                "{} ({}점)",
+                "★".repeat(r as usize) + &"☆".repeat(5 - r as usize),
+                r
+            )
         }
         _ => "—".to_string(),
     };
@@ -203,16 +314,19 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled("(없음)", theme::dim_style()),
         ]));
     } else {
-        let mut tag_spans = vec![
-            Span::styled("  태그   ", theme::label_style()),
-        ];
+        let mut tag_spans = vec![Span::styled("  태그   ", theme::label_style())];
         for (i, tag) in state.current_tags.iter().enumerate() {
             if i > 0 {
                 tag_spans.push(Span::raw(" "));
             }
+            let color = state
+                .tag_colors
+                .get(tag)
+                .and_then(|hex| Color::from_str(hex).ok())
+                .unwrap_or(theme::tag());
             tag_spans.push(Span::styled(
                 format!("#{}", tag),
-                Style::default().fg(theme::tag()).bg(theme::bg()),
+                Style::default().fg(color).bg(theme::bg()),
             ));
         }
         lines.push(Line::from(tag_spans));
@@ -220,7 +334,10 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     lines.push(Line::from(""));
 
     if let Some(abs) = &doc.abstract_text {
-        lines.push(Line::from(vec![Span::styled("  ─── 초록 ───", theme::dim_style())]));
+        lines.push(Line::from(vec![Span::styled(
+            "  ─ ─ 초록 ─ ─",
+            theme::divider_style(),
+        )]));
         lines.push(Line::from(""));
         for line in abs.lines().take(10) {
             lines.push(Line::from(vec![
@@ -229,16 +346,22 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
             ]));
         }
     } else {
-        lines.push(Line::from(vec![Span::styled("  초록 없음", theme::dim_style())]));
+        lines.push(Line::from(vec![Span::styled(
+            "  초록 없음",
+            theme::dim_style(),
+        )]));
     }
 
     if !state.custom_fields.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled("  ─── 추가 필드 ───", theme::dim_style())]));
+        lines.push(Line::from(vec![Span::styled(
+            "  ─ ─ 추가 필드 ─ ─",
+            theme::divider_style(),
+        )]));
         lines.push(Line::from(""));
         for (_field_id, key, value) in &state.custom_fields {
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:6} ", key), theme::label_style()),
+                Span::styled(format!("  {}  ", key), theme::label_style()),
                 Span::styled(value.clone(), Style::default().fg(theme::fg())),
             ]));
             lines.push(Line::from(""));
@@ -248,20 +371,29 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
     if !state.current_bookmarks.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
-            "  ─── 북마크 (b로 추출) ───",
-            theme::dim_style(),
+            "  ─ ─ 북마크 (b로 추출) ─ ─",
+            theme::divider_style(),
         )]));
         lines.push(Line::from(""));
         for (title, page) in state.current_bookmarks.iter().take(20) {
-            let page_str = if *page > 0 { format!(" (p.{})", page) } else { String::new() };
+            let page_str = if *page > 0 {
+                format!(" (p.{})", page)
+            } else {
+                String::new()
+            };
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(format!("{}{}", title, page_str), Style::default().fg(theme::fg())),
+                Span::styled(
+                    format!("{}{}", title, page_str),
+                    Style::default().fg(theme::fg()),
+                ),
             ]));
         }
     }
 
-    let para = Paragraph::new(lines).style(style).wrap(Wrap { trim: false });
+    let para = Paragraph::new(lines)
+        .style(style)
+        .wrap(Wrap { trim: false });
     frame.render_widget(para, info_area);
 
     render_note_section(frame, note_area, state, focused);
@@ -271,10 +403,12 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
     if state.note_mode {
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme::selected()))
+            .border_style(Style::default().fg(theme::accent_primary()))
             .title(Span::styled(
                 " ✎ 노트 (편집 중) ",
-                Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme::accent_primary())
+                    .add_modifier(Modifier::BOLD),
             ))
             .style(Style::default().fg(theme::fg()).bg(theme::bg()));
 
@@ -283,11 +417,18 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
             Style::default().fg(theme::dim()),
         )]);
 
-        let mut note_lines: Vec<Line> = state.note_input.lines()
-            .map(|l| Line::from(vec![
-                Span::raw(" "),
-                Span::styled(l.to_string(), Style::default().fg(theme::focus_fg()).bg(theme::bg())),
-            ]))
+        let mut note_lines: Vec<Line> = state
+            .note_input
+            .lines()
+            .map(|l| {
+                Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(
+                        l.to_string(),
+                        Style::default().fg(theme::focus_fg()).bg(theme::bg()),
+                    ),
+                ])
+            })
             .collect();
         if note_lines.is_empty() {
             note_lines.push(Line::from(vec![
@@ -298,44 +439,75 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
         note_lines.push(Line::from(""));
         note_lines.push(hint);
 
-        let para = Paragraph::new(note_lines).block(block).wrap(Wrap { trim: false });
+        let para = Paragraph::new(note_lines)
+            .block(block)
+            .wrap(Wrap { trim: false });
         frame.render_widget(para, area);
     } else {
-        let content = state.current_note.as_deref().unwrap_or("");
-        let has_note = !content.is_empty();
+        let notes = &state.current_notes;
+        let has_notes = !notes.is_empty();
+        let count = notes.len();
 
-        let title = if has_note { " 📝 노트 " } else { " 📝 노트 (없음) " };
+        let title = if has_notes {
+            if count > 1 {
+                format!(" 📝 노트 ({}개) ", count)
+            } else {
+                " 📝 노트 ".to_string()
+            }
+        } else {
+            " 📝 노트 (없음) ".to_string()
+        };
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::divider()))
-            .title(Span::styled(
-                title,
-                Style::default().fg(theme::fg()),
-            ))
+            .title(Span::styled(title, Style::default().fg(theme::fg())))
             .style(Style::default().fg(theme::fg()).bg(theme::bg()));
 
         let mut note_lines: Vec<Line> = Vec::new();
-        if has_note {
-            for line in content.lines().take(4) {
+        if has_notes {
+            let latest = &notes[0];
+            for line in latest.content.lines().take(4) {
                 note_lines.push(Line::from(vec![
                     Span::raw(" "),
-                    Span::styled(line.to_string(), Style::default().fg(theme::fg()).bg(theme::bg())),
+                    Span::styled(
+                        line.to_string(),
+                        Style::default().fg(theme::fg()).bg(theme::bg()),
+                    ),
+                ]));
+            }
+            if count > 1 {
+                note_lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("… 외 {}개 노트", count - 1),
+                        Style::default().fg(theme::dim()).bg(theme::bg()),
+                    ),
                 ]));
             }
         } else {
             note_lines.push(Line::from(vec![
                 Span::raw(" "),
-                Span::styled("(노트 없음)", Style::default().fg(theme::dim()).bg(theme::bg())),
+                Span::styled(
+                    "(노트 없음)",
+                    Style::default().fg(theme::dim()).bg(theme::bg()),
+                ),
             ]));
         }
 
-        let hint_text = if detail_focused { "  [n] 노트 작성/수정" } else { "" };
+        let hint_text = if detail_focused {
+            "  [n] 노트 작성  [:note] $EDITOR로 작성"
+        } else {
+            ""
+        };
         note_lines.push(Line::from(""));
-        note_lines.push(Line::from(vec![
-            Span::styled(hint_text, Style::default().fg(theme::dim())),
-        ]));
+        note_lines.push(Line::from(vec![Span::styled(
+            hint_text,
+            Style::default().fg(theme::dim()),
+        )]));
 
-        let para = Paragraph::new(note_lines).block(block).wrap(Wrap { trim: false });
+        let para = Paragraph::new(note_lines)
+            .block(block)
+            .wrap(Wrap { trim: false });
         frame.render_widget(para, area);
     }
 }
@@ -343,10 +515,13 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
 fn field_line(label: &str, value: &str) -> Line<'static> {
     use unicode_width::UnicodeWidthStr;
     let label_width = label.width();
-    let target_width: usize = 12;
+    let target_width: usize = 6;
     let pad = target_width.saturating_sub(label_width);
     Line::from(vec![
-        Span::styled(format!("  {}{} ", label, " ".repeat(pad)), theme::label_style()),
+        Span::styled(
+            format!("  {}{}  ", label, " ".repeat(pad)),
+            theme::label_style(),
+        ),
         Span::styled(value.to_string(), Style::default().fg(theme::fg())),
     ])
 }

@@ -58,16 +58,40 @@ impl ClassificationScheme for PhyshScheme {
 
 const TOP_LEVEL: &[(&str, &str, Option<&str>)] = &[
     ("Research Areas", "Research Areas", None),
-    ("Condensed Matter", "Condensed Matter Physics", Some("Research Areas")),
-    ("Atomic, Molecular & Optical", "Atomic, Molecular & Optical Physics", Some("Research Areas")),
-    ("Particles & Fields", "Particles & Fields", Some("Research Areas")),
+    (
+        "Condensed Matter",
+        "Condensed Matter Physics",
+        Some("Research Areas"),
+    ),
+    (
+        "Atomic, Molecular & Optical",
+        "Atomic, Molecular & Optical Physics",
+        Some("Research Areas"),
+    ),
+    (
+        "Particles & Fields",
+        "Particles & Fields",
+        Some("Research Areas"),
+    ),
     ("Nuclear Physics", "Nuclear Physics", Some("Research Areas")),
-    ("Biological Physics", "Biological Physics", Some("Research Areas")),
+    (
+        "Biological Physics",
+        "Biological Physics",
+        Some("Research Areas"),
+    ),
     ("Geophysics", "Geophysics", Some("Research Areas")),
     ("Astrophysics", "Astrophysics", Some("Research Areas")),
     ("Plasma Physics", "Plasma Physics", Some("Research Areas")),
-    ("Classical Physics", "Classical Physics", Some("Research Areas")),
-    ("Quantum Information", "Quantum Information", Some("Research Areas")),
+    (
+        "Classical Physics",
+        "Classical Physics",
+        Some("Research Areas"),
+    ),
+    (
+        "Quantum Information",
+        "Quantum Information",
+        Some("Research Areas"),
+    ),
     ("Physical Systems", "Physical Systems", None),
     ("Properties", "Properties", None),
     ("Techniques", "Techniques", None),

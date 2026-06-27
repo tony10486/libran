@@ -1,14 +1,14 @@
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
-use ratatui::Frame;
 
 use crate::app::AppState;
 use crate::citation::text::styles::{CitationLanguage, CitationStyle, DisplayMode};
-use crate::ui::theme;
 use crate::export::ExportFormat;
 use crate::export::export_dialog_state::DialogSection;
+use crate::ui::theme;
 
 const VISIBLE_ITEMS: usize = 5;
 
@@ -56,7 +56,7 @@ fn render_format_section(
     let focused = dialog.focused_section == DialogSection::Format;
     let items = build_section_items(
         ExportFormat::all(),
-        dialog.selected_format,
+        dialog.selected_format.clone(),
         dialog.format_cursor,
         focused,
         |f| f.is_implemented(),
@@ -143,7 +143,11 @@ fn render_language_display_section(
     frame.render_widget(Paragraph::new(lang_lines).style(lang_style), cols[0]);
 
     if display_active {
-        let modes = [DisplayMode::InText, DisplayMode::Footnotes, DisplayMode::Endnotes];
+        let modes = [
+            DisplayMode::InText,
+            DisplayMode::Footnotes,
+            DisplayMode::Endnotes,
+        ];
         let mode_items = build_section_items(
             &modes,
             dialog.display_mode,
@@ -193,7 +197,9 @@ fn render_preview(
     let lines = vec![
         Line::from(Span::styled(
             "  ── 미리보기 (Preview) ──",
-            Style::default().fg(theme::accent_primary()).add_modifier(Modifier::UNDERLINED),
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::UNDERLINED),
         )),
         Line::from(""),
         Line::from(Span::styled(
@@ -230,12 +236,14 @@ fn header_line(name: &str, focused: bool) -> Line<'static> {
             .fg(theme::accent_primary())
             .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
     } else {
-        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::UNDERLINED)
+        Style::default()
+            .fg(theme::accent_primary())
+            .add_modifier(Modifier::UNDERLINED)
     };
     Line::from(Span::styled(format!("  ▸ {}", name), style))
 }
 
-fn build_section_items<T: Copy + PartialEq>(
+fn build_section_items<T: Clone + PartialEq>(
     all: &[T],
     selected: T,
     cursor: usize,
@@ -258,7 +266,7 @@ fn build_section_items<T: Copy + PartialEq>(
 
     (start..end)
         .map(|i| {
-            let item = all[i];
+            let item = all[i].clone();
             let is_current = item == selected;
             let implemented = is_implemented(&item);
             let prefix = if focused && is_current {
@@ -272,7 +280,9 @@ fn build_section_items<T: Copy + PartialEq>(
             let style = if !implemented {
                 Style::default().fg(theme::dim())
             } else if focused && is_current {
-                Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme::accent_primary())
+                    .add_modifier(Modifier::BOLD)
             } else if is_current {
                 Style::default().fg(theme::selected())
             } else {

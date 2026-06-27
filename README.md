@@ -20,6 +20,24 @@ UDC 분류가 실제 논문에 적용된 사례를 보며 이해해 봅시다. [
 ### 분류 데이터 번들
 Libran은 UDC(87개 노드), PhySH(45개 노드), MSC(63개 노드)의 분류 데이터를 한국어 번역과 함께 바이너리에 임베드하여 제공합니다. 프로그램 시작 시 자동으로 SQLite 데이터베이스에 등록되며, 별도의 외부 데이터 다운로드가 필요하지 않습니다.
 
+### 커스텀 분류 체계 가져오기
+`:import-classification <CSV 파일 경로>` 명령으로 사용자 정의 분류 체계를 CSV 파일에서 가져올 수 있습니다. CSV 형식은 다음과 같습니다:
+
+```
+notation,pref_label,broader_notation,alt_labels,notes
+1,Root,,,root note
+1.1,Child A,1,alt1;alt2,child note
+1.2,Child B,1,,
+```
+
+- `notation`: 분류 기호 (필수)
+- `pref_label`: 대표 라벨 (필수)
+- `broader_notation`: 상위 분류 기호 (선택, 비워두면 최상위 노드)
+- `alt_labels`: 대체 라벨, 세미콜론(`;`) 구분 (선택)
+- `notes`: 범위 주석 (선택)
+
+스킴 코드는 파일명에서 파생됩니다 (예: `my-scheme.csv` → 코드 `my-scheme`). 동일한 기호가 중복되면 첫 번째 항목만 저장됩니다. 계층 구조를 유지하려면 상위 노드를 하위 노드보다 먼저 배치하세요.
+
 ### 자동 분류 추천
 PDF에서 추출된 메타데이터(제목, 저널명, 키워드)를 기반으로 UDC 코드를 자동 추천합니다. 추천은 제안만 하고, 최종 분류는 항상 사용자가 확정합니다.
 
@@ -138,3 +156,85 @@ SQLite(rusqlite bundled)를 사용합니다. 데이터베이스 파일은 `~/.li
 ## 로깅
 
 `~/.libran/libran.log`에 디버그 로그를 기록합니다. 터미널 이벤트, PDF 처리, API 조회, 경로 파싱 결과 등이 기록되어 문제 진단에 활용할 수 있습니다.
+
+## Libran 확장하기
+
+Libran은 여러 확장 지점을 제공합니다. 각 확장 지점은 설정 파일(`~/.libran/config.toml`) 또는 Rust 트레이트 구현을 통해 사용자 정의할 수 있습니다.
+
+### 커스텀 분류 체계
+
+Libran은 `ClassificationScheme` 트레이트를 통해 분류 체계를 확장할 수 있습니다. 트레이트는 `src/classification/scheme.rs`에 정의되어 있으며, 다음 메서드를 구현해야 합니다:
+
+- `code()`: 분류 체계 코드 (예: `"udc"`, `"my-scheme"`)
+- `name()`: 분류 체계 이름
+- `version()`, `license()`, `source_url()`: 메타데이터
+- `is_primary()`: 주 분류 체계 여부
+- `nodes()`: 분류 노드 목록 (`ClassificationNode` 배열)
+- `validate_notation()`: 기호 유효성 검사
+
+커스텀 분류 체계 구현 예시는 `src/classification/custom.rs`의 `CustomScheme`을 참조하세요.
+
+#### CSV로 분류 체계 가져오기
+
+Rust 코드를 작성하지 않고도 CSV 파일로 분류 체계를 가져올 수 있습니다. `:import-classification <CSV 파일 경로>` 명령을 사용하세요. CSV 형식은 위 "커스텀 분류 체계 가져오기" 섹션을 참조하세요.
+
+### 커스텀 내보내기 형식
+
+`~/.libran/config.toml`에 커스텀 내보내기 형식을 정의할 수 있습니다. 템플릿 기반 문자열 치환으로 원하는 형식으로 문헌을 내보낼 수 있습니다.
+
+```toml
+[[custom_export_formats]]
+name = "plain_text"
+file_extension = "txt"
+template = "{title} - {authors} ({year}). {doi}"
+
+[[custom_export_formats]]
+name = "markdown_ref"
+file_extension = "md"
+template = "- [{title}]({doi}) — {authors}, {year}"
+```
+
+**템플릿 플레이스홀더**:
+
+| 플레이스홀더 | 치환 값 | 비고 |
+|---|---|---|
+| `{title}` | 문헌 제목 | |
+| `{authors}` | 저자 문자열 | 세미콜론(`;`) 구분 |
+| `{year}` | 출판 연도 | 값이 없으면 빈 문자열 |
+| `{doi}` | DOI | 값이 없으면 빈 문자열 |
+| `{journal}` | 저널명 | 값이 없으면 빈 문자열 |
+| `{abstract}` | 초록 | 값이 없으면 빈 문자열 |
+
+여러 문헌을 내보낼 때 각 문헌의 치환 결과가 줄바꿈으로 구분되어 출력됩니다.
+
+### 커스텀 인용키 템플릿
+
+`citation_key_mode = "custom"`으로 설정하고 `citation_key_template`에 템플릿을 지정하여 인용키 생성 형식을 사용자 정의할 수 있습니다.
+
+```toml
+citation_key_mode = "custom"
+citation_key_template = "{author}_{year2}_{titleword}"
+```
+
+사용 가능한 플레이스홀더: `{author}` (첫 저자 성), `{year2}` (연도 뒤 2자리), `{titleword}` (제목 첫 단어). 다국어 저자(한글, 중문, 일문)는 원본 그대로 보존되며, 중복 시 a, b, c... 접미사로 충돌을 해결합니다.
+
+### 설정 키 (app_config)
+
+`~/.libran/config.toml`에서 다음 설정을 구성할 수 있습니다:
+
+| 키 | 설명 | 기본값 |
+|---|---|---|
+| `api_mode` | API 조회 모드 (`IdentifierOnly` / `AutoFallback` / `ManualSearch` / `FullyOffline`) | `IdentifierOnly` |
+| `user_email` | CrossRef polite 요청 이메일 | (없음) |
+| `file_storage_policy` | 파일 저장 정책 (`CopyToLibrary` / `ReferenceOnly` / `CopyAndTrash`) | `CopyToLibrary` |
+| `library_path` | PDF 라이브러리 경로 | `~/.libran/library` |
+| `citation_key_mode` | 인용키 생성 모드 | `AuthorYear` |
+| `citation_key_template` | 커스텀 인용키 템플릿 | (없음) |
+| `primary_scheme` | 주 분류 체계 | `udc` |
+| `enabled_schemes` | 활성화된 분류 체계 목록 | `["udc", "physh", "msc"]` |
+| `label_language` | 분류 라벨 언어 | `en` |
+| `db_path` | 데이터베이스 파일 경로 | `~/.libran/libran.db` |
+| `viewer_command` | 외부 PDF 뷰어 명령 | (시스템 기본값) |
+| `glyph_set` | 읽음 상태 마커 글리프 (`circles` / `ballot`) | `circles` |
+| `theme` | UI 테마 색상 | (기본 테마) |
+| `custom_export_formats` | 커스텀 내보내기 형식 목록 | `[]` |

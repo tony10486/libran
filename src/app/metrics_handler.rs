@@ -2,8 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 
-use super::action::AppAction;
 use super::AppState;
+use super::action::AppAction;
 use super::dispatcher::normalize_korean_key;
 
 pub(crate) fn handle_metrics_overlay_key(state: &mut AppState, key: KeyEvent) -> bool {
@@ -30,7 +30,9 @@ pub(crate) fn handle_api_key_input_key(state: &mut AppState, key: KeyEvent) -> b
             let key_input = state.api_key_input.clone();
             state.api_key_input_mode = false;
             state.api_key_input.clear();
-            let _ = state.action_tx.try_send(AppAction::RegisterApiKey(key_input));
+            let _ = state
+                .action_tx
+                .try_send(AppAction::RegisterApiKey(key_input));
         }
         KeyCode::Backspace => {
             state.api_key_input.pop();

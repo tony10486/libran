@@ -5,9 +5,7 @@
 //! In-text APSA: (Smith, Jones, and Brown 2023, 130)
 //! In-text ASA: (Smith, Jones, and Brown 2023:130) (colon instead of comma)
 
-use crate::citation::text::helpers::{
-    format_pages, get_authors, parse_author_full,
-};
+use crate::citation::text::helpers::{format_pages, get_authors, parse_author_full};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -43,7 +41,11 @@ fn last_names(authors: &[String]) -> Vec<String> {
     authors.iter().map(|n| parse_author_full(n).0).collect()
 }
 
-pub fn render_apsa_reference(doc: &Document, _lang: CitationLanguage, _mode: DisplayMode) -> String {
+pub fn render_apsa_reference(
+    doc: &Document,
+    _lang: CitationLanguage,
+    _mode: DisplayMode,
+) -> String {
     render_reference_impl(doc, true)
 }
 
@@ -188,31 +190,52 @@ mod tests {
     fn test_apsa_reference() {
         let doc = make_doc();
         let result = render_apsa_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, John A., Bob C. Jones, and David E. Brown."), "apsa authors: {result}");
+        assert!(
+            result.contains("Smith, John A., Bob C. Jones, and David E. Brown."),
+            "apsa authors: {result}"
+        );
         assert!(result.contains("2023."), "apsa year: {result}");
-        assert!(result.contains("\"Political Behavior.\""), "apsa title in quotes: {result}");
-        assert!(result.contains("42 (3): 123-145."), "apsa vol with spaces: {result}");
+        assert!(
+            result.contains("\"Political Behavior.\""),
+            "apsa title in quotes: {result}"
+        );
+        assert!(
+            result.contains("42 (3): 123-145."),
+            "apsa vol with spaces: {result}"
+        );
     }
 
     #[test]
     fn test_asa_reference() {
         let doc = make_doc();
         let result = render_asa_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("42(3):123-145."), "asa vol no spaces: {result}");
+        assert!(
+            result.contains("42(3):123-145."),
+            "asa vol no spaces: {result}"
+        );
     }
 
     #[test]
     fn test_apsa_in_text() {
         let doc = make_doc();
         let result = render_apsa_in_text(&doc, CitationLanguage::English);
-        assert!(result.contains("(Smith, Jones, and Brown 2023"), "apsa in-text: {result}");
-        assert!(result.contains(", 123-145)"), "apsa in-text comma page: {result}");
+        assert!(
+            result.contains("(Smith, Jones, and Brown 2023"),
+            "apsa in-text: {result}"
+        );
+        assert!(
+            result.contains(", 123-145)"),
+            "apsa in-text comma page: {result}"
+        );
     }
 
     #[test]
     fn test_asa_in_text_colon() {
         let doc = make_doc();
         let result = render_asa_in_text(&doc, CitationLanguage::English);
-        assert!(result.contains(":123-145)"), "asa in-text colon page: {result}");
+        assert!(
+            result.contains(":123-145)"),
+            "asa in-text colon page: {result}"
+        );
     }
 }

@@ -1,14 +1,14 @@
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Frame, Terminal,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame, Terminal,
 };
 use std::io::{self, stdout};
 
@@ -82,12 +82,18 @@ fn render(
     };
 
     let left_items: Vec<ListItem> = vec![
-        ListItem::new(Line::from(vec![Span::styled(" 프로젝트", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))])),
+        ListItem::new(Line::from(vec![Span::styled(
+            " 프로젝트",
+            Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )])),
         ListItem::new("   머신러닝 가속 연구"),
         ListItem::new("   CUI 렌더러 설계"),
         ListItem::new("   수학적 모델링"),
         ListItem::new(""),
-        ListItem::new(Line::from(vec![Span::styled(" 분류 (UDC)", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))])),
+        ListItem::new(Line::from(vec![Span::styled(
+            " 분류 (UDC)",
+            Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )])),
         ListItem::new(" ▸ 0  총류 · 정보학"),
         ListItem::new(" ▸ 1  철학 · 심리학"),
         ListItem::new(" ▸ 2  종교"),
@@ -115,7 +121,11 @@ fn render(
                 .title(" Libran ")
                 .border_style(left_block_style),
         )
-        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD));
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        );
 
     f.render_stateful_widget(left_list, body[0], left_state);
 
@@ -130,7 +140,10 @@ fn render(
             Span::raw("  "),
             Span::styled("517.9", Style::default().fg(Color::Yellow)),
             Span::raw("  "),
-            Span::styled("Nonisothermal Diffuse Interface Model", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Nonisothermal Diffuse Interface Model",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
@@ -138,14 +151,20 @@ fn render(
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
-            Span::styled("doi:10.33048/SIBJIM.2022.25.103", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "doi:10.33048/SIBJIM.2022.25.103",
+                Style::default().fg(Color::DarkGray),
+            ),
         ])),
         ListItem::new(""),
         ListItem::new(Line::from(vec![
             Span::raw("▶ "),
             Span::styled("51-72", Style::default().fg(Color::Yellow)),
             Span::raw("  "),
-            Span::styled("Mathematical Modeling in Physics", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Mathematical Modeling in Physics",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
@@ -153,18 +172,27 @@ fn render(
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
-            Span::styled("doi:10.1006/jmbi.2023.2354", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "doi:10.1006/jmbi.2023.2354",
+                Style::default().fg(Color::DarkGray),
+            ),
         ])),
         ListItem::new(""),
         ListItem::new(Line::from(vec![
             Span::raw("  "),
             Span::styled("35-XX", Style::default().fg(Color::Green)),
             Span::raw("  "),
-            Span::styled("PDE Solutions for Nonlinear Systems", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "PDE Solutions for Nonlinear Systems",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
-            Span::styled("Lee, S. · Park, M. (2023)", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "Lee, S. · Park, M. (2023)",
+                Style::default().fg(Color::Gray),
+            ),
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
@@ -175,7 +203,10 @@ fn render(
             Span::raw("  "),
             Span::styled("53", Style::default().fg(Color::Yellow)),
             Span::raw("   "),
-            Span::styled("Quantum Hall Effect in Graphene", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Quantum Hall Effect in Graphene",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
@@ -183,7 +214,10 @@ fn render(
         ])),
         ListItem::new(Line::from(vec![
             Span::raw("         "),
-            Span::styled("doi:10.1103/PhysRevLett.132.046", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "doi:10.1103/PhysRevLett.132.046",
+                Style::default().fg(Color::DarkGray),
+            ),
         ])),
     ];
 
@@ -195,7 +229,11 @@ fn render(
                 .title(" 문헌 (4) ")
                 .border_style(right_block_style),
         )
-        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD));
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        );
 
     f.render_stateful_widget(right_list, body[1], right_state);
 

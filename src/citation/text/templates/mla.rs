@@ -3,10 +3,8 @@
 //! Reference: Smith, John A., Bob C. Jones, and David E. Brown. "Title." Journal, vol. 42, no. 3, 2023, pp. 123-45.
 //! 3+ authors: first 1 then et al. In-text: (Smith, Jones, and Brown 130) — NO YEAR
 
-use crate::citation::text::helpers::{
-    format_pages, get_authors, parse_author_full,
-};
-use crate::citation::text::locale::{term, Term};
+use crate::citation::text::helpers::{format_pages, get_authors, parse_author_full};
+use crate::citation::text::locale::{Term, term};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -135,8 +133,14 @@ mod tests {
     fn test_mla_three_plus_et_al_reference() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("et al."), "mla 3+ et al in reference: {result}");
-        assert!(result.contains("\"Literary Analysis.\""), "mla title in quotes: {result}");
+        assert!(
+            result.contains("et al."),
+            "mla 3+ et al in reference: {result}"
+        );
+        assert!(
+            result.contains("\"Literary Analysis.\""),
+            "mla title in quotes: {result}"
+        );
         assert!(result.contains("vol. 42"), "mla vol: {result}");
         assert!(result.contains("no. 3"), "mla no: {result}");
         assert!(result.contains("pp. 123-145"), "mla pp: {result}");
@@ -152,8 +156,14 @@ mod tests {
             ..Default::default()
         };
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, John A. and Bob C. Jones"), "mla 2 authors: {result}");
-        assert!(!result.contains("et al."), "mla 2 authors no et al: {result}");
+        assert!(
+            result.contains("Smith, John A. and Bob C. Jones"),
+            "mla 2 authors: {result}"
+        );
+        assert!(
+            !result.contains("et al."),
+            "mla 2 authors no et al: {result}"
+        );
     }
 
     #[test]

@@ -14,11 +14,7 @@ impl GraphState {
     pub fn new(graph: CitationGraph, cache_hit: bool) -> Self {
         let node_count = graph.node_count();
         let render_mode = RenderMode::for_node_count(node_count);
-        let doc_ids: Vec<i64> = graph
-            .doc_to_node
-            .keys()
-            .copied()
-            .collect();
+        let doc_ids: Vec<i64> = graph.doc_to_node.keys().copied().collect();
         GraphState {
             doc_ids,
             graph,

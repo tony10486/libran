@@ -2,8 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::db::documents::Document;
 
-use super::action::AppAction;
 use super::AppState;
+use super::action::AppAction;
 
 pub(crate) fn handle_select_udc(state: &mut AppState, notation: Option<String>) {
     state.active_udc_notation = notation.clone();

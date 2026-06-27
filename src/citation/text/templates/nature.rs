@@ -3,9 +3,7 @@
 //! Reference: Smith, J. & Brown, D. Title. J. Name 42, 123-145 (2023).
 //! 6+ authors: first 1 then et al. In-text: [1]
 
-use crate::citation::text::helpers::{
-    format_pages, format_year, get_authors, parse_author,
-};
+use crate::citation::text::helpers::{format_pages, format_year, get_authors, parse_author};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -116,14 +114,26 @@ mod tests {
     fn test_nature_journal_article() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, J. & Brown, D."), "nature authors with &: {result}");
-        assert!(result.contains("Quantum Entanglement."), "nature title: {result}");
-        assert!(result.contains("42, 123-145 (2023)"), "nature vol pages year: {result}");
+        assert!(
+            result.contains("Smith, J. & Brown, D."),
+            "nature authors with &: {result}"
+        );
+        assert!(
+            result.contains("Quantum Entanglement."),
+            "nature title: {result}"
+        );
+        assert!(
+            result.contains("42, 123-145 (2023)"),
+            "nature vol pages year: {result}"
+        );
     }
 
     #[test]
     fn test_nature_six_plus_authors() {
-        let authors = (1..=7).map(|i| format!("Author{}", i)).collect::<Vec<_>>().join("; ");
+        let authors = (1..=7)
+            .map(|i| format!("Author{}", i))
+            .collect::<Vec<_>>()
+            .join("; ");
         let doc = Document {
             title: "Many".to_string(),
             authors: Some(authors),

@@ -22,8 +22,7 @@ static JOURNAL_PREFIXES: &[&str] = &[
     "DISCRETE MATH",
 ];
 
-static YEAR_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b(19[5-9]\d|20[0-3]\d)\b").unwrap());
+static YEAR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(19[5-9]\d|20[0-3]\d)\b").unwrap());
 
 // Trailing noise markers that end a journal name line:
 //  - ", VOL. 26" (volume number)
@@ -35,36 +34,31 @@ static JOURNAL_NOISE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i),?\s+(?:vol\.|no\.)\s*\d|,?\s+\d{1,4}\s*\(|\s+\d{4}\.\d{2}\s*:|\s+10\.\d{4,}/|,?\s+\d{4}\s*$").unwrap()
 });
 
-static DOWNLOAD_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\bdownload(?:ed)?\b").unwrap()
-});
+static DOWNLOAD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bdownload(?:ed)?\b").unwrap());
 
-static DOI_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)10\.\d{4,9}/[-._;()/:A-Z0-9]+[A-Z0-9]").unwrap()
-});
+static DOI_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)10\.\d{4,9}/[-._;()/:A-Z0-9]+[A-Z0-9]").unwrap());
 
 pub fn extract_journal_and_year(text: &str) -> (Option<String>, Option<i64>) {
     let first_page = text.split('\x0c').next().unwrap_or("");
     let first_10_pages: String = text.split('\x0c').take(10).collect::<Vec<_>>().join("\x0c");
 
-    let journal = JOURNAL_PREFIXES
-        .iter()
-        .find_map(|prefix| {
-            for line in first_page.lines().take(10) {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                let upper = trimmed.to_uppercase();
-                if upper.starts_with(prefix) {
-                    let name = clean_journal_name(trimmed);
-                    if name.to_uppercase().len() >= prefix.len() {
-                        return Some(name);
-                    }
+    let journal = JOURNAL_PREFIXES.iter().find_map(|prefix| {
+        for line in first_page.lines().take(10) {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let upper = trimmed.to_uppercase();
+            if upper.starts_with(prefix) {
+                let name = clean_journal_name(trimmed);
+                if name.to_uppercase().len() >= prefix.len() {
+                    return Some(name);
                 }
             }
-            None
-        });
+        }
+        None
+    });
 
     let year = extract_year(&first_10_pages);
 
@@ -154,7 +148,9 @@ mod tests {
 
     #[test]
     fn test_clean_journal_name_strips_volume_pages_doi() {
-        let cleaned = clean_journal_name("Linear Algebra and its Applications, 439 (2013) 3038–3043. 10.1016/j.laa.2013.08.039");
+        let cleaned = clean_journal_name(
+            "Linear Algebra and its Applications, 439 (2013) 3038–3043. 10.1016/j.laa.2013.08.039",
+        );
         assert_eq!(cleaned, "Linear Algebra and its Applications");
     }
 
@@ -176,7 +172,10 @@ mod tests {
     fn test_extract_journal_linear_algebra() {
         let text = "Linear Algebra and its Applications, 439 (2013) 3038–3043. 10.1016/j.laa.2013.08.039\nSome title\n";
         let (journal, year) = extract_journal_and_year(text);
-        assert_eq!(journal.as_deref(), Some("Linear Algebra and its Applications"));
+        assert_eq!(
+            journal.as_deref(),
+            Some("Linear Algebra and its Applications")
+        );
         assert_eq!(year, Some(2013));
     }
 }

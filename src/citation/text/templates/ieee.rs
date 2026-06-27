@@ -3,9 +3,7 @@
 //! Reference: J. A. Smith and B. C. Lee, "Title," J. Name, vol. 42, no. 3, pp. 123-145, 2023.
 //! 7+ authors: first 1 then et al. In-text: [1]
 
-use crate::citation::text::helpers::{
-    format_pages, format_year, get_authors,
-};
+use crate::citation::text::helpers::{format_pages, format_year, get_authors};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -14,10 +12,10 @@ fn format_ieee_authors(authors: &[String]) -> String {
         return String::new();
     }
     if authors.len() >= 7 {
-        let (last, first) = crate::citation::text::helpers::parse_author_full(&authors[0]);
+        let (last, first) = crate::citation::text::helpers::parse_author_full(&authors[0], None);
         let initials: String = first
             .split_whitespace()
-            .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic()))
+            .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
             .map(|c| format!("{}.", c.to_uppercase().collect::<String>()))
             .collect::<Vec<_>>()
             .join(" ");
@@ -132,8 +130,14 @@ mod tests {
     fn test_ieee_journal_article() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("J. A. Smith and B. C. Lee,"), "ieee authors initials first: {result}");
-        assert!(result.contains("\"Neural Network Design\","), "ieee title in quotes: {result}");
+        assert!(
+            result.contains("J. A. Smith and B. C. Lee,"),
+            "ieee authors initials first: {result}"
+        );
+        assert!(
+            result.contains("\"Neural Network Design\","),
+            "ieee title in quotes: {result}"
+        );
         assert!(result.contains("vol. 42"), "ieee vol: {result}");
         assert!(result.contains("no. 3"), "ieee no: {result}");
         assert!(result.contains("pp. 123-145"), "ieee pp: {result}");
@@ -142,7 +146,10 @@ mod tests {
 
     #[test]
     fn test_ieee_seven_plus_authors() {
-        let authors = (1..=8).map(|i| format!("Author{}", i)).collect::<Vec<_>>().join("; ");
+        let authors = (1..=8)
+            .map(|i| format!("Author{}", i))
+            .collect::<Vec<_>>()
+            .join("; ");
         let doc = Document {
             title: "Many".to_string(),
             authors: Some(authors),

@@ -231,14 +231,17 @@ CREATE TABLE IF NOT EXISTS citation_relations (
 CREATE INDEX IF NOT EXISTS idx_citation_citing ON citation_relations(citing_id);
 CREATE INDEX IF NOT EXISTS idx_citation_cited ON citation_relations(cited_id);
 
--- Per-document notes (one note per document)
+-- Per-document notes (multiple notes per document, markdown stored as plain text)
 CREATE TABLE IF NOT EXISTS document_notes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    document_id INTEGER NOT NULL UNIQUE,
+    document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     content     TEXT NOT NULL DEFAULT '',
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    note_type   TEXT NOT NULL DEFAULT 'general',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_document_notes_doc ON document_notes(document_id);
 
 -- Series: bundles multiple issues/volumes of the same publication
 -- (e.g., Lecture Notes in Mathematics, Journal of Number Theory)

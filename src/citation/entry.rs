@@ -3,11 +3,7 @@ use rusqlite::Connection;
 
 use super::match_refs::MatchStatus;
 
-pub fn add_manual_citation(
-    conn: &Connection,
-    source_id: i64,
-    target_id: i64,
-) -> Result<()> {
+pub fn add_manual_citation(conn: &Connection, source_id: i64, target_id: i64) -> Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO citation_relations (citing_id, cited_id, match_status, confidence, created_at, updated_at)
          VALUES (?1, ?2, 'manual', 1.0, datetime('now'), datetime('now'))",
@@ -16,11 +12,7 @@ pub fn add_manual_citation(
     Ok(())
 }
 
-pub fn add_bibtex_citation(
-    conn: &Connection,
-    source_id: i64,
-    target_id: i64,
-) -> Result<()> {
+pub fn add_bibtex_citation(conn: &Connection, source_id: i64, target_id: i64) -> Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO citation_relations (citing_id, cited_id, match_status, confidence, created_at, updated_at)
          VALUES (?1, ?2, 'bibtex_import', 1.0, datetime('now'), datetime('now'))",
@@ -154,41 +146,39 @@ fn parse_bibtex_fields(block: &str) -> Vec<(String, String)> {
                     state = ParseState::InValue;
                 }
             }
-            ParseState::InValue => {
-                match ch {
-                    '}' => {
-                        if depth > 1 {
-                            depth -= 1;
-                            value_buf.push(ch);
-                        } else if depth == 1 {
-                            depth -= 1;
-                            fields.push((name_buf.trim().to_lowercase(), value_buf.trim().to_string()));
-                            name_buf.clear();
-                            value_buf.clear();
-                            state = ParseState::InName;
-                        }
-                    }
-                    '"' => {
+            ParseState::InValue => match ch {
+                '}' => {
+                    if depth > 1 {
+                        depth -= 1;
+                        value_buf.push(ch);
+                    } else if depth == 1 {
+                        depth -= 1;
                         fields.push((name_buf.trim().to_lowercase(), value_buf.trim().to_string()));
                         name_buf.clear();
                         value_buf.clear();
                         state = ParseState::InName;
-                    }
-                    ',' if depth <= 1 => {
-                        fields.push((name_buf.trim().to_lowercase(), value_buf.trim().to_string()));
-                        name_buf.clear();
-                        value_buf.clear();
-                        state = ParseState::InName;
-                    }
-                    '{' => {
-                        depth += 1;
-                        value_buf.push(ch);
-                    }
-                    _ => {
-                        value_buf.push(ch);
                     }
                 }
-            }
+                '"' => {
+                    fields.push((name_buf.trim().to_lowercase(), value_buf.trim().to_string()));
+                    name_buf.clear();
+                    value_buf.clear();
+                    state = ParseState::InName;
+                }
+                ',' if depth <= 1 => {
+                    fields.push((name_buf.trim().to_lowercase(), value_buf.trim().to_string()));
+                    name_buf.clear();
+                    value_buf.clear();
+                    state = ParseState::InName;
+                }
+                '{' => {
+                    depth += 1;
+                    value_buf.push(ch);
+                }
+                _ => {
+                    value_buf.push(ch);
+                }
+            },
         }
     }
 
@@ -255,7 +245,10 @@ mod tests {
 "#;
         let entries = parse_bibtex(content);
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].title.as_deref(), Some("Deep Learning for Science"));
+        assert_eq!(
+            entries[0].title.as_deref(),
+            Some("Deep Learning for Science")
+        );
         assert_eq!(entries[0].year, Some(2023));
         assert_eq!(entries[0].doi.as_deref(), Some("10.1234/test"));
     }

@@ -60,7 +60,10 @@ const TOP_LEVEL: &[(&str, &str)] = &[
     ("A", "General Works"),
     ("B", "Philosophy, Psychology, Religion"),
     ("C", "Auxiliary Sciences of History"),
-    ("D", "World History and History of Europe, Asia, Africa, Australia, New Zealand, etc."),
+    (
+        "D",
+        "World History and History of Europe, Asia, Africa, Australia, New Zealand, etc.",
+    ),
     ("E", "History of the Americas"),
     ("F", "History of the Americas"),
     ("G", "Geography, Anthropology, Recreation"),

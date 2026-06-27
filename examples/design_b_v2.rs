@@ -1,22 +1,30 @@
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Frame, Terminal,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
-    Frame, Terminal,
 };
 use std::io::{self, stdout};
 
 #[derive(PartialEq)]
-enum Focus { Tree, Docs, Detail }
+enum Focus {
+    Tree,
+    Docs,
+    Detail,
+}
 
 #[derive(PartialEq)]
-enum Mode { Normal, Search, Help }
+enum Mode {
+    Normal,
+    Search,
+    Help,
+}
 
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
@@ -38,11 +46,22 @@ fn main() -> io::Result<()> {
 
     loop {
         terminal.draw(|f| {
-            render(f, &mut tree_state, &mut doc_state, &focus, &mode, &search_input, show_detail, selected_idx);
+            render(
+                f,
+                &mut tree_state,
+                &mut doc_state,
+                &focus,
+                &mode,
+                &search_input,
+                show_detail,
+                selected_idx,
+            );
         })?;
 
         if let Event::Key(key) = event::read()? {
-            if key.kind != KeyEventKind::Press { continue; }
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
 
             if mode == Mode::Help {
                 match key.code {
@@ -54,10 +73,19 @@ fn main() -> io::Result<()> {
 
             if mode == Mode::Search {
                 match key.code {
-                    KeyCode::Esc => { mode = Mode::Normal; search_input.clear(); }
-                    KeyCode::Enter => { mode = Mode::Normal; }
-                    KeyCode::Backspace => { search_input.pop(); }
-                    KeyCode::Char(c) => { search_input.push(c); }
+                    KeyCode::Esc => {
+                        mode = Mode::Normal;
+                        search_input.clear();
+                    }
+                    KeyCode::Enter => {
+                        mode = Mode::Normal;
+                    }
+                    KeyCode::Backspace => {
+                        search_input.pop();
+                    }
+                    KeyCode::Char(c) => {
+                        search_input.push(c);
+                    }
                     _ => {}
                 }
                 continue;
@@ -65,7 +93,11 @@ fn main() -> io::Result<()> {
 
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => {
-                    if show_detail { show_detail = false; } else { break; }
+                    if show_detail {
+                        show_detail = false;
+                    } else {
+                        break;
+                    }
                 }
                 KeyCode::Tab => {
                     focus = match focus {
@@ -75,20 +107,16 @@ fn main() -> io::Result<()> {
                         Focus::Detail => Focus::Tree,
                     };
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    match focus {
-                        Focus::Tree => tree_state.select_next(),
-                        Focus::Docs if !show_detail => doc_state.select_next(),
-                        _ => {}
-                    }
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    match focus {
-                        Focus::Tree => tree_state.select_previous(),
-                        Focus::Docs if !show_detail => doc_state.select_previous(),
-                        _ => {}
-                    }
-                }
+                KeyCode::Down | KeyCode::Char('j') => match focus {
+                    Focus::Tree => tree_state.select_next(),
+                    Focus::Docs if !show_detail => doc_state.select_next(),
+                    _ => {}
+                },
+                KeyCode::Up | KeyCode::Char('k') => match focus {
+                    Focus::Tree => tree_state.select_previous(),
+                    Focus::Docs if !show_detail => doc_state.select_previous(),
+                    _ => {}
+                },
                 KeyCode::Enter => {
                     if focus == Focus::Docs && !show_detail {
                         selected_idx = doc_state.selected();
@@ -98,8 +126,13 @@ fn main() -> io::Result<()> {
                         show_detail = false;
                     }
                 }
-                KeyCode::Char('/') => { mode = Mode::Search; search_input.clear(); }
-                KeyCode::Char('?') => { mode = Mode::Help; }
+                KeyCode::Char('/') => {
+                    mode = Mode::Search;
+                    search_input.clear();
+                }
+                KeyCode::Char('?') => {
+                    mode = Mode::Help;
+                }
                 _ => {}
             }
         }
@@ -157,7 +190,11 @@ fn render_list_mode(
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(area);
 
     render_header(f, chunks[0], search_input, *mode == Mode::Search);
@@ -184,7 +221,11 @@ fn render_detail_mode(
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(area);
 
     render_header(f, chunks[0], search_input, *mode == Mode::Search);
@@ -203,7 +244,10 @@ fn render_detail_mode(
 fn render_header(f: &mut Frame, area: Rect, _search_input: &str, _is_searching: bool) {
     let header = Paragraph::new(Line::from(vec![
         Span::raw("  "),
-        Span::styled("Libran", Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Libran",
+            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
+        ),
         Span::raw("  "),
         Span::styled("│", Style::default().fg(PRIMARY_DIM)),
         Span::raw("  "),
@@ -225,9 +269,10 @@ fn render_tree(f: &mut Frame, area: Rect, state: &mut ListState, focused: bool) 
     let border_color = if focused { PRIMARY } else { PRIMARY_DIM };
 
     let items: Vec<ListItem> = vec![
-        ListItem::new(Line::from(vec![
-            Span::styled("  프로젝트", Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)),
-        ])),
+        ListItem::new(Line::from(vec![Span::styled(
+            "  프로젝트",
+            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
+        )])),
         ListItem::new(Line::from(vec![
             Span::raw("    "),
             Span::styled("ML 가속", Style::default().fg(TEXT)),
@@ -237,9 +282,10 @@ fn render_tree(f: &mut Frame, area: Rect, state: &mut ListState, focused: bool) 
             Span::styled("CUI 렌더러", Style::default().fg(TEXT)),
         ])),
         ListItem::new(""),
-        ListItem::new(Line::from(vec![
-            Span::styled("  UDC 분류", Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)),
-        ])),
+        ListItem::new(Line::from(vec![Span::styled(
+            "  UDC 분류",
+            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
+        )])),
         ListItem::new(Line::from(vec![
             Span::raw("  ▸ "),
             Span::styled("0  ", Style::default().fg(ACCENT)),
@@ -291,9 +337,10 @@ fn render_tree(f: &mut Frame, area: Rect, state: &mut ListState, focused: bool) 
             Span::styled("(7)", Style::default().fg(TEXT_DIM)),
         ])),
         ListItem::new(""),
-        ListItem::new(Line::from(vec![
-            Span::styled("  PhySH", Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)),
-        ])),
+        ListItem::new(Line::from(vec![Span::styled(
+            "  PhySH",
+            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
+        )])),
         ListItem::new(Line::from(vec![
             Span::raw("  ▸ "),
             Span::styled("응축물질", Style::default().fg(TEXT)),
@@ -324,13 +371,41 @@ fn render_doc_list(f: &mut Frame, area: Rect, state: &mut ListState, focused: bo
     let border_color = if focused { PRIMARY } else { PRIMARY_DIM };
 
     let items: Vec<ListItem> = vec![
-        doc_item("517.9", "Nonisothermal Diffuse Interface Model", "Smith, J. (2024)", "doi:10.33048/SIBJIM.2022.25.103", "Smith2024", false),
+        doc_item(
+            "517.9",
+            "Nonisothermal Diffuse Interface Model",
+            "Smith, J. (2024)",
+            "doi:10.33048/SIBJIM.2022.25.103",
+            "Smith2024",
+            false,
+        ),
         ListItem::new(""),
-        doc_item("51-72", "Mathematical Modeling in Physics", "Kim, D. (2023)", "doi:10.1006/jmbi.2023.2354", "Kim2023", false),
+        doc_item(
+            "51-72",
+            "Mathematical Modeling in Physics",
+            "Kim, D. (2023)",
+            "doi:10.1006/jmbi.2023.2354",
+            "Kim2023",
+            false,
+        ),
         ListItem::new(""),
-        doc_item("35-XX", "PDE Solutions for Nonlinear Systems", "Lee, S. · Park, M. (2023)", "arXiv:2301.00123", "Lee2023", true),
+        doc_item(
+            "35-XX",
+            "PDE Solutions for Nonlinear Systems",
+            "Lee, S. · Park, M. (2023)",
+            "arXiv:2301.00123",
+            "Lee2023",
+            true,
+        ),
         ListItem::new(""),
-        doc_item("53", "Quantum Hall Effect in Graphene", "Zhang, Y. (2024)", "doi:10.1103/PhysRevLett.132.046", "Zhang2024", false),
+        doc_item(
+            "53",
+            "Quantum Hall Effect in Graphene",
+            "Zhang, Y. (2024)",
+            "doi:10.1103/PhysRevLett.132.046",
+            "Zhang2024",
+            false,
+        ),
     ];
 
     let list = List::default()
@@ -358,15 +433,29 @@ fn render_doc_list(f: &mut Frame, area: Rect, state: &mut ListState, focused: bo
     f.render_stateful_widget(list, area, state);
 }
 
-fn doc_item<'a>(code: &'a str, title: &'a str, author: &'a str, id: &'a str, key: &'a str, selected: bool) -> ListItem<'a> {
+fn doc_item<'a>(
+    code: &'a str,
+    title: &'a str,
+    author: &'a str,
+    id: &'a str,
+    key: &'a str,
+    selected: bool,
+) -> ListItem<'a> {
     let marker = if selected { "◆ " } else { "  " };
-    let marker_style = if selected { Style::default().fg(ACCENT) } else { Style::default() };
+    let marker_style = if selected {
+        Style::default().fg(ACCENT)
+    } else {
+        Style::default()
+    };
 
     ListItem::new(vec![
         Line::from(vec![
             Span::styled(marker, marker_style),
             Span::styled(format!("{:<6} ", code), Style::default().fg(ACCENT)),
-            Span::styled(title, Style::default().fg(TEXT).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                title,
+                Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::raw("          "),
@@ -386,18 +475,36 @@ fn render_detail_panel(f: &mut Frame, area: Rect, _selected_idx: Option<usize>, 
         Line::from(""),
         Line::from(vec![
             Span::styled("  제목   ", Style::default().fg(PRIMARY)),
-            Span::styled("PDE Solutions for Nonlinear Systems", Style::default().fg(TEXT).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "PDE Solutions for Nonlinear Systems",
+                Style::default().fg(TEXT).add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  저자   ", Style::default().fg(PRIMARY)), Span::styled("Lee, S. · Park, M.", Style::default().fg(TEXT))]),
+        Line::from(vec![
+            Span::styled("  저자   ", Style::default().fg(PRIMARY)),
+            Span::styled("Lee, S. · Park, M.", Style::default().fg(TEXT)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  저널   ", Style::default().fg(PRIMARY)), Span::styled("—", Style::default().fg(TEXT_DIM))]),
+        Line::from(vec![
+            Span::styled("  저널   ", Style::default().fg(PRIMARY)),
+            Span::styled("—", Style::default().fg(TEXT_DIM)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  연도   ", Style::default().fg(PRIMARY)), Span::styled("2023", Style::default().fg(TEXT))]),
+        Line::from(vec![
+            Span::styled("  연도   ", Style::default().fg(PRIMARY)),
+            Span::styled("2023", Style::default().fg(TEXT)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  DOI    ", Style::default().fg(PRIMARY)), Span::styled("—", Style::default().fg(TEXT_DIM))]),
+        Line::from(vec![
+            Span::styled("  DOI    ", Style::default().fg(PRIMARY)),
+            Span::styled("—", Style::default().fg(TEXT_DIM)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  arXiv  ", Style::default().fg(PRIMARY)), Span::styled("2301.00123", Style::default().fg(Color::Blue))]),
+        Line::from(vec![
+            Span::styled("  arXiv  ", Style::default().fg(PRIMARY)),
+            Span::styled("2301.00123", Style::default().fg(Color::Blue)),
+        ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  분류   ", Style::default().fg(PRIMARY)),
@@ -412,32 +519,63 @@ fn render_detail_panel(f: &mut Frame, area: Rect, _selected_idx: Option<usize>, 
             Span::styled("(MSC)", Style::default().fg(TEXT_DIM)),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  키     ", Style::default().fg(PRIMARY)), Span::styled("Lee2023", Style::default().fg(ACCENT2))]),
+        Line::from(vec![
+            Span::styled("  키     ", Style::default().fg(PRIMARY)),
+            Span::styled("Lee2023", Style::default().fg(ACCENT2)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  파일   ", Style::default().fg(PRIMARY)), Span::styled("~/.libran/library/Lee2023.pdf", Style::default().fg(TEXT_DIM))]),
+        Line::from(vec![
+            Span::styled("  파일   ", Style::default().fg(PRIMARY)),
+            Span::styled(
+                "~/.libran/library/Lee2023.pdf",
+                Style::default().fg(TEXT_DIM),
+            ),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  출처   ", Style::default().fg(PRIMARY)), Span::styled("PDF 자체 추출", Style::default().fg(TEXT_DIM))]),
+        Line::from(vec![
+            Span::styled("  출처   ", Style::default().fg(PRIMARY)),
+            Span::styled("PDF 자체 추출", Style::default().fg(TEXT_DIM)),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  ──────── 초록 ────────", Style::default().fg(PRIMARY_DIM))]),
+        Line::from(vec![Span::styled(
+            "  ──────── 초록 ────────",
+            Style::default().fg(PRIMARY_DIM),
+        )]),
         Line::from(""),
-        Line::from(vec![Span::raw("  " ), Span::styled("비선형 편미분방정식의 해법을 다룬 논문으로,", Style::default().fg(TEXT))]),
-        Line::from(vec![Span::raw("  " ), Span::styled("분해법과 수치 해석을 결합한 접근을 제시한다.", Style::default().fg(TEXT))]),
-        Line::from(vec![Span::raw("  " ), Span::styled("특히 반응-확산 계의 해 존재성을 증명하며...", Style::default().fg(TEXT_DIM))]),
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                "비선형 편미분방정식의 해법을 다룬 논문으로,",
+                Style::default().fg(TEXT),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                "분해법과 수치 해석을 결합한 접근을 제시한다.",
+                Style::default().fg(TEXT),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                "특히 반응-확산 계의 해 존재성을 증명하며...",
+                Style::default().fg(TEXT_DIM),
+            ),
+        ]),
     ];
 
-    let detail = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color))
-                .style(Style::default().bg(SURFACE))
-                .title_top(Line::from(vec![
-                    Span::raw(" "),
-                    Span::styled("상세", Style::default().fg(TEXT)),
-                    Span::raw(" "),
-                ])),
-        );
+    let detail = Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color))
+            .style(Style::default().bg(SURFACE))
+            .title_top(Line::from(vec![
+                Span::raw(" "),
+                Span::styled("상세", Style::default().fg(TEXT)),
+                Span::raw(" "),
+            ])),
+    );
 
     f.render_widget(detail, area);
 }
@@ -456,14 +594,15 @@ fn render_footer(f: &mut Frame, area: Rect) {
 
     let mut spans = vec![Span::raw(" ")];
     for (i, (key, label)) in keys.iter().enumerate() {
-        if i > 0 { spans.push(Span::raw("  ")); }
+        if i > 0 {
+            spans.push(Span::raw("  "));
+        }
         spans.push(Span::styled(*key, Style::default().fg(PRIMARY)));
         spans.push(Span::raw(" "));
         spans.push(Span::styled(*label, Style::default().fg(TEXT_DIM)));
     }
 
-    let footer = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(SURFACE));
+    let footer = Paragraph::new(Line::from(spans)).style(Style::default().bg(SURFACE));
     f.render_widget(footer, area);
 }
 
@@ -500,9 +639,12 @@ fn render_help_overlay(f: &mut Frame, area: Rect) {
 
     let help_lines = vec![
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  단축키", Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  단축키",
+            Style::default()
+                .fg(PRIMARY)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Tab      ", Style::default().fg(PRIMARY)),
@@ -551,14 +693,23 @@ fn render_help_overlay(f: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(vec![
             Span::styled("  q / Esc  ", Style::default().fg(PRIMARY)),
-            Span::styled("종료 (상세 보기 중일 시 상세 닫기)", Style::default().fg(TEXT)),
+            Span::styled(
+                "종료 (상세 보기 중일 시 상세 닫기)",
+                Style::default().fg(TEXT),
+            ),
         ]),
         Line::from(""),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Drag & Drop", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  Drag & Drop",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
-            Span::styled("PDF 파일을 터미널로 드래그하여 추가", Style::default().fg(TEXT)),
+            Span::styled(
+                "PDF 파일을 터미널로 드래그하여 추가",
+                Style::default().fg(TEXT),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -568,18 +719,20 @@ fn render_help_overlay(f: &mut Frame, area: Rect) {
         ]),
     ];
 
-    let help = Paragraph::new(help_lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(PRIMARY))
-                .style(Style::default().bg(Color::Black))
-                .title_top(Line::from(vec![
-                    Span::raw(" "),
-                    Span::styled("Libran — 도움말", Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD)),
-                    Span::raw(" "),
-                ])),
-        );
+    let help = Paragraph::new(help_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(PRIMARY))
+            .style(Style::default().bg(Color::Black))
+            .title_top(Line::from(vec![
+                Span::raw(" "),
+                Span::styled(
+                    "Libran — 도움말",
+                    Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" "),
+            ])),
+    );
     f.render_widget(help, popup_area);
 }
 

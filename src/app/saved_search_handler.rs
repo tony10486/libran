@@ -31,23 +31,51 @@ pub fn handle_save_current_search_named(state: &mut AppState, name: String) {
 }
 
 /// Apply a saved search.
+///
+/// If the saved search has structured `filters_json` criteria, execute the
+/// criteria-based query directly. Otherwise fall back to the FTS query string.
 pub fn handle_select_saved_search(state: &mut AppState, search_id: i64) {
     let db = state.db.clone();
-    let apply_result: Option<(String, String)> = if let Ok(conn) = db.lock() {
-        saved_searches::get_by_id(&conn, search_id)
-            .ok()
-            .flatten()
-            .and_then(|s| s.fts_query.map(|q| (s.name, q)))
+    let search = if let Ok(conn) = db.lock() {
+        saved_searches::get_by_id(&conn, search_id).ok().flatten()
     } else {
         None
     };
 
-    if let Some((name, query)) = apply_result {
+    let Some(s) = search else {
+        state.set_status("저장된 검색을 찾을 수 없음");
+        return;
+    };
+
+    let has_criteria = s
+        .filters_json
+        .as_ref()
+        .is_some_and(|j| !j.is_empty() && j != "{}");
+
+    if has_criteria && let Ok(conn) = db.lock() {
+        match saved_searches::execute_saved_search(&conn, &s) {
+            Ok(docs) => {
+                state.documents = docs;
+                state.document_count = state.documents.len();
+                state.list_cursor = 0;
+                state.search_input.clear();
+                state.set_status(&format!("검색 적용: {}", s.name));
+                state.dirty = true;
+                return;
+            }
+            Err(e) => {
+                state.set_status(&format!("검색 실행 실패: {}", e));
+                return;
+            }
+        }
+    }
+
+    if let Some(query) = s.fts_query {
         state.search_input = query;
-        state.set_status(&format!("검색 적용: {}", name));
+        state.set_status(&format!("검색 적용: {}", s.name));
         state.reload_documents();
     } else {
-        state.set_status("저장된 검색을 찾을 수 없음");
+        state.set_status("저장된 검색에 조건이 없음");
     }
 }
 

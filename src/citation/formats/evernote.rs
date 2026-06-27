@@ -1,6 +1,4 @@
-use crate::citation::text::{
-    render_citation, CitationLanguage, CitationStyle, DisplayMode,
-};
+use crate::citation::text::{CitationLanguage, CitationStyle, DisplayMode, render_citation};
 use crate::db::documents::Document;
 use anyhow::Result;
 use std::io::Write;
@@ -26,9 +24,13 @@ fn write_note(writer: &mut impl Write, doc: &Document) -> Result<()> {
 
     write!(writer, "<title>{}</title>", html_escape(&doc.title))?;
 
-    let citation_text =
-        render_citation(doc, CitationStyle::Apa7th, CitationLanguage::English, DisplayMode::InText)
-            .unwrap_or_else(|_| doc.title.clone());
+    let citation_text = render_citation(
+        doc,
+        CitationStyle::Apa7th,
+        CitationLanguage::English,
+        DisplayMode::InText,
+    )
+    .unwrap_or_else(|_| doc.title.clone());
     let content = build_content(&citation_text, doc);
     write!(writer, "<content><![CDATA[{content}]]></content>")?;
 
@@ -61,9 +63,11 @@ fn write_note(writer: &mut impl Write, doc: &Document) -> Result<()> {
 
 fn build_content(citation_text: &str, doc: &Document) -> String {
     let mut body = String::new();
-    body.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+    body.push_str(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
                    <!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml.dtd\">\
-                   <en-note>");
+                   <en-note>",
+    );
     body.push_str(&format!("<div>{}</div>", citation_text));
 
     if let Some(abstract_text) = &doc.abstract_text {
@@ -134,7 +138,10 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
         // Then the ENEX envelope is present
         assert!(out.contains("<en-export "), "missing en-export root: {out}");
-        assert!(out.contains("</en-export>"), "missing en-export footer: {out}");
+        assert!(
+            out.contains("</en-export>"),
+            "missing en-export footer: {out}"
+        );
         // And a note element wraps the document
         assert!(out.contains("<note>"), "missing note element: {out}");
         assert!(out.contains("</note>"), "missing note close: {out}");
@@ -148,7 +155,10 @@ mod tests {
             out.contains("<content><![CDATA["),
             "missing content CDATA open: {out}"
         );
-        assert!(out.contains("<en-note>"), "missing en-note in content: {out}");
+        assert!(
+            out.contains("<en-note>"),
+            "missing en-note in content: {out}"
+        );
         // And the APA citation text appears inside the content
         assert!(
             out.contains("Smith, J. (2023). Deep Learning."),

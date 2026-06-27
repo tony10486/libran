@@ -1,13 +1,13 @@
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Table, Row as TableRow, Cell};
-use ratatui::Frame;
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row as TableRow, Table};
 
 use crate::app::AppState;
+use crate::citation::MatchStatus;
 use crate::citation::graph::RenderMode;
 use crate::ui::theme;
-use crate::citation::MatchStatus;
 use petgraph::visit::EdgeRef;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -36,7 +36,12 @@ fn render_empty(frame: &mut Frame, area: Rect) {
     frame.render_widget(msg, inner);
 }
 
-fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::app::graph_state::GraphState) {
+fn render_visual(
+    frame: &mut Frame,
+    area: Rect,
+    _state: &AppState,
+    gs: &crate::app::graph_state::GraphState,
+) {
     let cache_tag = if gs.cache_hit { " [캐시]" } else { "" };
     let node_count = gs.graph.node_count();
     let edge_count = gs.graph.inner.edge_count();
@@ -45,8 +50,13 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme::accent_primary()))
         .title(Span::styled(
-            format!(" 인용 그래프 ({} 노드, {} 에지){} ", node_count, edge_count, cache_tag),
-            Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
+            format!(
+                " 인용 그래프 ({} 노드, {} 에지){} ",
+                node_count, edge_count, cache_tag
+            ),
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::BOLD),
         ))
         .style(Style::default().fg(theme::fg()).bg(theme::bg()));
 
@@ -64,9 +74,15 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             Style::default().fg(theme::dim()),
         )));
     } else {
-        let max_row = layout.node_positions.iter().map(|p| p.row).max().unwrap_or(0) as usize;
+        let max_row = layout
+            .node_positions
+            .iter()
+            .map(|p| p.row)
+            .max()
+            .unwrap_or(0) as usize;
 
-        let mut row_content: std::collections::HashMap<usize, Vec<Span>> = std::collections::HashMap::new();
+        let mut row_content: std::collections::HashMap<usize, Vec<Span>> =
+            std::collections::HashMap::new();
 
         for nl in &layout.node_positions {
             let node_idx = petgraph::graph::NodeIndex::new(nl.node_idx);
@@ -79,9 +95,13 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             let is_high_cite = node.citation_count >= 3;
 
             let label_style = if is_focused {
-                Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme::selected())
+                    .add_modifier(Modifier::BOLD)
             } else if is_high_cite {
-                Style::default().fg(theme::title_fg()).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme::title_fg())
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme::fg())
             };
@@ -93,7 +113,11 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             };
 
             let indent = (nl.col as usize).min(inner.width as usize);
-            let padding = if indent > 0 { " ".repeat(indent) } else { String::new() };
+            let padding = if indent > 0 {
+                " ".repeat(indent)
+            } else {
+                String::new()
+            };
 
             let spans = row_content.entry(nl.row as usize).or_default();
             if !spans.is_empty() {
@@ -122,7 +146,10 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
 
         let focused_info = gs.focused_node.and_then(|idx| {
             let nidx = petgraph::graph::NodeIndex::new(idx);
-            gs.graph.inner.node_weight(nidx).map(|n| (n.doc_id, n.label.clone(), n.citation_count))
+            gs.graph
+                .inner
+                .node_weight(nidx)
+                .map(|n| (n.doc_id, n.label.clone(), n.citation_count))
         });
 
         if let Some((doc_id, label, cite_count)) = focused_info {
@@ -130,7 +157,10 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
             lines.push(Line::from(vec![
                 Span::styled("  포커스: ", Style::default().fg(theme::dim())),
                 Span::styled(label_owned, Style::default().fg(theme::selected())),
-                Span::styled(format!(" (id:{}, 인용:{}건)", doc_id, cite_count), Style::default().fg(theme::dim())),
+                Span::styled(
+                    format!(" (id:{}, 인용:{}건)", doc_id, cite_count),
+                    Style::default().fg(theme::dim()),
+                ),
             ]));
         }
     }
@@ -153,7 +183,12 @@ fn render_visual(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::a
     frame.render_widget(para, inner);
 }
 
-fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::app::graph_state::GraphState) {
+fn render_table(
+    frame: &mut Frame,
+    area: Rect,
+    _state: &AppState,
+    gs: &crate::app::graph_state::GraphState,
+) {
     let cache_tag = if gs.cache_hit { " [캐시]" } else { "" };
     let node_count = gs.graph.node_count();
     let edge_count = gs.graph.inner.edge_count();
@@ -162,8 +197,13 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme::accent_primary()))
         .title(Span::styled(
-            format!(" 인용 그래프 표 ({}, {}){} ", node_count, edge_count, cache_tag),
-            Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
+            format!(
+                " 인용 그래프 표 ({}, {}){} ",
+                node_count, edge_count, cache_tag
+            ),
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::BOLD),
         ))
         .style(Style::default().fg(theme::fg()).bg(theme::bg()));
 
@@ -171,10 +211,26 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
     frame.render_widget(block, area);
 
     let header = TableRow::new(vec![
-        Cell::from("인용 문헌").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
-        Cell::from("피인용 문헌").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
-        Cell::from("매치").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
-        Cell::from("신뢰도").style(Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)),
+        Cell::from("인용 문헌").style(
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("피인용 문헌").style(
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("매치").style(
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("신뢰도").style(
+            Style::default()
+                .fg(theme::accent_primary())
+                .add_modifier(Modifier::BOLD),
+        ),
     ]);
 
     let mut rows: Vec<TableRow> = Vec::new();
@@ -194,7 +250,9 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
             || gs.focused_node == Some(edge_ref.target().index());
 
         let row_style = if is_focused {
-            Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme::selected())
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme::fg())
         };
@@ -214,10 +272,18 @@ fn render_table(frame: &mut Frame, area: Rect, _state: &AppState, gs: &crate::ap
         }
     }
 
-    let table = Table::new(rows, [Constraint::Length(20), Constraint::Length(20), Constraint::Length(10), Constraint::Length(8)])
-        .header(header)
-        .style(Style::default().fg(theme::fg()).bg(theme::bg()))
-        .block(Block::default().style(Style::default().fg(theme::fg()).bg(theme::bg())));
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(20),
+            Constraint::Length(20),
+            Constraint::Length(10),
+            Constraint::Length(8),
+        ],
+    )
+    .header(header)
+    .style(Style::default().fg(theme::fg()).bg(theme::bg()))
+    .block(Block::default().style(Style::default().fg(theme::fg()).bg(theme::bg())));
 
     frame.render_widget(table, inner);
 }

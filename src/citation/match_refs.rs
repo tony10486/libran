@@ -126,9 +126,7 @@ fn find_by_title_year(conn: &Connection, title: &str, year: Option<i64>) -> Resu
             |row| row.get(0),
         )
         .ok()
-        .and_then(|candidate_id| {
-            verify_title_match(conn, candidate_id, &norm)
-        })
+        .and_then(|candidate_id| verify_title_match(conn, candidate_id, &norm))
     } else {
         let mut stmt = conn.prepare("SELECT id, title FROM documents")?;
         let rows = stmt.query_map([], |row| {
@@ -195,7 +193,10 @@ pub fn normalize_title(title: &str) -> String {
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == ' ')
         .collect();
-    let words: Vec<&str> = stripped.split_whitespace().filter(|w| *w != "the" && *w != "a" && *w != "an").collect();
+    let words: Vec<&str> = stripped
+        .split_whitespace()
+        .filter(|w| *w != "the" && *w != "a" && *w != "an")
+        .collect();
     words.join(" ")
 }
 
@@ -210,7 +211,10 @@ mod tests {
 
     #[test]
     fn test_normalize_title_case_insensitive() {
-        assert_eq!(normalize_title("Deep Learning"), normalize_title("deep learning"));
+        assert_eq!(
+            normalize_title("Deep Learning"),
+            normalize_title("deep learning")
+        );
     }
 
     #[test]

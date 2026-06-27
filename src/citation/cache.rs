@@ -43,11 +43,7 @@ pub fn compute_edge_version(conn: &Connection, doc_ids: &[i64]) -> Result<i64> {
 
 const REGEN_THRESHOLD: i64 = 5;
 
-pub fn should_regenerate(
-    conn: &Connection,
-    cache_key: &str,
-    new_doc_ids: &[i64],
-) -> Result<bool> {
+pub fn should_regenerate(conn: &Connection, cache_key: &str, new_doc_ids: &[i64]) -> Result<bool> {
     let cached = lookup_cache(conn, cache_key)?;
 
     let Some(entry) = cached else {
@@ -65,9 +61,7 @@ pub fn should_regenerate(
         .filter_map(|s| s.parse::<i64>().ok())
         .collect();
 
-    let delta_count = new_docs_in_set
-        .difference(&cached_docs)
-        .count() as i64;
+    let delta_count = new_docs_in_set.difference(&cached_docs).count() as i64;
 
     Ok(delta_count >= REGEN_THRESHOLD)
 }

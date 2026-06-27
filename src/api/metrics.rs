@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::time::Duration as StdDuration;
 
@@ -48,7 +48,11 @@ pub struct AuthorMetrics {
 }
 
 pub fn cache_key(backend: MetricsBackend, author_name: &str) -> String {
-    format!("metrics:{}:{}", backend.as_str(), author_name.to_lowercase())
+    format!(
+        "metrics:{}:{}",
+        backend.as_str(),
+        author_name.to_lowercase()
+    )
 }
 
 pub fn get_cached_metrics(
@@ -137,9 +141,7 @@ pub async fn fetch_author_metrics(
 
     for attempt in 0..=MAX_RETRIES {
         let result = match backend {
-            MetricsBackend::SemanticScholar => {
-                fetch_from_semantic_scholar(author_name).await
-            }
+            MetricsBackend::SemanticScholar => fetch_from_semantic_scholar(author_name).await,
             MetricsBackend::OpenAlex => fetch_from_openalex(api_key, author_name).await,
         };
 
@@ -172,7 +174,9 @@ async fn fetch_from_semantic_scholar(author_name: &str) -> Result<AuthorMetrics>
     let body = resp.text().await?;
 
     if status.as_u16() == 429 {
-        anyhow::bail!("Semantic Scholar 요청 제한 초과 (429). 잠시 후 재시도하거나 OpenAlex(K 키)를 사용하세요.");
+        anyhow::bail!(
+            "Semantic Scholar 요청 제한 초과 (429). 잠시 후 재시도하거나 OpenAlex(K 키)를 사용하세요."
+        );
     }
     if !status.is_success() {
         anyhow::bail!("Semantic Scholar 오류: HTTP {}", status);
@@ -218,8 +222,8 @@ async fn fetch_from_openalex(api_key: Option<&str>, author_name: &str) -> Result
         anyhow::bail!("OpenAlex 오류: HTTP {}", status);
     }
 
-    let resp_data: OpenAlexListResponse = serde_json::from_str(&body)
-        .map_err(|e| anyhow::anyhow!("OpenAlex 응답 파싱 실패: {e}"))?;
+    let resp_data: OpenAlexListResponse =
+        serde_json::from_str(&body).map_err(|e| anyhow::anyhow!("OpenAlex 응답 파싱 실패: {e}"))?;
 
     let author = resp_data
         .results

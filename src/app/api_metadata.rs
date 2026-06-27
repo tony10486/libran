@@ -2,8 +2,8 @@ use crate::api;
 use crate::db::documents;
 use crate::pdf;
 
-use super::action::AppAction;
 use super::AppState;
+use super::action::AppAction;
 
 pub(crate) fn try_api_lookup(
     tx: tokio::sync::mpsc::Sender<AppAction>,
@@ -18,78 +18,74 @@ pub(crate) fn try_api_lookup(
     tokio::spawn(async move {
         if let Some(doi) = doi {
             match api::crossref::create_polite_http_client(None) {
-                Ok(client) => {
-                    match api::crossref::fetch_by_doi(&client, &doi).await {
-                        Ok(body) => {
-                            if let Some(meta) = parse_crossref_response(&body) {
-                                let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
-                            } else {
-                                let _ = tx
-                                    .send(AppAction::ApiLookupSkipped(
-                                        "CrossRef 응답 파싱 실패".to_string(),
-                                    ))
-                                    .await;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
+                Ok(client) => match api::crossref::fetch_by_doi(&client, &doi).await {
+                    Ok(body) => {
+                        if let Some(meta) = parse_crossref_response(&body) {
+                            let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
+                        } else {
+                            let _ = tx
+                                .send(AppAction::ApiLookupSkipped(
+                                    "CrossRef 응답 파싱 실패".to_string(),
+                                ))
+                                .await;
                         }
                     }
-                }
+                    Err(e) => {
+                        let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
+                    }
+                },
                 Err(e) => {
                     let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
                 }
             }
         } else if let Some(arxiv) = arxiv_id {
             match api::arxiv::create_client() {
-                Ok(client) => {
-                    match api::arxiv::fetch_by_arxiv_id(&client, &arxiv).await {
-                        Ok(body) => {
-                            if let Some(meta) = parse_arxiv_response(&body) {
-                                let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
-                            } else {
-                                let _ = tx
-                                    .send(AppAction::ApiLookupSkipped(
-                                        "arXiv 응답 파싱 실패".to_string(),
-                                    ))
-                                    .await;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
+                Ok(client) => match api::arxiv::fetch_by_arxiv_id(&client, &arxiv).await {
+                    Ok(body) => {
+                        if let Some(meta) = parse_arxiv_response(&body) {
+                            let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
+                        } else {
+                            let _ = tx
+                                .send(AppAction::ApiLookupSkipped(
+                                    "arXiv 응답 파싱 실패".to_string(),
+                                ))
+                                .await;
                         }
                     }
-                }
+                    Err(e) => {
+                        let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
+                    }
+                },
                 Err(e) => {
                     let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
                 }
             }
         } else if mode == api::ApiMode::AutoFallback {
             match api::crossref::create_polite_http_client(None) {
-                Ok(client) => {
-                    match api::crossref::search_by_title(&client, &title).await {
-                        Ok(body) => {
-                            if let Some(meta) = parse_crossref_search_response(&body) {
-                                let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
-                            } else {
-                                let _ = tx
-                                    .send(AppAction::ApiLookupSkipped(
-                                        "제목 검색 결과 없음".to_string(),
-                                    ))
-                                    .await;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
+                Ok(client) => match api::crossref::search_by_title(&client, &title).await {
+                    Ok(body) => {
+                        if let Some(meta) = parse_crossref_search_response(&body) {
+                            let _ = tx.send(AppAction::ApiLookupSuccess(meta, doc_id)).await;
+                        } else {
+                            let _ = tx
+                                .send(AppAction::ApiLookupSkipped(
+                                    "제목 검색 결과 없음".to_string(),
+                                ))
+                                .await;
                         }
                     }
-                }
+                    Err(e) => {
+                        let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
+                    }
+                },
                 Err(e) => {
                     let _ = tx.send(AppAction::ApiLookupFailed(e.to_string())).await;
                 }
             }
         } else {
-            let _ = tx.send(AppAction::ApiLookupSkipped("식별자 없음".to_string())).await;
+            let _ = tx
+                .send(AppAction::ApiLookupSkipped("식별자 없음".to_string()))
+                .await;
         }
     });
 }
@@ -142,7 +138,10 @@ pub(crate) fn parse_crossref_response(body: &str) -> Option<pdf::RawMetadata> {
         .and_then(|a| a.first())
         .and_then(|y| y.as_i64());
     let doi = message.get("DOI").and_then(|d| d.as_str());
-    let abstract_text = message.get("abstract").and_then(|a| a.as_str()).map(strip_jats_tags);
+    let abstract_text = message
+        .get("abstract")
+        .and_then(|a| a.as_str())
+        .map(strip_jats_tags);
 
     Some(pdf::RawMetadata {
         title: title.map(|s| s.to_string()),
@@ -154,6 +153,7 @@ pub(crate) fn parse_crossref_response(body: &str) -> Option<pdf::RawMetadata> {
         abstract_text,
         keywords: Vec::new(),
         source: pdf::MetadataSource::Crossref,
+        body_text: None,
     })
 }
 
@@ -231,6 +231,7 @@ pub(crate) fn parse_crossref_search_response(body: &str) -> Option<pdf::RawMetad
         abstract_text: None,
         keywords: Vec::new(),
         source: pdf::MetadataSource::Crossref,
+        body_text: None,
     })
 }
 
@@ -288,8 +289,7 @@ pub(crate) fn parse_arxiv_response(body: &str) -> Option<pdf::RawMetadata> {
                 if in_summary {
                     abstract_text = Some(text.clone());
                 }
-                if in_published
-                    && let Some(y) = text.get(0..4).and_then(|s| s.parse::<i64>().ok())
+                if in_published && let Some(y) = text.get(0..4).and_then(|s| s.parse::<i64>().ok())
                 {
                     year = Some(y);
                 }
@@ -318,6 +318,7 @@ pub(crate) fn parse_arxiv_response(body: &str) -> Option<pdf::RawMetadata> {
         abstract_text,
         keywords: Vec::new(),
         source: pdf::MetadataSource::Arxiv,
+        body_text: None,
     })
 }
 
@@ -370,7 +371,8 @@ pub(crate) fn apply_api_metadata(state: &mut AppState, meta: pdf::RawMetadata, d
                         doc.title = t.clone();
                         changed = true;
                     }
-                    let authors_empty = doc.authors.as_deref().map_or(true, |a| a.trim().is_empty());
+                    let authors_empty =
+                        doc.authors.as_deref().map_or(true, |a| a.trim().is_empty());
                     let authors_look_wrong = doc.authors.as_deref().map_or(false, |a| {
                         let a = a.trim();
                         !a.contains(' ') && a.len() <= 20
@@ -386,16 +388,23 @@ pub(crate) fn apply_api_metadata(state: &mut AppState, meta: pdf::RawMetadata, d
                         doc.journal = Some(j.clone());
                         changed = true;
                     }
-                    if doc.pub_year.is_none() && let Some(y) = meta.pub_year {
+                    if doc.pub_year.is_none()
+                        && let Some(y) = meta.pub_year
+                    {
                         doc.pub_year = Some(y);
                         changed = true;
                     }
-                    if doc.doi.is_none() && let Some(ref d) = meta.doi {
+                    if doc.doi.is_none()
+                        && let Some(ref d) = meta.doi
+                    {
                         doc.doi = Some(d.clone());
                         changed = true;
                     }
                     if (doc.abstract_text.is_none()
-                        || doc.abstract_text.as_deref().map_or(true, |a| a.trim().is_empty()))
+                        || doc
+                            .abstract_text
+                            .as_deref()
+                            .map_or(true, |a| a.trim().is_empty()))
                         && let Some(ref a) = meta.abstract_text
                     {
                         doc.abstract_text = Some(a.clone());

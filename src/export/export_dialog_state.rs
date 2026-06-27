@@ -42,7 +42,6 @@ impl ExportDialogState {
         }
     }
 
-
     fn active_sections(&self) -> Vec<DialogSection> {
         if self.is_display_mode_active() {
             vec![
@@ -111,7 +110,7 @@ impl ExportDialogState {
             .iter()
             .enumerate()
             .filter(|(_, f)| f.is_implemented())
-            .map(|(i, f)| (i, *f))
+            .map(|(i, f)| (i, f.clone()))
             .collect();
         if implemented.is_empty() {
             return;
@@ -128,7 +127,7 @@ impl ExportDialogState {
             current_pos - 1
         };
         self.format_cursor = implemented[new_pos].0;
-        self.selected_format = implemented[new_pos].1;
+        self.selected_format = implemented[new_pos].1.clone();
     }
 
     fn move_style_cursor(&mut self, direction: i32) {
@@ -178,7 +177,11 @@ impl ExportDialogState {
     }
 
     fn move_display_mode_cursor(&mut self, direction: i32) {
-        let modes = [DisplayMode::InText, DisplayMode::Footnotes, DisplayMode::Endnotes];
+        let modes = [
+            DisplayMode::InText,
+            DisplayMode::Footnotes,
+            DisplayMode::Endnotes,
+        ];
         let current_pos = modes
             .iter()
             .position(|m| *m == self.display_mode)
@@ -205,9 +208,8 @@ impl ExportDialogState {
             self.selected_language,
             self.display_mode,
         );
-        self.preview_text = result.unwrap_or_else(|e| {
-            format!("[{}] {}", self.selected_style.display_name(), e)
-        });
+        self.preview_text =
+            result.unwrap_or_else(|e| format!("[{}] {}", self.selected_style.display_name(), e));
     }
 }
 

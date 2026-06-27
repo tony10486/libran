@@ -7,11 +7,7 @@ use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
 /// Render a full APA 7th reference-list citation.
-pub fn render_reference(
-    doc: &Document,
-    _lang: CitationLanguage,
-    _mode: DisplayMode,
-) -> String {
+pub fn render_reference(doc: &Document, _lang: CitationLanguage, _mode: DisplayMode) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     if let Some(authors_str) = &doc.authors {
@@ -49,10 +45,7 @@ pub fn render_reference(
 /// Render a short APA 7th in-text citation.
 pub fn render_in_text(doc: &Document, _lang: CitationLanguage) -> String {
     let authors = get_authors(doc.authors.as_deref());
-    let last_names: Vec<String> = authors
-        .iter()
-        .map(|name| parse_author(name).0)
-        .collect();
+    let last_names: Vec<String> = authors.iter().map(|name| parse_author(name).0).collect();
 
     let year_part = format_year(doc.pub_year);
 
@@ -72,8 +65,8 @@ fn format_authors_apa_reference(authors: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::citation::text::styles::{CitationLanguage, CitationStyle, DisplayMode};
     use crate::citation::text::engine::render_citation;
+    use crate::citation::text::styles::{CitationLanguage, CitationStyle, DisplayMode};
     use crate::db::documents::Document;
 
     fn doc_with(title: &str, authors: &str) -> Document {

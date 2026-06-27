@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 
@@ -105,8 +105,14 @@ mod tests {
         let mut buf = Vec::new();
         export_coins(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("class=\"Z3988\""), "missing Z3988 class: {out}");
-        assert!(out.contains("ctx_ver=Z39.88-2004"), "missing ctx_ver: {out}");
+        assert!(
+            out.contains("class=\"Z3988\""),
+            "missing Z3988 class: {out}"
+        );
+        assert!(
+            out.contains("ctx_ver=Z39.88-2004"),
+            "missing ctx_ver: {out}"
+        );
         assert!(out.contains("rft.genre=article"), "missing genre: {out}");
         assert!(out.contains("rft.atitle="), "missing atitle: {out}");
         assert!(out.contains("rft_id=info:doi/"), "missing DOI: {out}");
@@ -124,7 +130,10 @@ mod tests {
         let mut buf = Vec::new();
         export_coins(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("AT%26T"), "missing URL-encoded ampersand: {out}");
+        assert!(
+            out.contains("AT%26T"),
+            "missing URL-encoded ampersand: {out}"
+        );
     }
 
     #[test]
@@ -140,6 +149,9 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("rft.genre=book"), "missing book genre: {out}");
         assert!(out.contains("rft.btitle="), "missing btitle: {out}");
-        assert!(!out.contains("rft.atitle="), "should not have atitle for book: {out}");
+        assert!(
+            !out.contains("rft.atitle="),
+            "should not have atitle for book: {out}"
+        );
     }
 }

@@ -6,9 +6,8 @@ pub struct PaperIdentifiers {
     pub arxiv_id: Option<String>,
 }
 
-static DOI_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b10\.\d{4,9}/[-._;()/:A-Z0-9]+[A-Z0-9]").unwrap()
-});
+static DOI_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\b10\.\d{4,9}/[-._;()/:A-Z0-9]+[A-Z0-9]").unwrap());
 
 static ARXIV_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
@@ -81,29 +80,27 @@ pub fn search_academic_identifiers(page_text: &str) -> PaperIdentifiers {
         doi_str
     });
 
-    let found_arxiv = ARXIV_RE
-        .captures_iter(&scope)
-        .find_map(|cap| {
-            if let Some(new_scheme) = cap.get(1) {
-                let overlaps = doi_spans.iter().any(|(ds, de)| {
-                    new_scheme.start() < *de && new_scheme.end() > *ds
-                });
-                if overlaps {
-                    return None;
-                }
-                if !is_valid_arxiv_new_scheme(new_scheme.as_str()) {
-                    return None;
-                }
-                if !is_standalone_arxiv_id(&scope, new_scheme.start()) {
-                    return None;
-                }
-                return Some(new_scheme.as_str().to_string());
+    let found_arxiv = ARXIV_RE.captures_iter(&scope).find_map(|cap| {
+        if let Some(new_scheme) = cap.get(1) {
+            let overlaps = doi_spans
+                .iter()
+                .any(|(ds, de)| new_scheme.start() < *de && new_scheme.end() > *ds);
+            if overlaps {
+                return None;
             }
-            if let Some(old_scheme) = cap.get(2) {
-                return Some(old_scheme.as_str().to_string());
+            if !is_valid_arxiv_new_scheme(new_scheme.as_str()) {
+                return None;
             }
-            None
-        });
+            if !is_standalone_arxiv_id(&scope, new_scheme.start()) {
+                return None;
+            }
+            return Some(new_scheme.as_str().to_string());
+        }
+        if let Some(old_scheme) = cap.get(2) {
+            return Some(old_scheme.as_str().to_string());
+        }
+        None
+    });
 
     PaperIdentifiers {
         doi: found_doi,
@@ -160,7 +157,11 @@ mod tests {
     fn test_arxiv_not_matched_inside_doi_suffix() {
         let text = "See doi:10.1098/rspa.2011.0680 for details.";
         let ids = search_academic_identifiers(text);
-        assert!(ids.arxiv_id.is_none(), "should not extract arXiv from DOI suffix: {:?}", ids.arxiv_id);
+        assert!(
+            ids.arxiv_id.is_none(),
+            "should not extract arXiv from DOI suffix: {:?}",
+            ids.arxiv_id
+        );
         assert!(ids.doi.is_some());
     }
 
@@ -168,7 +169,11 @@ mod tests {
     fn test_arxiv_not_matched_inside_doi_suffix_invalid_month() {
         let text = "doi:10.1006/jcta.2000.3094 is the reference.";
         let ids = search_academic_identifiers(text);
-        assert!(ids.arxiv_id.is_none(), "should not extract arXiv from DOI suffix: {:?}", ids.arxiv_id);
+        assert!(
+            ids.arxiv_id.is_none(),
+            "should not extract arXiv from DOI suffix: {:?}",
+            ids.arxiv_id
+        );
     }
 
     #[test]
@@ -183,7 +188,11 @@ mod tests {
     fn test_arxiv_new_scheme_invalid_month_rejected() {
         let text = "Reference 2099.0099 here.";
         let ids = search_academic_identifiers(text);
-        assert!(ids.arxiv_id.is_none(), "month 00 should be rejected: {:?}", ids.arxiv_id);
+        assert!(
+            ids.arxiv_id.is_none(),
+            "month 00 should be rejected: {:?}",
+            ids.arxiv_id
+        );
     }
 
     #[test]
@@ -191,6 +200,10 @@ mod tests {
         // A DOI appearing only on page 3 should not be found.
         let text = "page one text\n\x0cpage two text\n\x0cdoi:10.1234/only.on.page.three";
         let ids = search_academic_identifiers(text);
-        assert!(ids.doi.is_none(), "should not search past first 2 pages: {:?}", ids.doi);
+        assert!(
+            ids.doi.is_none(),
+            "should not search past first 2 pages: {:?}",
+            ids.doi
+        );
     }
 }

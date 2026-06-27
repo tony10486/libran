@@ -1,5 +1,7 @@
 use crate::db::documents::Document;
+use crate::export::fetch_user_export_data;
 use anyhow::Result;
+use rusqlite::Connection;
 use std::io::Write;
 
 /// Export a slice of `Document`s as RFC 4180 CSV to `writer`.
@@ -42,6 +44,65 @@ pub fn export_csv(documents: &[Document], writer: &mut impl Write) -> Result<()>
             doc.citation_key.clone().unwrap_or_default(),
             doc.source.clone().unwrap_or_default(),
             doc.rating.map(|r| r.to_string()).unwrap_or_default(),
+        ])?;
+    }
+
+    wtr.flush()?;
+    Ok(())
+}
+
+pub fn export_csv_with_user_data(
+    conn: &Connection,
+    documents: &[Document],
+    writer: &mut impl Write,
+) -> Result<()> {
+    let mut wtr = csv::Writer::from_writer(writer);
+    wtr.write_record([
+        "id",
+        "title",
+        "authors",
+        "journal",
+        "conference",
+        "pub_year",
+        "doi",
+        "arxiv_id",
+        "abstract",
+        "keywords",
+        "citation_key",
+        "source",
+        "rating",
+        "reading_status",
+        "notes",
+        "tags",
+        "classifications",
+        "projects",
+    ])?;
+
+    for doc in documents {
+        let user_data = doc
+            .id
+            .and_then(|id| fetch_user_export_data(conn, id).ok())
+            .unwrap_or_default();
+
+        wtr.write_record([
+            doc.id.map(|i| i.to_string()).unwrap_or_default(),
+            doc.title.clone(),
+            doc.authors.clone().unwrap_or_default(),
+            doc.journal.clone().unwrap_or_default(),
+            doc.conference.clone().unwrap_or_default(),
+            doc.pub_year.map(|y| y.to_string()).unwrap_or_default(),
+            doc.doi.clone().unwrap_or_default(),
+            doc.arxiv_id.clone().unwrap_or_default(),
+            doc.abstract_text.clone().unwrap_or_default(),
+            doc.keywords.clone().unwrap_or_default(),
+            doc.citation_key.clone().unwrap_or_default(),
+            doc.source.clone().unwrap_or_default(),
+            doc.rating.map(|r| r.to_string()).unwrap_or_default(),
+            doc.reading_status.clone().unwrap_or_default(),
+            user_data.notes.join(" | "),
+            user_data.tags.join("; "),
+            user_data.classifications.join("; "),
+            user_data.projects.join("; "),
         ])?;
     }
 
@@ -156,7 +217,10 @@ mod tests {
             data.contains("Smith2024Test"),
             "citation_key should be present: {data}"
         );
-        assert!(data.contains("crossref"), "source should be present: {data}");
+        assert!(
+            data.contains("crossref"),
+            "source should be present: {data}"
+        );
         assert!(data.contains("5"), "rating should be 5: {data}");
     }
 
@@ -201,19 +265,7 @@ mod tests {
     fn test_missing_fields_become_empty_cells_not_none() {
         // Given a document with many fields set to None
         let doc = make_doc(
-            None,
-            "Sparse",
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            None, "Sparse", None, None, None, None, None, None, None, None, None, None, None,
         );
 
         // When exported to CSV

@@ -1,7 +1,7 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
-use crate::db::fts_query::{build_search_plan, escape_like, normalize_nfc, SearchPlan};
+use crate::db::fts_query::{SearchPlan, build_search_plan, escape_like, normalize_nfc};
 
 pub fn search_documents(conn: &Connection, term: &str) -> Result<Vec<i64>> {
     let term = term.trim();
@@ -19,11 +19,29 @@ pub fn search_documents(conn: &Connection, term: &str) -> Result<Vec<i64>> {
     }
 }
 
-pub fn search_in_project(
+/// Search documents with an optional body-text toggle.
+/// When `include_body` is false, delegates to `search_documents` (metadata-only).
+/// When true, unions metadata FTS results with body FTS results (deduped).
+pub fn search_documents_with_body(
     conn: &Connection,
     term: &str,
-    project_id: i64,
+    include_body: bool,
 ) -> Result<Vec<i64>> {
+    if !include_body {
+        return search_documents(conn, term);
+    }
+
+    let mut ids = search_documents(conn, term)?;
+    let body_ids = crate::db::documents_body::search_body(conn, term)?;
+    for id in body_ids {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
+pub fn search_in_project(conn: &Connection, term: &str, project_id: i64) -> Result<Vec<i64>> {
     let term = term.trim();
     if term.is_empty() {
         let mut stmt = conn.prepare(
@@ -41,9 +59,7 @@ pub fn search_in_project(
 
     match build_search_plan(&term) {
         SearchPlan::FtsMatch(escaped) => search_in_project_fts(conn, &escaped, project_id),
-        SearchPlan::BigramMatch(escaped) => {
-            search_in_project_bigram(conn, &escaped, project_id)
-        }
+        SearchPlan::BigramMatch(escaped) => search_in_project_bigram(conn, &escaped, project_id),
         SearchPlan::ChoseongMatch(escaped) => {
             search_in_project_choseong(conn, &escaped, project_id)
         }
@@ -52,9 +68,8 @@ pub fn search_in_project(
 }
 
 fn search_fts_match(conn: &Connection, escaped: &str) -> Result<Vec<i64>> {
-    let mut stmt = conn.prepare(
-        "SELECT rowid FROM documents_fts WHERE documents_fts MATCH ?1 ORDER BY rank",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT rowid FROM documents_fts WHERE documents_fts MATCH ?1 ORDER BY rank")?;
     let rows = stmt.query_map(params![escaped], |row| row.get::<_, i64>(0))?;
     let mut ids = Vec::new();
     for row in rows {
@@ -121,11 +136,7 @@ fn search_in_project_fts(conn: &Connection, escaped: &str, project_id: i64) -> R
     Ok(ids)
 }
 
-fn search_in_project_bigram(
-    conn: &Connection,
-    escaped: &str,
-    project_id: i64,
-) -> Result<Vec<i64>> {
+fn search_in_project_bigram(conn: &Connection, escaped: &str, project_id: i64) -> Result<Vec<i64>> {
     let mut stmt = conn.prepare(
         "SELECT d.id FROM documents d
          INNER JOIN project_documents pd ON d.id = pd.document_id

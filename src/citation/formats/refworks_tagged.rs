@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 

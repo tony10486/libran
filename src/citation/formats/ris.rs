@@ -1,5 +1,7 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
+use crate::export::fetch_user_export_data;
 use anyhow::Result;
+use rusqlite::Connection;
 use std::io::Write;
 
 pub fn export_ris(documents: &[Document], writer: &mut impl Write) -> Result<()> {
@@ -31,6 +33,21 @@ pub fn export_ris(documents: &[Document], writer: &mut impl Write) -> Result<()>
             write!(writer, "DO  - {}\r\n", sanitize_ris_field(doi))?;
         }
 
+        if let Some(volume) = &doc.volume {
+            write!(writer, "VL  - {}\r\n", sanitize_ris_field(volume))?;
+        }
+
+        if let Some(issue) = &doc.issue {
+            write!(writer, "IS  - {}\r\n", sanitize_ris_field(issue))?;
+        }
+
+        if let (Some(start), Some(end)) = (&doc.page_start, &doc.page_end) {
+            write!(writer, "SP  - {}\r\n", sanitize_ris_field(start))?;
+            write!(writer, "EP  - {}\r\n", sanitize_ris_field(end))?;
+        } else if let Some(start) = &doc.page_start {
+            write!(writer, "SP  - {}\r\n", sanitize_ris_field(start))?;
+        }
+
         if let Some(abstract_text) = &doc.abstract_text {
             write!(writer, "AB  - {}\r\n", sanitize_ris_field(abstract_text))?;
         }
@@ -50,6 +67,89 @@ pub fn export_ris(documents: &[Document], writer: &mut impl Write) -> Result<()>
     Ok(())
 }
 
+pub fn export_ris_with_user_data(
+    conn: &Connection,
+    documents: &[Document],
+    writer: &mut impl Write,
+) -> Result<()> {
+    for doc in documents {
+        let user_data = doc
+            .id
+            .and_then(|id| fetch_user_export_data(conn, id).ok())
+            .unwrap_or_default();
+
+        let entry_type = guess_ris_type(doc);
+        write!(writer, "TY  - {}\r\n", entry_type)?;
+        write!(writer, "TI  - {}\r\n", sanitize_ris_field(&doc.title))?;
+
+        if let Some(authors) = &doc.authors {
+            for author in split_authors(authors) {
+                write!(writer, "AU  - {}\r\n", sanitize_ris_field(&author))?;
+            }
+        }
+
+        if let Some(year) = doc.pub_year {
+            write!(writer, "PY  - {}\r\n", year)?;
+        }
+
+        if let Some(journal) = &doc.journal {
+            write!(writer, "JO  - {}\r\n", sanitize_ris_field(journal))?;
+        } else if let Some(conference) = &doc.conference {
+            write!(writer, "BT  - {}\r\n", sanitize_ris_field(conference))?;
+        }
+
+        if let Some(doi) = &doc.doi {
+            write!(writer, "DO  - {}\r\n", sanitize_ris_field(doi))?;
+        }
+
+        if let Some(volume) = &doc.volume {
+            write!(writer, "VL  - {}\r\n", sanitize_ris_field(volume))?;
+        }
+
+        if let Some(issue) = &doc.issue {
+            write!(writer, "IS  - {}\r\n", sanitize_ris_field(issue))?;
+        }
+
+        if let (Some(start), Some(end)) = (&doc.page_start, &doc.page_end) {
+            write!(writer, "SP  - {}\r\n", sanitize_ris_field(start))?;
+            write!(writer, "EP  - {}\r\n", sanitize_ris_field(end))?;
+        } else if let Some(start) = &doc.page_start {
+            write!(writer, "SP  - {}\r\n", sanitize_ris_field(start))?;
+        }
+
+        if let Some(abstract_text) = &doc.abstract_text {
+            write!(writer, "AB  - {}\r\n", sanitize_ris_field(abstract_text))?;
+        }
+
+        let mut kw_parts: Vec<&str> = doc
+            .keywords
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .into_iter()
+            .flat_map(|s| s.split(',').map(str::trim))
+            .filter(|s| !s.is_empty())
+            .collect();
+        kw_parts.extend(user_data.tags.iter().map(String::as_str));
+        for kw in kw_parts {
+            write!(writer, "KW  - {}\r\n", sanitize_ris_field(kw))?;
+        }
+
+        if let Some(arxiv) = &doc.arxiv_id {
+            write!(writer, "AN  - arXiv:{}\r\n", sanitize_ris_field(arxiv))?;
+        }
+
+        for note in &user_data.notes {
+            write!(writer, "N1  - {}\r\n", sanitize_ris_field(note))?;
+        }
+
+        for class in &user_data.classifications {
+            write!(writer, "N1  - Classification: {}\r\n", sanitize_ris_field(class))?;
+        }
+
+        write!(writer, "ER  - \r\n")?;
+    }
+    Ok(())
+}
 /// Replace CR and LF with spaces to prevent RIS record injection.
 /// A malicious title like "Foo\r\nER  - \r\n" could otherwise terminate the
 /// record early and inject arbitrary follow-on records.
@@ -58,12 +158,15 @@ fn sanitize_ris_field(s: &str) -> String {
 }
 
 fn guess_ris_type(doc: &Document) -> &'static str {
-    if doc.journal.is_some() {
-        "JOUR"
-    } else if doc.conference.is_some() {
-        "CONF"
-    } else {
-        "GEN"
+    match doc.item_type.as_str() {
+        "article" => "JOUR",
+        "conference" => "CONF",
+        "book" => "BOOK",
+        "thesis" => "THES",
+        "dataset" => "DATA",
+        "webpage" => "ELEC",
+        "patent" => "PAT",
+        _ => "GEN",
     }
 }
 
@@ -89,6 +192,7 @@ mod tests {
             citation_key: None,
             source: None,
             rating: None,
+            item_type: "misc".to_string(),
             ..Default::default()
         }
     }
@@ -100,6 +204,7 @@ mod tests {
             journal: Some("Nature".to_string()),
             pub_year: Some(2023),
             doi: Some("10.1234/test".to_string()),
+            item_type: "article".to_string(),
             ..make_doc("Deep Learning", Some("Smith, John; Lee, Jane"))
         };
         let mut buf = Vec::new();
@@ -140,6 +245,7 @@ mod tests {
         let doc = Document {
             conference: Some("ICML 2023".to_string()),
             pub_year: Some(2023),
+            item_type: "conference".to_string(),
             ..make_doc("Deep Learning", Some("Smith, John"))
         };
         let mut buf = Vec::new();
@@ -151,7 +257,10 @@ mod tests {
         assert!(out.contains("TI  - Deep Learning"), "missing TI: {out}");
         assert!(out.contains("AU  - Smith, John"), "missing AU: {out}");
         assert!(out.contains("BT  - ICML 2023"), "missing BT tag: {out}");
-        assert!(!out.contains("JO  -"), "should not have JO for conference: {out}");
+        assert!(
+            !out.contains("JO  -"),
+            "should not have JO for conference: {out}"
+        );
         assert!(out.contains("ER  - "), "missing ER: {out}");
     }
 
@@ -173,8 +282,14 @@ mod tests {
             "expected sanitized title containing Evil and Fake: {out:?}"
         );
         // And exactly one real ER terminator exists (at start of a line)
-        let er_lines = out.split("\r\n").filter(|line| line.starts_with("ER  - ")).count();
-        assert_eq!(er_lines, 1, "expected exactly 1 ER line, got {er_lines}: {out:?}");
+        let er_lines = out
+            .split("\r\n")
+            .filter(|line| line.starts_with("ER  - "))
+            .count();
+        assert_eq!(
+            er_lines, 1,
+            "expected exactly 1 ER line, got {er_lines}: {out:?}"
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 
@@ -116,7 +116,10 @@ mod tests {
         export_refer_bibix(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("%0 Journal Article"), "missing type: {out}");
-        assert!(out.contains("%A Smith, John"), "missing first author: {out}");
+        assert!(
+            out.contains("%A Smith, John"),
+            "missing first author: {out}"
+        );
         assert!(out.contains("%A Lee, Jane"), "missing second author: {out}");
         assert!(out.contains("%J Nature"), "missing journal: {out}");
         assert!(out.contains("%V 42"), "missing volume: {out}");

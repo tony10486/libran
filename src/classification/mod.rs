@@ -1,3 +1,4 @@
+pub mod csv_import;
 pub mod custom;
 pub mod data_loader;
 pub mod label_override;

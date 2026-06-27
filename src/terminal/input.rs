@@ -4,9 +4,7 @@ use futures::StreamExt;
 use crate::app::AppAction;
 use crate::terminal::drag_drop;
 
-pub async fn poll_event(
-    stream: &mut EventStream,
-) -> Option<AppAction> {
+pub async fn poll_event(stream: &mut EventStream) -> Option<AppAction> {
     while let Some(Ok(event)) = stream.next().await {
         if let Some(action) = convert_event(&event) {
             return Some(action);
@@ -23,9 +21,7 @@ fn convert_event(event: &Event) -> Option<AppAction> {
             }
             Some(AppAction::KeyPressed(*key))
         }
-        Event::Paste(text) => {
-            drag_drop::parse_dragged_path(text).map(AppAction::DragDetected)
-        }
+        Event::Paste(text) => drag_drop::parse_dragged_path(text).map(AppAction::DragDetected),
         _ => None,
     }
 }

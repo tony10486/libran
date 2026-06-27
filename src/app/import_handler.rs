@@ -1,5 +1,5 @@
-use crate::app::action::AppAction;
 use crate::app::AppState;
+use crate::app::action::AppAction;
 use crate::citation::bibtex_parser::{self, ParsedEntry};
 use crate::db::documents;
 use crate::db::fts_query::normalize_nfc;
@@ -28,10 +28,10 @@ pub fn handle_file_import_submitted(state: &mut AppState, path_str: String) {
             if !path.exists() {
                 return Err(format!("파일 없음: {}", path_str));
             }
-            let content = std::fs::read_to_string(path)
-                .map_err(|e| format!("파일 읽기 실패: {}", e))?;
-            let entries = bibtex_parser::parse_bibtex(&content)
-                .map_err(|e| format!("파싱 실패: {}", e))?;
+            let content =
+                std::fs::read_to_string(path).map_err(|e| format!("파일 읽기 실패: {}", e))?;
+            let entries =
+                bibtex_parser::parse_bibtex(&content).map_err(|e| format!("파싱 실패: {}", e))?;
 
             let conn = db.lock().map_err(|e| e.to_string())?;
             let mut count = 0;
@@ -87,11 +87,7 @@ fn entry_to_document(entry: &ParsedEntry) -> documents::Document {
     let keywords = get("keywords");
     let volume = get("volume");
     let issue = get("number");
-    let page_start = get("pages").and_then(|p| {
-        p.split("--")
-            .next()
-            .map(|s| s.trim().to_string())
-    });
+    let page_start = get("pages").and_then(|p| p.split("--").next().map(|s| s.trim().to_string()));
     let publisher = get("publisher");
     let url = get("url");
     let isbn = get("isbn");

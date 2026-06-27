@@ -1,8 +1,8 @@
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use ratatui::Frame;
 
 use crate::app::AppState;
 use crate::db::stats::LibraryStats;
@@ -44,39 +44,69 @@ fn render_summary(frame: &mut Frame, area: Rect, stats: &LibraryStats) {
     let lines = vec![
         Line::from(vec![
             Span::styled("  총 문헌      ", theme::label_style()),
-            Span::styled(stats.total_documents.to_string(), Style::default().fg(theme::title_fg())),
+            Span::styled(
+                stats.total_documents.to_string(),
+                Style::default().fg(theme::title_fg()),
+            ),
             Span::raw("   "),
             Span::styled("파일 있음 ", theme::label_style()),
-            Span::styled(stats.documents_with_files.to_string(), Style::default().fg(theme::key())),
+            Span::styled(
+                stats.documents_with_files.to_string(),
+                Style::default().fg(theme::key()),
+            ),
             Span::raw("   "),
             Span::styled("DOI ", theme::label_style()),
-            Span::styled(stats.documents_with_doi.to_string(), Style::default().fg(theme::key())),
+            Span::styled(
+                stats.documents_with_doi.to_string(),
+                Style::default().fg(theme::key()),
+            ),
             Span::raw("   "),
             Span::styled("arXiv ", theme::label_style()),
-            Span::styled(stats.documents_with_arxiv.to_string(), Style::default().fg(theme::key())),
+            Span::styled(
+                stats.documents_with_arxiv.to_string(),
+                Style::default().fg(theme::key()),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  태그 ", theme::label_style()),
-            Span::styled(stats.total_tags.to_string(), Style::default().fg(theme::title_fg())),
+            Span::styled(
+                stats.total_tags.to_string(),
+                Style::default().fg(theme::title_fg()),
+            ),
             Span::raw("   "),
             Span::styled("프로젝트 ", theme::label_style()),
-            Span::styled(stats.total_projects.to_string(), Style::default().fg(theme::title_fg())),
+            Span::styled(
+                stats.total_projects.to_string(),
+                Style::default().fg(theme::title_fg()),
+            ),
             Span::raw("   "),
             Span::styled("시리즈 ", theme::label_style()),
-            Span::styled(stats.total_series.to_string(), Style::default().fg(theme::title_fg())),
+            Span::styled(
+                stats.total_series.to_string(),
+                Style::default().fg(theme::title_fg()),
+            ),
             Span::raw("   "),
             Span::styled("저자 ", theme::label_style()),
-            Span::styled(stats.total_authors.to_string(), Style::default().fg(theme::title_fg())),
+            Span::styled(
+                stats.total_authors.to_string(),
+                Style::default().fg(theme::title_fg()),
+            ),
             Span::raw("   "),
             Span::styled("인용관계 ", theme::label_style()),
-            Span::styled(stats.total_citation_relations.to_string(), Style::default().fg(theme::title_fg())),
+            Span::styled(
+                stats.total_citation_relations.to_string(),
+                Style::default().fg(theme::title_fg()),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  별점 문헌 ", theme::label_style()),
             Span::styled(
-                format!("{}건 / 평균 {:.1}점", stats.rated_documents, stats.average_rating),
+                format!(
+                    "{}건 / 평균 {:.1}점",
+                    stats.rated_documents, stats.average_rating
+                ),
                 Style::default().fg(theme::selected()),
             ),
         ]),
@@ -126,7 +156,11 @@ fn render_reading_status(frame: &mut Frame, area: Rect, stats: &LibraryStats) {
 fn render_charts(frame: &mut Frame, area: Rect, stats: &LibraryStats) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Percentage(34)])
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+        ])
         .split(area);
 
     render_year_distribution(frame, chunks[0], stats);
@@ -194,7 +228,10 @@ fn render_top_authors(frame: &mut Frame, area: Rect, stats: &LibraryStats) {
                 name.clone()
             };
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:3} ", count), Style::default().fg(theme::selected())),
+                Span::styled(
+                    format!("  {:3} ", count),
+                    Style::default().fg(theme::selected()),
+                ),
                 Span::styled(display_name, Style::default().fg(theme::fg())),
             ]));
         }
@@ -226,7 +263,10 @@ fn render_top_journals(frame: &mut Frame, area: Rect, stats: &LibraryStats) {
                 name.clone()
             };
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:3} ", count), Style::default().fg(theme::selected())),
+                Span::styled(
+                    format!("  {:3} ", count),
+                    Style::default().fg(theme::selected()),
+                ),
                 Span::styled(display_name, Style::default().fg(theme::fg())),
             ]));
         }

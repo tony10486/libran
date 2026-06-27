@@ -1,12 +1,10 @@
 //! MHRA 4th edition notes citation style template.
 //!
-//! Note: 1. John A. Smith and Bob C. Lee, 'Title,' Journal, XLII (2023), 123-45.
-//! Bibliography: Smith, John A., and Bob C. Lee. 'Title.' Journal, XLII (2023), 123-45.
+//! Note: 1. John A. Smith and Bob C. Lee, 'Title,' Journal, 42.3 (2023), 123-45.
+//! Bibliography: Smith, John A., and Bob C. Lee. 'Title.' Journal, 42.3 (2023), 123-45.
 //! 4+ authors: "and others" (NOT et al.). In-text: [1]
 
-use crate::citation::text::helpers::{
-    format_pages, get_authors, parse_author_full, to_roman,
-};
+use crate::citation::text::helpers::{format_pages, get_authors, parse_author_full};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -83,17 +81,24 @@ fn render_note(doc: &Document, mode: DisplayMode) -> String {
         String::new()
     };
 
-    let journal = doc.journal.clone().or(doc.conference.clone()).unwrap_or_default();
+    let journal = doc
+        .journal
+        .clone()
+        .or(doc.conference.clone())
+        .unwrap_or_default();
 
     let year = match doc.pub_year {
         Some(y) => y.to_string(),
         None => "n.d.".to_string(),
     };
 
-    let vol_roman = doc.volume.as_deref()
-        .and_then(|v| v.parse::<i64>().ok())
-        .map(|n| to_roman(n))
-        .or_else(|| doc.volume.clone());
+    // MHRA 4th edition: Arabic numerals, volume.issue format
+    let vol_issue = match (&doc.volume, &doc.issue) {
+        (Some(v), Some(i)) => Some(format!("{}.{}", v, i)),
+        (Some(v), None) => Some(v.clone()),
+        (None, Some(i)) => Some(i.clone()),
+        (None, None) => None,
+    };
 
     let pages = format_pages(doc.page_start.as_deref(), doc.page_end.as_deref());
 
@@ -108,8 +113,8 @@ fn render_note(doc: &Document, mode: DisplayMode) -> String {
         elements.push(journal);
     }
     let mut vol_year = String::new();
-    if let Some(vr) = vol_roman {
-        vol_year.push_str(&format!("{}, ", vr));
+    if let Some(vi) = vol_issue {
+        vol_year.push_str(&format!("{}, ", vi));
     }
     vol_year.push_str(&format!("({})", year));
     if !pages.is_empty() {
@@ -158,16 +163,19 @@ fn render_bibliography(doc: &Document) -> String {
         None => "n.d.".to_string(),
     };
 
-    let vol_roman = doc.volume.as_deref()
-        .and_then(|v| v.parse::<i64>().ok())
-        .map(|n| to_roman(n))
-        .or_else(|| doc.volume.clone());
+    // MHRA 4th edition: Arabic numerals, volume.issue format
+    let vol_issue = match (&doc.volume, &doc.issue) {
+        (Some(v), Some(i)) => Some(format!("{}.{}", v, i)),
+        (Some(v), None) => Some(v.clone()),
+        (None, Some(i)) => Some(i.clone()),
+        (None, None) => None,
+    };
 
     let pages = format_pages(doc.page_start.as_deref(), doc.page_end.as_deref());
 
     let mut vol_year = String::new();
-    if let Some(vr) = vol_roman {
-        vol_year.push_str(&format!("{}, ", vr));
+    if let Some(vi) = vol_issue {
+        vol_year.push_str(&format!("{}, ", vi));
     }
     vol_year.push_str(&format!("({})", year));
     if !pages.is_empty() {
@@ -205,21 +213,36 @@ mod tests {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::Footnotes);
         assert!(result.starts_with("1. "), "mhra footnote number: {result}");
-        assert!(result.contains("John A. Smith"), "mhra first-name-first in note: {result}");
-        assert!(result.contains("'Literary Criticism'"), "mhra single-quote title: {result}");
-        assert!(result.contains("XLII"), "mhra roman numeral volume: {result}");
+        assert!(
+            result.contains("John A. Smith"),
+            "mhra first-name-first in note: {result}"
+        );
+        assert!(
+            result.contains("'Literary Criticism'"),
+            "mhra single-quote title: {result}"
+        );
+        assert!(
+            result.contains("42"),
+            "mhra arabic numeral volume: {result}"
+        );
     }
 
     #[test]
     fn test_mhra_bibliography() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, John A."), "mhra bib last-name-first: {result}");
+        assert!(
+            result.contains("Smith, John A."),
+            "mhra bib last-name-first: {result}"
+        );
     }
 
     #[test]
     fn test_mhra_four_plus_and_others() {
-        let authors = (1..=5).map(|i| format!("Author{}", i)).collect::<Vec<_>>().join("; ");
+        let authors = (1..=5)
+            .map(|i| format!("Author{}", i))
+            .collect::<Vec<_>>()
+            .join("; ");
         let doc = Document {
             title: "Many".to_string(),
             authors: Some(authors),
@@ -227,7 +250,10 @@ mod tests {
             ..Default::default()
         };
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::Footnotes);
-        assert!(result.contains("and others"), "mhra 'and others' not et al: {result}");
+        assert!(
+            result.contains("and others"),
+            "mhra 'and others' not et al: {result}"
+        );
         assert!(!result.contains("et al."), "mhra no et al: {result}");
     }
 

@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 
@@ -156,7 +156,10 @@ mod tests {
         let mut buf = Vec::new();
         export_cff_references(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains("type: article"), "missing type: article: {out}");
+        assert!(
+            out.contains("type: article"),
+            "missing type: article: {out}"
+        );
         assert!(
             out.contains("title: \"Deep Learning\""),
             "missing title: {out}"
@@ -174,20 +177,14 @@ mod tests {
             "missing family-names Lee: {out}"
         );
         assert!(out.contains("year: 2023"), "missing year: {out}");
-        assert!(
-            out.contains("doi: \"10.1234/test\""),
-            "missing doi: {out}"
-        );
+        assert!(out.contains("doi: \"10.1234/test\""), "missing doi: {out}");
         assert!(
             out.contains("journal: \"Nature\""),
             "missing journal: {out}"
         );
         assert!(out.contains("volume: \"42\""), "missing volume: {out}");
         assert!(out.contains("issue: \"7\""), "missing issue: {out}");
-        assert!(
-            out.contains("pages: \"551-565\""),
-            "missing pages: {out}"
-        );
+        assert!(out.contains("pages: \"551-565\""), "missing pages: {out}");
     }
 
     #[test]

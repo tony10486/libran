@@ -1,8 +1,15 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use strsim::jaro_winkler;
 
+use crate::citation::match_refs::normalize_title;
 use crate::db::fts_query::normalize_nfc;
+
+const DUP_THRESHOLD: f64 = 0.75;
+const TITLE_WEIGHT: f64 = 3.0;
+const AUTHOR_WEIGHT: f64 = 2.5;
+const YEAR_WEIGHT: f64 = 1.0;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
@@ -34,6 +41,8 @@ pub struct Document {
     pub accessed_date: Option<String>,
     pub reading_status: Option<String>,
     pub reading_progress: Option<i64>,
+    pub queue_position: Option<i64>,
+    pub item_type: String,
 }
 
 impl Default for Document {
@@ -67,14 +76,16 @@ impl Default for Document {
             accessed_date: None,
             reading_status: None,
             reading_progress: None,
+            queue_position: None,
+            item_type: "misc".to_string(),
         }
     }
 }
 
 pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
     conn.execute(
-        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+        "INSERT INTO documents (title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, item_type)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
         params![
             normalize_nfc(&doc.title),
             doc.authors.as_deref().map(normalize_nfc),
@@ -101,14 +112,17 @@ pub fn insert(conn: &Connection, doc: &Document) -> Result<i64> {
             doc.issn,
             doc.url,
             doc.accessed_date,
+            doc.item_type,
         ],
     )?;
-    Ok(conn.last_insert_rowid())
+    let doc_id = conn.last_insert_rowid();
+    crate::db::creators::sync_from_authors(conn, doc_id, doc.authors.as_deref())?;
+    Ok(doc_id)
 }
 
 pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, reading_status, reading_progress
+        "SELECT id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, reading_status, reading_progress, queue_position, item_type
          FROM documents WHERE id = ?1",
     )?;
     let mut rows = stmt.query(params![id])?;
@@ -142,6 +156,8 @@ pub fn get_by_id(conn: &Connection, id: i64) -> Result<Option<Document>> {
             accessed_date: row.get(25)?,
             reading_status: row.get(26)?,
             reading_progress: row.get(27)?,
+            queue_position: row.get(28)?,
+            item_type: row.get(29)?,
         }))
     } else {
         Ok(None)
@@ -179,17 +195,19 @@ macro_rules! doc_from_row {
             accessed_date: $row.get(25)?,
             reading_status: $row.get(26)?,
             reading_progress: $row.get(27)?,
+            queue_position: $row.get(28)?,
+            item_type: $row.get(29)?,
         }
     };
 }
 
-const DOCUMENT_COLS: &str =
-    "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, reading_status, reading_progress";
+const DOCUMENT_COLS: &str = "id, title, authors, journal, pub_year, doi, arxiv_id, abstract, keywords, file_path, file_hash, citation_key, source, conference, rating, volume, issue, page_start, page_end, publisher, city, edition, isbn, issn, url, accessed_date, reading_status, reading_progress, queue_position, item_type";
 
 pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
-    let mut stmt = conn.prepare(
-        &format!("SELECT {} FROM documents WHERE doi = ?1", DOCUMENT_COLS),
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {} FROM documents WHERE doi = ?1",
+        DOCUMENT_COLS
+    ))?;
     let mut rows = stmt.query(params![doi])?;
     if let Some(row) = rows.next()? {
         Ok(Some(doc_from_row!(row)))
@@ -199,15 +217,70 @@ pub fn find_by_doi(conn: &Connection, doi: &str) -> Result<Option<Document>> {
 }
 
 pub fn find_by_hash(conn: &Connection, hash: &str) -> Result<Option<Document>> {
-    let mut stmt = conn.prepare(
-        &format!("SELECT {} FROM documents WHERE file_hash = ?1", DOCUMENT_COLS),
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {} FROM documents WHERE file_hash = ?1",
+        DOCUMENT_COLS
+    ))?;
     let mut rows = stmt.query(params![hash])?;
     if let Some(row) = rows.next()? {
         Ok(Some(doc_from_row!(row)))
     } else {
         Ok(None)
     }
+}
+
+/// Find fuzzy duplicate documents using weighted title/author/year similarity.
+/// Returns `(doc_id, score)` pairs with score >= 0.75, sorted by score descending.
+/// Weights: title 3.0, author 2.5, year 1.0 (exact match). Fields that are None
+/// in either the query or candidate are skipped (weight excluded from normalization).
+pub fn find_duplicates(conn: &Connection, query: &Document) -> Result<Vec<(i64, f64)>> {
+    let mut stmt = conn.prepare("SELECT id, title, authors, pub_year FROM documents")?;
+    let rows = stmt.query_map([], |row| {
+        let id: i64 = row.get(0)?;
+        let title: String = row.get(1)?;
+        let authors: Option<String> = row.get(2)?;
+        let pub_year: Option<i64> = row.get(3)?;
+        Ok((id, title, authors, pub_year))
+    })?;
+
+    let norm_query_title = normalize_title(&query.title);
+    let norm_query_authors = query.authors.as_deref().map(|a| a.to_lowercase());
+    let query_year = query.pub_year;
+
+    let mut matches: Vec<(i64, f64)> = Vec::new();
+    for row in rows {
+        let (id, title, authors, pub_year) = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        let mut weight_sum = 0.0;
+        let mut score_sum = 0.0;
+
+        let title_score = jaro_winkler(&norm_query_title, &normalize_title(&title));
+        score_sum += TITLE_WEIGHT * title_score;
+        weight_sum += TITLE_WEIGHT;
+
+        if let (Some(qa), Some(ca)) = (norm_query_authors.as_deref(), authors.as_deref()) {
+            let author_score = jaro_winkler(qa, &ca.to_lowercase());
+            score_sum += AUTHOR_WEIGHT * author_score;
+            weight_sum += AUTHOR_WEIGHT;
+        }
+
+        if let (Some(qy), Some(cy)) = (query_year, pub_year) {
+            let year_score = if qy == cy { 1.0 } else { 0.0 };
+            score_sum += YEAR_WEIGHT * year_score;
+            weight_sum += YEAR_WEIGHT;
+        }
+
+        let score = score_sum / weight_sum;
+        if score >= DUP_THRESHOLD {
+            matches.push((id, score));
+        }
+    }
+
+    matches.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(matches)
 }
 
 pub fn citation_key_exists(conn: &Connection, key: &str) -> Result<bool> {
@@ -236,8 +309,9 @@ pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
          doi = ?6, arxiv_id = ?7, abstract = ?8, keywords = ?9,
          volume = ?10, issue = ?11, page_start = ?12, page_end = ?13, publisher = ?14, city = ?15,
          edition = ?16, isbn = ?17, issn = ?18, url = ?19, accessed_date = ?20,
+         item_type = ?21,
          updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?21",
+         WHERE id = ?22",
         params![
             normalize_nfc(&doc.title),
             doc.authors.as_deref().map(normalize_nfc),
@@ -259,9 +333,13 @@ pub fn update(conn: &Connection, doc: &Document) -> Result<()> {
             doc.issn,
             doc.url,
             doc.accessed_date,
+            doc.item_type,
             doc.id,
         ],
     )?;
+    if let Some(id) = doc.id {
+        crate::db::creators::sync_from_authors(conn, id, doc.authors.as_deref())?;
+    }
     Ok(())
 }
 
@@ -330,6 +408,124 @@ pub fn remove_tag(conn: &Connection, document_id: i64, tag: &str) -> Result<()> 
     Ok(())
 }
 
+pub fn set_tag_color(conn: &Connection, tag: &str, color: Option<&str>) -> Result<()> {
+    conn.execute(
+        "UPDATE tags SET color = ?1 WHERE tag = ?2",
+        params![color, tag],
+    )?;
+    Ok(())
+}
+
+pub fn get_tags_with_color(conn: &Connection) -> Result<Vec<(String, Option<String>)>> {
+    let mut stmt = conn.prepare("SELECT tag, color FROM tags GROUP BY tag ORDER BY tag")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+    })?;
+    let mut tags = Vec::new();
+    for row in rows {
+        tags.push(row?);
+    }
+    Ok(tags)
+}
+
+pub fn list_favorites(conn: &Connection) -> Result<Vec<Document>> {
+    let sql = format!(
+        "SELECT {} FROM documents WHERE rating = 5 ORDER BY id DESC",
+        DOCUMENT_COLS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], |row| Ok(doc_from_row!(row)))?;
+    let mut docs = Vec::new();
+    for row in rows {
+        docs.push(row?);
+    }
+    Ok(docs)
+}
+
+// ── Reading queue / TBR ──
+
+pub fn add_to_queue(conn: &Connection, doc_id: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE documents SET queue_position = COALESCE(
+            (SELECT MAX(queue_position) FROM documents WHERE queue_position IS NOT NULL), 0
+         ) + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+        params![doc_id],
+    )?;
+    Ok(())
+}
+
+pub fn remove_from_queue(conn: &Connection, doc_id: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE documents SET queue_position = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+        params![doc_id],
+    )?;
+    conn.execute_batch(
+        "WITH renumbered AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY queue_position) AS new_pos
+            FROM documents
+            WHERE queue_position IS NOT NULL
+        )
+        UPDATE documents
+        SET queue_position = (SELECT new_pos FROM renumbered WHERE renumbered.id = documents.id)",
+    )?;
+    Ok(())
+}
+
+pub fn get_queue(conn: &Connection) -> Result<Vec<Document>> {
+    let sql = format!(
+        "SELECT {} FROM documents WHERE queue_position IS NOT NULL ORDER BY queue_position",
+        DOCUMENT_COLS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], |row| Ok(doc_from_row!(row)))?;
+    let mut docs = Vec::new();
+    for row in rows {
+        docs.push(row?);
+    }
+    Ok(docs)
+}
+
+pub fn reorder_queue(conn: &Connection, doc_id: i64, new_position: usize) -> Result<()> {
+    let current: Option<i64> = conn
+        .query_row(
+            "SELECT queue_position FROM documents WHERE id = ?1",
+            params![doc_id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+
+    let current = match current {
+        Some(pos) => pos,
+        None => return Ok(()),
+    };
+
+    let new_pos = new_position as i64 + 1;
+
+    if new_pos < current {
+        conn.execute(
+            "UPDATE documents SET queue_position = queue_position + 1
+             WHERE queue_position IS NOT NULL AND queue_position >= ?1 AND queue_position < ?2",
+            params![new_pos, current],
+        )?;
+    } else if new_pos > current {
+        conn.execute(
+            "UPDATE documents SET queue_position = queue_position - 1
+             WHERE queue_position IS NOT NULL AND queue_position > ?1 AND queue_position <= ?2",
+            params![current, new_pos],
+        )?;
+    } else {
+        return Ok(());
+    }
+
+    conn.execute(
+        "UPDATE documents SET queue_position = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+        params![new_pos, doc_id],
+    )?;
+
+    Ok(())
+}
+
 // ── Citation helpers ──
 
 /// Add a citation relation with match metadata.
@@ -365,9 +561,7 @@ pub fn remove_citation(conn: &Connection, citing_id: i64, cited_id: i64) -> Resu
 
 /// Get all document IDs that this document cites.
 pub fn get_cited_docs(conn: &Connection, document_id: i64) -> Result<Vec<i64>> {
-    let mut stmt = conn.prepare(
-        "SELECT cited_id FROM citation_relations WHERE citing_id = ?1",
-    )?;
+    let mut stmt = conn.prepare("SELECT cited_id FROM citation_relations WHERE citing_id = ?1")?;
     let rows = stmt.query_map(params![document_id], |row| row.get::<_, i64>(0))?;
     let mut ids = Vec::new();
     for row in rows {
@@ -378,9 +572,7 @@ pub fn get_cited_docs(conn: &Connection, document_id: i64) -> Result<Vec<i64>> {
 
 /// Get all document IDs that cite this document.
 pub fn get_citing_docs(conn: &Connection, document_id: i64) -> Result<Vec<i64>> {
-    let mut stmt = conn.prepare(
-        "SELECT citing_id FROM citation_relations WHERE cited_id = ?1",
-    )?;
+    let mut stmt = conn.prepare("SELECT citing_id FROM citation_relations WHERE cited_id = ?1")?;
     let rows = stmt.query_map(params![document_id], |row| row.get::<_, i64>(0))?;
     let mut ids = Vec::new();
     for row in rows {
@@ -419,7 +611,9 @@ pub fn has_reference_extraction(conn: &Connection, doc_id: i64) -> Result<bool> 
 /// Splits `documents.authors` by ';', trims, NFC-normalizes, and sorts by
 /// count desc then name asc.
 pub fn list_authors(conn: &Connection, min_count: usize) -> Result<Vec<(String, i64)>> {
-    let mut stmt = conn.prepare("SELECT authors FROM documents WHERE authors IS NOT NULL AND trim(authors) <> ''")?;
+    let mut stmt = conn.prepare(
+        "SELECT authors FROM documents WHERE authors IS NOT NULL AND trim(authors) <> ''",
+    )?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
 
     let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();

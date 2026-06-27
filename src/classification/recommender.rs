@@ -47,7 +47,11 @@ pub fn recommend(conn: &Connection, doc: &Document, limit: usize) -> Result<Vec<
         }
     }
 
-    scored.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    scored.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     scored.truncate(limit);
     Ok(scored)
 }

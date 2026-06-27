@@ -2,16 +2,16 @@ use std::collections::{HashMap, HashSet};
 
 use tokio::sync::mpsc;
 
-use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 use crate::api::ApiMode;
+use crate::api::metrics::{AuthorMetrics, MetricsBackend};
 use crate::config::AppConfig;
+use crate::db::DbConn;
 use crate::db::documents::Document;
 use crate::db::facets::FacetCount;
 use crate::db::projects::Project;
 use crate::db::series::Series;
-use crate::db::DbConn;
-use crate::similarity::scoring::{DocumentScore, UdcTree};
 use crate::similarity::SimilarityConfig;
+use crate::similarity::scoring::{DocumentScore, UdcTree};
 use crate::ui::settings_panel::SettingsPanelState;
 
 use super::action::AppAction;
@@ -98,7 +98,7 @@ pub struct AppState {
     // ── Note editing ──
     pub note_mode: bool,
     pub note_input: String,
-    pub current_note: Option<String>,
+    pub current_notes: Vec<crate::db::notes::Note>,
 
     // ── Tags ──
     pub tag_mode: bool,
@@ -155,6 +155,9 @@ pub struct AppState {
     // ── PDF bookmarks (J) ──
     pub current_bookmarks: Vec<(String, i64)>,
 
+    // ── Additional attachments (non-primary files) ──
+    pub current_attachments: Vec<crate::db::attachments::Attachment>,
+
     // ── Bulk DOI import (C) ──
     pub bulk_import_mode: bool,
     pub bulk_import_input: String,
@@ -172,6 +175,20 @@ pub struct AppState {
     // ── Settings panel (,) ──
     pub settings_panel_mode: bool,
     pub settings_panel: Option<SettingsPanelState>,
+
+    // ── Command mode (:backup / :restore) ──
+    pub command_mode: bool,
+    pub command_input: String,
+
+    // ── Favorite filter (*) ──
+    pub favorite_filter: bool,
+
+    // ── Reading queue / TBR (Y) ──
+    pub queue_view: bool,
+    pub queue: Vec<Document>,
+
+    // ── Tag colors (tag name -> hex color) ──
+    pub tag_colors: HashMap<String, String>,
 }
 
 impl AppState {
@@ -201,7 +218,7 @@ impl AppState {
             list_cursor: 0,
             selected_doc_ids: HashSet::new(),
             show_help: false,
-        help_page: 0,
+            help_page: 0,
             search_mode: false,
             search_input: String::new(),
             add_file_mode: false,
@@ -243,7 +260,7 @@ impl AppState {
             glyph_set,
             note_mode: false,
             note_input: String::new(),
-            current_note: None,
+            current_notes: Vec::new(),
             tag_mode: false,
             tag_input: String::new(),
             current_tags: Vec::new(),
@@ -280,16 +297,23 @@ impl AppState {
             show_stats: false,
             library_stats: None,
             current_bookmarks: Vec::new(),
+            current_attachments: Vec::new(),
             bulk_import_mode: false,
             bulk_import_input: String::new(),
             file_import_mode: false,
             file_import_input: String::new(),
-    author_merge_mode: false,
-    author_merge_phase: 0,
-    author_merge_source: String::new(),
-    author_merge_input: String::new(),
+            author_merge_mode: false,
+            author_merge_phase: 0,
+            author_merge_source: String::new(),
+            author_merge_input: String::new(),
             settings_panel_mode: false,
             settings_panel: None,
+            command_mode: false,
+            command_input: String::new(),
+            favorite_filter: false,
+            queue_view: false,
+            queue: Vec::new(),
+            tag_colors: HashMap::new(),
         }
     }
 
@@ -320,7 +344,12 @@ impl AppState {
 
     pub fn reload_documents(&mut self) {
         if let Ok(conn) = self.db.lock() {
-            if let Ok(docs) = crate::db::documents::list_all(&conn) {
+            let docs_result = if self.favorite_filter {
+                crate::db::documents::list_favorites(&conn)
+            } else {
+                crate::db::documents::list_all(&conn)
+            };
+            if let Ok(docs) = docs_result {
                 self.document_count = docs.len();
                 if self.list_cursor >= docs.len() && !docs.is_empty() {
                     self.list_cursor = docs.len() - 1;
@@ -339,33 +368,46 @@ impl AppState {
 
     pub fn reload_projects(&mut self) {
         if let Ok(conn) = self.db.lock()
-            && let Ok(projects) = crate::db::projects::list_projects(&conn) {
-                self.projects = projects;
-            }
+            && let Ok(projects) = crate::db::projects::list_projects(&conn)
+        {
+            self.projects = projects;
+        }
         self.dirty = true;
     }
 
     pub fn reload_series(&mut self) {
         if let Ok(conn) = self.db.lock()
-            && let Ok(series) = crate::db::series::list_series(&conn) {
-                self.series = series;
-            }
+            && let Ok(series) = crate::db::series::list_series(&conn)
+        {
+            self.series = series;
+        }
         self.dirty = true;
     }
 
     pub fn reload_authors(&mut self) {
         if let Ok(conn) = self.db.lock()
-            && let Ok(authors) = crate::db::documents::list_authors(&conn, 1) {
-                self.authors = authors;
-            }
+            && let Ok(authors) = crate::db::documents::list_authors(&conn, 1)
+        {
+            self.authors = authors;
+        }
         self.dirty = true;
     }
 
     pub fn reload_saved_searches(&mut self) {
         if let Ok(conn) = self.db.lock()
-            && let Ok(searches) = crate::db::saved_searches::list(&conn) {
-                self.saved_searches = searches;
-            }
+            && let Ok(searches) = crate::db::saved_searches::list(&conn)
+        {
+            self.saved_searches = searches;
+        }
+        self.dirty = true;
+    }
+
+    pub fn reload_queue(&mut self) {
+        if let Ok(conn) = self.db.lock()
+            && let Ok(queue) = crate::db::documents::get_queue(&conn)
+        {
+            self.queue = queue;
+        }
         self.dirty = true;
     }
 
@@ -374,17 +416,27 @@ impl AppState {
             self.detail_doc = Some(doc.clone());
             let doc_id = doc.id.unwrap_or(0);
             if let Ok(conn) = self.db.lock() {
-                self.current_note = crate::db::notes::get(&conn, doc_id).ok().flatten();
-                self.current_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                self.current_notes = crate::db::notes::list(&conn, doc_id).unwrap_or_default();
+                self.current_tags =
+                    crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                self.tag_colors = crate::db::documents::get_tags_with_color(&conn)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|(tag, color)| color.map(|c| (tag, c)))
+                    .collect();
                 self.custom_fields = crate::db::custom_fields::list_fields(&conn, doc_id)
                     .unwrap_or_default()
                     .into_iter()
                     .map(|f| (f.id, f.key, f.value))
                     .collect();
+                self.current_attachments =
+                    crate::db::attachments::list_for_doc(&conn, doc_id).unwrap_or_default();
             } else {
-                self.current_note = None;
+                self.current_notes = Vec::new();
                 self.current_tags = Vec::new();
+                self.tag_colors = HashMap::new();
                 self.custom_fields = Vec::new();
+                self.current_attachments = Vec::new();
             }
         }
     }
@@ -393,7 +445,13 @@ impl AppState {
         if let Some(doc) = &self.detail_doc {
             let doc_id = doc.id.unwrap_or(0);
             if let Ok(conn) = self.db.lock() {
-                self.current_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                self.current_tags =
+                    crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                self.tag_colors = crate::db::documents::get_tags_with_color(&conn)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|(tag, color)| color.map(|c| (tag, c)))
+                    .collect();
             }
         }
     }
@@ -589,11 +647,9 @@ fn load_metrics_refresh_interval_days(db: &DbConn) -> u32 {
 }
 
 fn load_export_dialog_state(db: &DbConn) -> crate::export::export_dialog_state::ExportDialogState {
-    use crate::citation::text::styles::{
-        CitationLanguage, CitationStyle, DisplayMode,
-    };
-    use crate::export::export_dialog_state::{DialogSection, ExportDialogState};
+    use crate::citation::text::styles::{CitationLanguage, CitationStyle, DisplayMode};
     use crate::export::ExportFormat;
+    use crate::export::export_dialog_state::{DialogSection, ExportDialogState};
 
     let default_state = ExportDialogState::new();
     if let Ok(conn) = db.lock() {

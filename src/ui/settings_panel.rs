@@ -1,10 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Frame,
 };
 
 use crate::app::AppState;
@@ -65,9 +65,21 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
 
     // ── 라이브 프리뷰 ──
     let preview = Paragraph::new(Line::from(vec![
-        Span::styled(" Libran ", Style::default().fg(theme::accent_secondary()).add_modifier(Modifier::BOLD).bg(theme::bg())),
-        Span::styled(" 문헌 관리 ", Style::default().fg(theme::accent_primary()).bg(theme::bg())),
-        Span::styled("● 읽음 ◐ 읽는중 ○ 안읽음", Style::default().fg(theme::selected()).bg(theme::bg())),
+        Span::styled(
+            " Libran ",
+            Style::default()
+                .fg(theme::accent_secondary())
+                .add_modifier(Modifier::BOLD)
+                .bg(theme::bg()),
+        ),
+        Span::styled(
+            " 문헌 관리 ",
+            Style::default().fg(theme::accent_primary()).bg(theme::bg()),
+        ),
+        Span::styled(
+            "● 읽음 ◐ 읽는중 ○ 안읽음",
+            Style::default().fg(theme::selected()).bg(theme::bg()),
+        ),
     ]))
     .alignment(Alignment::Center);
     frame.render_widget(preview, chunks[0]);
@@ -83,11 +95,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     } else {
         " j/k 탐색 · Enter 변경 · +/- 조정 · Esc 닫기 "
     };
-    let hint = Paragraph::new(Span::styled(
-        hint_text,
-        Style::default().fg(theme::dim()),
-    ))
-    .alignment(Alignment::Center);
+    let hint = Paragraph::new(Span::styled(hint_text, Style::default().fg(theme::dim())))
+        .alignment(Alignment::Center);
     frame.render_widget(hint, chunks[2]);
 }
 
@@ -102,7 +111,9 @@ fn build_item_lines(state: &AppState) -> Vec<Line<'_>> {
     // 섹션 헤더
     lines.push(Line::from(Span::styled(
         " 외관 ",
-        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(theme::accent_primary())
+            .add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(Span::styled(
         "──────────────",
@@ -115,7 +126,9 @@ fn build_item_lines(state: &AppState) -> Vec<Line<'_>> {
         let value = item_value_str(state, i, cursor, editing, edit_input);
 
         let label_style = if i == cursor {
-            Style::default().fg(theme::accent_secondary()).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme::accent_secondary())
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme::fg())
         };

@@ -25,19 +25,56 @@ pub struct LibraryStats {
 pub fn compute(conn: &Connection) -> Result<LibraryStats> {
     let mut stats = LibraryStats::default();
 
-    stats.total_documents = conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
-    stats.documents_with_files = conn.query_row("SELECT COUNT(*) FROM documents WHERE file_path IS NOT NULL AND trim(file_path) <> ''", [], |row| row.get(0))?;
-    stats.documents_with_doi = conn.query_row("SELECT COUNT(*) FROM documents WHERE doi IS NOT NULL AND trim(doi) <> ''", [], |row| row.get(0))?;
-    stats.documents_with_arxiv = conn.query_row("SELECT COUNT(*) FROM documents WHERE arxiv_id IS NOT NULL AND trim(arxiv_id) <> ''", [], |row| row.get(0))?;
-    stats.reading_unread = conn.query_row("SELECT COUNT(*) FROM documents WHERE reading_status = 'unread'", [], |row| row.get(0))?;
-    stats.reading_reading = conn.query_row("SELECT COUNT(*) FROM documents WHERE reading_status = 'reading'", [], |row| row.get(0))?;
-    stats.reading_read = conn.query_row("SELECT COUNT(*) FROM documents WHERE reading_status = 'read'", [], |row| row.get(0))?;
-    stats.rated_documents = conn.query_row("SELECT COUNT(*) FROM documents WHERE rating IS NOT NULL", [], |row| row.get(0))?;
-    stats.average_rating = conn.query_row("SELECT COALESCE(AVG(rating), 0) FROM documents WHERE rating IS NOT NULL", [], |row| row.get(0))?;
-    stats.total_tags = conn.query_row("SELECT COUNT(DISTINCT tag) FROM tags", [], |row| row.get(0))?;
+    stats.total_documents =
+        conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
+    stats.documents_with_files = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE file_path IS NOT NULL AND trim(file_path) <> ''",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.documents_with_doi = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE doi IS NOT NULL AND trim(doi) <> ''",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.documents_with_arxiv = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE arxiv_id IS NOT NULL AND trim(arxiv_id) <> ''",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.reading_unread = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE reading_status = 'unread'",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.reading_reading = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE reading_status = 'reading'",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.reading_read = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE reading_status = 'read'",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.rated_documents = conn.query_row(
+        "SELECT COUNT(*) FROM documents WHERE rating IS NOT NULL",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.average_rating = conn.query_row(
+        "SELECT COALESCE(AVG(rating), 0) FROM documents WHERE rating IS NOT NULL",
+        [],
+        |row| row.get(0),
+    )?;
+    stats.total_tags =
+        conn.query_row("SELECT COUNT(DISTINCT tag) FROM tags", [], |row| row.get(0))?;
     stats.total_projects = conn.query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))?;
     stats.total_series = conn.query_row("SELECT COUNT(*) FROM series", [], |row| row.get(0))?;
-    stats.total_citation_relations = conn.query_row("SELECT COUNT(*) FROM citation_relations", [], |row| row.get(0))?;
+    stats.total_citation_relations =
+        conn.query_row("SELECT COUNT(*) FROM citation_relations", [], |row| {
+            row.get(0)
+        })?;
 
     // Author count (distinct split authors)
     stats.total_authors = {

@@ -1,4 +1,4 @@
-use libran::citation::{generate_citation_key, CitationKeyMode};
+use libran::citation::{CitationKeyMode, generate_citation_key};
 use libran::db::documents::Document;
 
 #[test]
@@ -21,9 +21,11 @@ fn test_bibtex_export_format() {
         file_hash: None,
         reading_status: None,
         reading_progress: None,
+        queue_position: None,
         citation_key: Some("Smith2024".to_string()),
         source: None,
         rating: None,
+        item_type: "article".to_string(),
         ..Default::default()
     };
 
@@ -57,9 +59,11 @@ fn test_csl_json_export_format() {
         file_hash: None,
         reading_status: None,
         reading_progress: None,
+        queue_position: None,
         citation_key: Some("Smith2024".to_string()),
         source: None,
         rating: None,
+        item_type: "article".to_string(),
         ..Default::default()
     };
 
@@ -93,6 +97,7 @@ fn test_collision_resolution_chain() {
         file_hash: None,
         reading_status: None,
         reading_progress: None,
+        queue_position: None,
         citation_key: None,
         source: None,
         rating: None,
@@ -123,6 +128,7 @@ fn test_custom_template_all_vars() {
         file_hash: None,
         reading_status: None,
         reading_progress: None,
+        queue_position: None,
         citation_key: None,
         source: None,
         rating: None,

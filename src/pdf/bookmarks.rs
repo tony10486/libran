@@ -77,10 +77,7 @@ fn traverse_outline(
             traverse_outline(doc, first_child_ref, pages, result, depth + 1, visited)?;
         }
 
-        current_ref = item
-            .get(b"Next")
-            .ok()
-            .and_then(|o| o.as_reference().ok());
+        current_ref = item.get(b"Next").ok().and_then(|o| o.as_reference().ok());
     }
 
     Ok(())
@@ -107,10 +104,7 @@ fn get_dest_page(
     None
 }
 
-fn resolve_dest_page(
-    dest: &Object,
-    pages: &HashMap<lopdf::ObjectId, u32>,
-) -> Option<u32> {
+fn resolve_dest_page(dest: &Object, pages: &HashMap<lopdf::ObjectId, u32>) -> Option<u32> {
     match dest {
         Object::Array(arr) => {
             if let Some(Object::Reference(id)) = arr.first() {

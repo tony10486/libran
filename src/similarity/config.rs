@@ -48,14 +48,12 @@ impl SimilarityConfig {
         let path = Self::path();
         if path.exists() {
             match fs::read_to_string(&path) {
-                Ok(content) => {
-                    match toml::from_str::<SimilarityConfig>(&content) {
-                        Ok(cfg) => return cfg,
-                        Err(e) => {
-                            eprintln!("similarity.toml parse error: {e}, using defaults");
-                        }
+                Ok(content) => match toml::from_str::<SimilarityConfig>(&content) {
+                    Ok(cfg) => return cfg,
+                    Err(e) => {
+                        eprintln!("similarity.toml parse error: {e}, using defaults");
                     }
-                }
+                },
                 Err(e) => {
                     eprintln!("similarity.toml read error: {e}, using defaults");
                 }
@@ -74,8 +72,8 @@ impl SimilarityConfig {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let toml_str = toml::to_string_pretty(self)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let toml_str =
+            toml::to_string_pretty(self).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         let mut file = fs::File::create(&path)?;
         file.write_all(toml_str.as_bytes())?;
         Ok(())

@@ -20,8 +20,8 @@ pub struct DocumentFeatures {
     pub id: i64,
     pub udc_notations: Vec<String>,
     pub tags: Vec<String>,
-    pub cited_docs: Vec<i64>,       // documents this paper cites
-    pub cited_by_docs: Vec<i64>,    // documents that cite this paper
+    pub cited_docs: Vec<i64>,    // documents this paper cites
+    pub cited_by_docs: Vec<i64>, // documents that cite this paper
     pub pub_year: Option<i64>,
     pub conference: Option<String>,
 }
@@ -241,7 +241,8 @@ pub fn compute_scores(
         let year_score = compute_year_score(ref_year, doc.pub_year, config);
 
         // 5. Conference score
-        let conference_score = compute_conference_score(ref_conference, doc.conference.as_deref(), config);
+        let conference_score =
+            compute_conference_score(ref_conference, doc.conference.as_deref(), config);
 
         // Determine if this paper should be excluded (UDC top-level mismatch)
         // Exclusion rule: if no UDC top-level match AND no tag match AND no citation match
@@ -266,7 +267,11 @@ pub fn compute_scores(
     }
 
     // Sort by total_score descending
-    scores.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap_or(std::cmp::Ordering::Equal));
+    scores.sort_by(|a, b| {
+        b.total_score
+            .partial_cmp(&a.total_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     scores
 }
@@ -338,7 +343,7 @@ mod tests {
     fn make_tree() -> UdcTree {
         let mut parents = HashMap::new();
         // UDC hierarchy
-        parents.insert("5".to_string(), String::new());  // root children have empty parent
+        parents.insert("5".to_string(), String::new()); // root children have empty parent
         parents.insert("51".to_string(), "5".to_string());
         parents.insert("512".to_string(), "51".to_string());
         parents.insert("514".to_string(), "51".to_string());
@@ -391,11 +396,8 @@ mod tests {
     fn test_score_leaf_match() {
         let tree = make_tree();
         let config = SimilarityConfig::default();
-        let (score, matched) = tree.score_between(
-            &["517.9".to_string()],
-            &["517.9".to_string()],
-            &config,
-        );
+        let (score, matched) =
+            tree.score_between(&["517.9".to_string()], &["517.9".to_string()], &config);
         assert!(matched);
         assert_eq!(score, config.udc_leaf_match);
     }
@@ -405,11 +407,8 @@ mod tests {
         let tree = make_tree();
         let config = SimilarityConfig::default();
         // 512 (Algebra) and 514 (Geometry) both under 51 (Mathematics)
-        let (score, matched) = tree.score_between(
-            &["512".to_string()],
-            &["514".to_string()],
-            &config,
-        );
+        let (score, matched) =
+            tree.score_between(&["512".to_string()], &["514".to_string()], &config);
         assert!(matched);
         assert_eq!(score, config.udc_parent_match);
     }
@@ -420,11 +419,8 @@ mod tests {
         let config = SimilarityConfig::default();
         // 517.9 (depth 4) and 512 (depth 3) - LCA at depth 2 (51)
         // levels_up: 4-2=2, 3-2=1, max=2 -> grandparent match
-        let (score, matched) = tree.score_between(
-            &["517.9".to_string()],
-            &["512".to_string()],
-            &config,
-        );
+        let (score, matched) =
+            tree.score_between(&["517.9".to_string()], &["512".to_string()], &config);
         assert!(matched);
         assert_eq!(score, config.udc_grandparent_match);
     }
@@ -434,11 +430,8 @@ mod tests {
         let tree = make_tree();
         let config = SimilarityConfig::default();
         // 512 (Math) and 61 (Medicine) -> different top-level
-        let (score, matched) = tree.score_between(
-            &["512".to_string()],
-            &["61".to_string()],
-            &config,
-        );
+        let (score, matched) =
+            tree.score_between(&["512".to_string()], &["61".to_string()], &config);
         assert!(!matched);
         assert_eq!(score, 0.0);
     }
@@ -449,11 +442,8 @@ mod tests {
         let config = SimilarityConfig::default();
         // "5" (broad Math/Science) and "517.9" (very specific differential equations)
         // LCA at depth 1 ("5"), levels_up: 0 and 3 → max=3, but lca_d=1>0 → grandparent
-        let (score, matched) = tree.score_between(
-            &["5".to_string()],
-            &["517.9".to_string()],
-            &config,
-        );
+        let (score, matched) =
+            tree.score_between(&["5".to_string()], &["517.9".to_string()], &config);
         assert!(matched);
         assert_eq!(score, config.udc_grandparent_match);
     }

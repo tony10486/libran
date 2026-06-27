@@ -10,24 +10,25 @@ pub fn extract_metadata(path: &Path) -> Result<RawMetadata> {
 
     if let Ok(info) = doc.trailer.get(b"Info")
         && let Ok(info_ref) = info.as_reference()
-            && let Ok(info_obj) = doc.get_object(info_ref)
-                && let Ok(dict) = info_obj.as_dict() {
-                    if let Some(title) = get_string(dict, b"Title") {
-                        if is_plausible_title(&title) {
-                            meta.title = Some(title);
-                        }
-                    }
-                    if let Some(journal) = get_string(dict, b"Subject") {
-                        if is_plausible_metadata(&journal) {
-                            meta.journal = Some(journal);
-                        }
-                    }
-                    if let Some(author_str) = get_string(dict, b"Author") {
-                        if is_plausible_metadata(&author_str) {
-                            meta.authors = parse_metadata_authors(&author_str);
-                        }
-                    }
-                }
+        && let Ok(info_obj) = doc.get_object(info_ref)
+        && let Ok(dict) = info_obj.as_dict()
+    {
+        if let Some(title) = get_string(dict, b"Title") {
+            if is_plausible_title(&title) {
+                meta.title = Some(title);
+            }
+        }
+        if let Some(journal) = get_string(dict, b"Subject") {
+            if is_plausible_metadata(&journal) {
+                meta.journal = Some(journal);
+            }
+        }
+        if let Some(author_str) = get_string(dict, b"Author") {
+            if is_plausible_metadata(&author_str) {
+                meta.authors = parse_metadata_authors(&author_str);
+            }
+        }
+    }
 
     Ok(meta)
 }
@@ -233,17 +234,23 @@ mod tests {
 
     #[test]
     fn test_is_plausible_metadata_rejects_tabs() {
-        assert!(!is_plausible_metadata("Subject collections\tArticles on similar topics"));
+        assert!(!is_plausible_metadata(
+            "Subject collections\tArticles on similar topics"
+        ));
     }
 
     #[test]
     fn test_is_plausible_metadata_rejects_null_pattern() {
-        assert!(!is_plausible_metadata("Discrete Math. Algorithm. Appl. 2016.08:null-null"));
+        assert!(!is_plausible_metadata(
+            "Discrete Math. Algorithm. Appl. 2016.08:null-null"
+        ));
     }
 
     #[test]
     fn test_is_plausible_metadata_rejects_doi_in_journal() {
-        assert!(!is_plausible_metadata("Linear Algebra and its Applications, 439 (2013) 3038–3043. 10.1016/j.laa.2013.08.039"));
+        assert!(!is_plausible_metadata(
+            "Linear Algebra and its Applications, 439 (2013) 3038–3043. 10.1016/j.laa.2013.08.039"
+        ));
     }
 
     #[test]

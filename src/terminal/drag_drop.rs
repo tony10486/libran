@@ -25,10 +25,11 @@ pub fn parse_dragged_path(input: &str) -> Option<PathBuf> {
     path_str = url_decode(&path_str);
 
     if path_str.starts_with("~/")
-        && let Some(home) = directories::BaseDirs::new() {
-            let home_path = home.home_dir().to_path_buf();
-            path_str = home_path.join(&path_str[2..]).to_string_lossy().to_string();
-        }
+        && let Some(home) = directories::BaseDirs::new()
+    {
+        let home_path = home.home_dir().to_path_buf();
+        path_str = home_path.join(&path_str[2..]).to_string_lossy().to_string();
+    }
 
     if path_str.contains('\n') {
         path_str = path_str.lines().next().unwrap_or("").to_string();
@@ -68,10 +69,11 @@ fn url_decode(s: &str) -> String {
             let h1 = chars.next();
             let h2 = chars.next();
             if let (Some(a), Some(b)) = (h1, h2)
-                && let Ok(byte) = u8::from_str_radix(&format!("{}{}", a, b), 16) {
-                    result.push(byte as char);
-                    continue;
-                }
+                && let Ok(byte) = u8::from_str_radix(&format!("{}{}", a, b), 16)
+            {
+                result.push(byte as char);
+                continue;
+            }
             result.push('%');
             if let Some(a) = h1 {
                 result.push(a);
@@ -169,7 +171,10 @@ mod tests {
 
         let escaped = format!("{}/\\(a\\&b\\).pdf", tmp.path().display());
         let result = parse_dragged_path(&escaped);
-        assert!(result.is_some(), "이스케이프된 괄호/앰퍼샌드 경로가 파싱되어야 함");
+        assert!(
+            result.is_some(),
+            "이스케이프된 괄호/앰퍼샌드 경로가 파싱되어야 함"
+        );
         assert_eq!(result.unwrap(), file_path);
     }
 

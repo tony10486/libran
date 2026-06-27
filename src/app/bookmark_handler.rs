@@ -1,5 +1,5 @@
-use crate::app::action::AppAction;
 use crate::app::AppState;
+use crate::app::action::AppAction;
 use crate::db::documents;
 use crate::pdf::bookmarks;
 use crate::storage::library;
@@ -29,7 +29,10 @@ pub fn handle_extract_bookmarks(state: &mut AppState, doc_id: i64) {
         .await;
 
         let action = match result {
-            Ok(Ok(bms)) => AppAction::BookmarksExtracted { doc_id, bookmarks: bms },
+            Ok(Ok(bms)) => AppAction::BookmarksExtracted {
+                doc_id,
+                bookmarks: bms,
+            },
             Ok(Err(m)) => AppAction::BookmarkExtractionFailed { doc_id, reason: m },
             Err(e) => AppAction::BookmarkExtractionFailed {
                 doc_id,
@@ -41,11 +44,7 @@ pub fn handle_extract_bookmarks(state: &mut AppState, doc_id: i64) {
 }
 
 /// Store extracted bookmarks in state.
-pub fn handle_bookmarks_extracted(
-    state: &mut AppState,
-    _doc_id: i64,
-    bms: Vec<(String, i64)>,
-) {
+pub fn handle_bookmarks_extracted(state: &mut AppState, _doc_id: i64, bms: Vec<(String, i64)>) {
     state.finish_processing(&format!("북마크 {}개 추출됨", bms.len()));
     state.current_bookmarks = bms;
 }

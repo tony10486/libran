@@ -148,10 +148,7 @@ pub fn compute_layout(graph: &CitationGraph) -> GraphLayout {
             })
             .count();
 
-        let pos_in_layer = positions
-            .iter()
-            .filter(|p| p.row as usize == layer)
-            .count();
+        let pos_in_layer = positions.iter().filter(|p| p.row as usize == layer).count();
 
         let col_spacing = 20u16;
         let row_spacing = 3u16;
@@ -185,16 +182,10 @@ fn build_condensed_dag(
         let src_scc = node_scc_id.get(&edge.source()).copied().unwrap_or(0);
         let tgt_scc = node_scc_id.get(&edge.target()).copied().unwrap_or(0);
         if src_scc != tgt_scc {
-            let src_node = condensed
-                .node_indices()
-                .find(|n| condensed[*n] == src_scc);
-            let tgt_node = condensed
-                .node_indices()
-                .find(|n| condensed[*n] == tgt_scc);
+            let src_node = condensed.node_indices().find(|n| condensed[*n] == src_scc);
+            let tgt_node = condensed.node_indices().find(|n| condensed[*n] == tgt_scc);
             if let (Some(s), Some(t)) = (src_node, tgt_node) {
-                let exists = condensed
-                    .edges_connecting(s, t)
-                    .any(|e| e.weight() == &());
+                let exists = condensed.edges_connecting(s, t).any(|e| e.weight() == &());
                 if !exists {
                     condensed.add_edge(s, t, ());
                 }
@@ -210,7 +201,12 @@ fn assign_layers(condensed: &CondensedGraph) -> std::collections::HashMap<usize,
 
     let mut sources: Vec<NodeIndex> = condensed
         .node_indices()
-        .filter(|n| condensed.neighbors_directed(*n, petgraph::Direction::Incoming).count() == 0)
+        .filter(|n| {
+            condensed
+                .neighbors_directed(*n, petgraph::Direction::Incoming)
+                .count()
+                == 0
+        })
         .collect();
 
     if sources.is_empty() && condensed.node_count() > 0 {
@@ -262,9 +258,7 @@ fn count_cited_by_in_set(
     doc_id: i64,
     id_set: &std::collections::HashSet<i64>,
 ) -> Result<usize> {
-    let mut stmt = conn.prepare(
-        "SELECT citing_id FROM citation_relations WHERE cited_id = ?1",
-    )?;
+    let mut stmt = conn.prepare("SELECT citing_id FROM citation_relations WHERE cited_id = ?1")?;
     let rows = stmt.query_map(rusqlite::params![doc_id], |row| row.get::<_, i64>(0))?;
     let count = rows
         .filter_map(|r| r.ok())

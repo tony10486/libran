@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::writer::Writer;
@@ -184,11 +184,7 @@ fn write_idno<W: Write>(w: &mut Writer<W>, id_type: &str, value: &str) -> Result
     Ok(())
 }
 
-fn write_bibl_scope<W: Write>(
-    w: &mut Writer<W>,
-    unit: &str,
-    content: &str,
-) -> Result<()> {
+fn write_bibl_scope<W: Write>(w: &mut Writer<W>, unit: &str, content: &str) -> Result<()> {
     let mut elem = BytesStart::new("biblScope");
     elem.push_attribute(("unit", unit));
     w.write_event(Event::Start(elem))?;
@@ -253,8 +249,14 @@ mod tests {
         let output = String::from_utf8(buf).unwrap();
 
         // Then the XML contains the core TEI structural elements
-        assert!(output.contains("<biblStruct>"), "missing <biblStruct>: {output}");
-        assert!(output.contains("<analytic>"), "missing <analytic>: {output}");
+        assert!(
+            output.contains("<biblStruct>"),
+            "missing <biblStruct>: {output}"
+        );
+        assert!(
+            output.contains("<analytic>"),
+            "missing <analytic>: {output}"
+        );
         assert!(
             output.contains("<surname>Smith</surname>"),
             "missing surname Smith: {output}"
@@ -269,7 +271,8 @@ mod tests {
         );
         assert!(output.contains("<monogr>"), "missing <monogr>: {output}");
         assert!(
-            output.contains("<title level=\"j\">Siberian Journal of Industrial Mathematics</title>"),
+            output
+                .contains("<title level=\"j\">Siberian Journal of Industrial Mathematics</title>"),
             "missing journal title: {output}"
         );
         assert!(

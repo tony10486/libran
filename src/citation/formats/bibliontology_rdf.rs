@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use std::io::Write;
 
@@ -11,7 +11,10 @@ pub fn export_bibliontology_rdf(documents: &[Document], writer: &mut impl Write)
 }
 
 fn write_prefixes(writer: &mut impl Write) -> Result<()> {
-    writeln!(writer, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .")?;
+    writeln!(
+        writer,
+        "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> ."
+    )?;
     writeln!(writer, "@prefix bibo: <http://purl.org/ontology/bibo/> .")?;
     writeln!(writer, "@prefix dcterms: <http://purl.org/dc/terms/> .")?;
     writeln!(writer, "@prefix foaf: <http://xmlns.com/foaf/0.1/> .")?;
@@ -188,12 +191,24 @@ mod tests {
         export_bibliontology_rdf(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
         eprintln!("--- RDF OUTPUT ---\n{out}\n--- END ---");
-        assert!(out.contains("bibo:AcademicArticle"), "missing bibo:AcademicArticle: {out}");
-        assert!(out.contains("dcterms:title"), "missing dcterms:title: {out}");
+        assert!(
+            out.contains("bibo:AcademicArticle"),
+            "missing bibo:AcademicArticle: {out}"
+        );
+        assert!(
+            out.contains("dcterms:title"),
+            "missing dcterms:title: {out}"
+        );
         assert!(out.contains("foaf:Person"), "missing foaf:Person: {out}");
-        assert!(out.contains("foaf:surname \"Smith\""), "missing foaf:surname Smith: {out}");
+        assert!(
+            out.contains("foaf:surname \"Smith\""),
+            "missing foaf:surname Smith: {out}"
+        );
         assert!(out.contains("bibo:doi"), "missing bibo:doi: {out}");
-        assert!(out.contains("dcterms:isPartOf"), "missing dcterms:isPartOf: {out}");
+        assert!(
+            out.contains("dcterms:isPartOf"),
+            "missing dcterms:isPartOf: {out}"
+        );
     }
 
     #[test]
@@ -227,6 +242,9 @@ mod tests {
         export_bibliontology_rdf(&[doc], &mut Cursor::new(&mut buf)).unwrap();
         let out = String::from_utf8(buf).unwrap();
         let count = out.matches("dcterms:subject").count();
-        assert_eq!(count, 2, "expected 2 dcterms:subject lines, got {count}: {out}");
+        assert_eq!(
+            count, 2,
+            "expected 2 dcterms:subject lines, got {count}: {out}"
+        );
     }
 }

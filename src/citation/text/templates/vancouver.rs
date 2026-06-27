@@ -3,9 +3,7 @@
 //! Reference: Smith JA, Lee BC. Title. J Name. 2023;42(3):123-45.
 //! 7+ authors: first 6 then et al. In-text: (1)
 
-use crate::citation::text::helpers::{
-    format_pages, format_year, get_authors,
-};
+use crate::citation::text::helpers::{format_pages, format_year, get_authors};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -50,7 +48,11 @@ fn shorten_pages(pages: &str) -> String {
             if common_len <= start.len() {
                 let shortened = &start[common_len..];
                 if end.ends_with(shortened) {
-                    return format!("{}-{}", start, &end[end.len() - (end.len() - shortened_len(end, start))..]);
+                    return format!(
+                        "{}-{}",
+                        start,
+                        &end[end.len() - (end.len() - shortened_len(end, start))..]
+                    );
                 }
             }
         }
@@ -142,15 +144,27 @@ mod tests {
     fn test_vancouver_journal_article() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith JA, Lee BC."), "vancouver authors no periods: {result}");
-        assert!(result.contains("Systematic Review."), "vancouver title: {result}");
+        assert!(
+            result.contains("Smith JA, Lee BC."),
+            "vancouver authors no periods: {result}"
+        );
+        assert!(
+            result.contains("Systematic Review."),
+            "vancouver title: {result}"
+        );
         assert!(result.contains("BMJ."), "vancouver journal: {result}");
-        assert!(result.contains("2023;42(3):"), "vancouver year;vol(issue): {result}");
+        assert!(
+            result.contains("2023;42(3):"),
+            "vancouver year;vol(issue): {result}"
+        );
     }
 
     #[test]
     fn test_vancouver_seven_plus_authors() {
-        let authors = (1..=8).map(|i| format!("Author{}", i)).collect::<Vec<_>>().join("; ");
+        let authors = (1..=8)
+            .map(|i| format!("Author{}", i))
+            .collect::<Vec<_>>()
+            .join("; ");
         let doc = Document {
             title: "Many".to_string(),
             authors: Some(authors),

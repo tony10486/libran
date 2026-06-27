@@ -1,4 +1,4 @@
-use crate::db::documents::{split_authors, Document};
+use crate::db::documents::{Document, split_authors};
 use anyhow::Result;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::writer::Writer;
@@ -16,6 +16,7 @@ pub fn export_mods(documents: &[Document], writer: &mut impl Write) -> Result<()
 
     // Root: <modsCollection version="3.7">
     let mut root = BytesStart::new("modsCollection");
+    root.push_attribute(("xmlns", "http://www.loc.gov/mods/v3"));
     root.push_attribute(("version", "3.7"));
     w.write_event(Event::Start(root))?;
 
@@ -29,7 +30,9 @@ pub fn export_mods(documents: &[Document], writer: &mut impl Write) -> Result<()
 }
 
 fn write_mods_element<W: Write>(w: &mut Writer<W>, doc: &Document) -> Result<()> {
-    w.write_event(Event::Start(BytesStart::new("mods")))?;
+    let mut mods_start = BytesStart::new("mods");
+    mods_start.push_attribute(("version", "3.7"));
+    w.write_event(Event::Start(mods_start))?;
 
     // titleInfo / title (always present — title is required on Document)
     w.write_event(Event::Start(BytesStart::new("titleInfo")))?;
@@ -47,18 +50,18 @@ fn write_mods_element<W: Write>(w: &mut Writer<W>, doc: &Document) -> Result<()>
         }
     }
 
-    // originInfo / dateCreated — if pub_year present
+    // originInfo / dateIssued — if pub_year present (MODS spec: dateIssued = publication date)
     if let Some(year) = doc.pub_year {
         w.write_event(Event::Start(BytesStart::new("originInfo")))?;
-        write_text_element(w, "dateCreated", &year.to_string())?;
+        write_text_element(w, "dateIssued", &year.to_string())?;
         w.write_event(Event::End(BytesEnd::new("originInfo")))?;
     }
 
     // relatedItem type="host" / titleInfo / title — journal or conference
     if let Some(journal) = &doc.journal {
-        write_host_title(w, journal)?;
+        write_host_title(w, journal, doc)?;
     } else if let Some(conference) = &doc.conference {
-        write_host_title(w, conference)?;
+        write_host_title(w, conference, doc)?;
     }
 
     // identifier type="doi"
@@ -87,13 +90,46 @@ fn write_mods_element<W: Write>(w: &mut Writer<W>, doc: &Document) -> Result<()>
     Ok(())
 }
 
-fn write_host_title<W: Write>(w: &mut Writer<W>, title: &str) -> Result<()> {
+fn write_host_title<W: Write>(w: &mut Writer<W>, title: &str, doc: &Document) -> Result<()> {
     let mut related = BytesStart::new("relatedItem");
     related.push_attribute(("type", "host"));
     w.write_event(Event::Start(related))?;
     w.write_event(Event::Start(BytesStart::new("titleInfo")))?;
     write_text_element(w, "title", title)?;
     w.write_event(Event::End(BytesEnd::new("titleInfo")))?;
+
+    let has_volume = doc.volume.is_some();
+    let has_issue = doc.issue.is_some();
+    let has_pages = doc.page_start.is_some();
+    if has_volume || has_issue || has_pages {
+        w.write_event(Event::Start(BytesStart::new("part")))?;
+        if let Some(vol) = &doc.volume {
+            let mut detail = BytesStart::new("detail");
+            detail.push_attribute(("type", "volume"));
+            w.write_event(Event::Start(detail))?;
+            write_text_element(w, "number", vol)?;
+            w.write_event(Event::End(BytesEnd::new("detail")))?;
+        }
+        if let Some(iss) = &doc.issue {
+            let mut detail = BytesStart::new("detail");
+            detail.push_attribute(("type", "issue"));
+            w.write_event(Event::Start(detail))?;
+            write_text_element(w, "number", iss)?;
+            w.write_event(Event::End(BytesEnd::new("detail")))?;
+        }
+        if let Some(start) = &doc.page_start {
+            let mut extent = BytesStart::new("extent");
+            extent.push_attribute(("unit", "pages"));
+            w.write_event(Event::Start(extent))?;
+            write_text_element(w, "start", start)?;
+            if let Some(end) = &doc.page_end {
+                write_text_element(w, "end", end)?;
+            }
+            w.write_event(Event::End(BytesEnd::new("extent")))?;
+        }
+        w.write_event(Event::End(BytesEnd::new("part")))?;
+    }
+
     w.write_event(Event::End(BytesEnd::new("relatedItem")))?;
     Ok(())
 }
@@ -199,8 +235,8 @@ mod tests {
             "missing <namePart> with author: {output}"
         );
         assert!(
-            output.contains("<dateCreated>2022</dateCreated>"),
-            "missing <dateCreated> with year: {output}"
+            output.contains("<dateIssued>2022</dateIssued>"),
+            "missing <dateIssued> with year: {output}"
         );
         assert!(
             output.contains("<identifier type=\"doi\">10.33048/SIBJIM.2022.25.103</identifier>"),

@@ -247,14 +247,162 @@ pub fn run(conn: &Connection) -> Result<()> {
         set_version(conn, 10)?;
     }
 
+    if version < 11 {
+        let _ = conn.execute("ALTER TABLE tags ADD COLUMN color TEXT", []);
+        set_version(conn, 11)?;
+    }
+
+    if version < 12 {
+        let _ = conn.execute(
+            "ALTER TABLE documents ADD COLUMN queue_position INTEGER",
+            [],
+        );
+        set_version(conn, 12)?;
+    }
+
+    if version < 13 {
+        // Migration 13: recreate document_notes without UNIQUE constraint (multi-note)
+        // and add note_type + created_at columns. SQLite cannot ALTER TABLE DROP
+        // CONSTRAINT, so we recreate via the standard 4-step pattern.
+        conn.execute_batch(
+            "CREATE TABLE document_notes_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                content     TEXT NOT NULL DEFAULT '',
+                note_type   TEXT NOT NULL DEFAULT 'general',
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO document_notes_new (document_id, content, note_type, created_at, updated_at)
+            SELECT document_id, content, 'general',
+                   COALESCE(updated_at, CURRENT_TIMESTAMP),
+                   COALESCE(updated_at, CURRENT_TIMESTAMP)
+            FROM document_notes;
+
+            DROP TABLE document_notes;
+            ALTER TABLE document_notes_new RENAME TO document_notes;
+            CREATE INDEX idx_document_notes_doc ON document_notes(document_id);",
+        )?;
+        set_version(conn, 13)?;
+    }
+
+    if version < 14 {
+        // Migration 14: full-text body indexing — documents_body table + FTS5
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS documents_body (
+                document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+                body_text   TEXT
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS documents_body_fts USING fts5(
+                body_text,
+                content='documents_body',
+                content_rowid='document_id',
+                tokenize='trigram'
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_body_fts_insert AFTER INSERT ON documents_body BEGIN
+                INSERT INTO documents_body_fts(rowid, body_text)
+                VALUES (new.document_id, new.body_text);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_body_fts_delete AFTER DELETE ON documents_body BEGIN
+                INSERT INTO documents_body_fts(documents_body_fts, rowid, body_text)
+                VALUES ('delete', old.document_id, old.body_text);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_body_fts_update AFTER UPDATE ON documents_body BEGIN
+                INSERT INTO documents_body_fts(documents_body_fts, rowid, body_text)
+                VALUES ('delete', old.document_id, old.body_text);
+                INSERT INTO documents_body_fts(rowid, body_text)
+                VALUES (new.document_id, new.body_text);
+            END;",
+        )?;
+        set_version(conn, 14)?;
+    }
+
+    if version < 15 {
+        let _ = conn.execute(
+            "ALTER TABLE documents ADD COLUMN item_type TEXT NOT NULL DEFAULT 'misc' \
+             CHECK(item_type IN ('article','book','thesis','conference','dataset','webpage','patent','misc'))",
+            [],
+        );
+        conn.execute(
+            "UPDATE documents SET item_type = 'article' WHERE journal IS NOT NULL AND item_type = 'misc'",
+            [],
+        )?;
+        conn.execute(
+            "UPDATE documents SET item_type = 'book' WHERE isbn IS NOT NULL AND item_type = 'misc'",
+            [],
+        )?;
+        conn.execute(
+            "UPDATE documents SET item_type = 'conference' WHERE conference IS NOT NULL AND item_type = 'misc'",
+            [],
+        )?;
+        set_version(conn, 15)?;
+    }
+
+    if version < 16 {
+        // Migration 16: structured creators with roles — replaces ad-hoc authors
+        // TEXT splitting with a normalized creators table. Backfill populates
+        // from existing `authors` TEXT via `split_authors` + CJK locale detection.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS creators (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id  INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                creator_type TEXT NOT NULL DEFAULT 'author'
+                    CHECK(creator_type IN ('author','editor','translator','contributor')),
+                family       TEXT,
+                given        TEXT,
+                suffix       TEXT,
+                particles    TEXT,
+                literal      TEXT,
+                locale       TEXT,
+                order_index  INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_creators_doc ON creators(document_id, order_index);",
+        )?;
+
+        crate::db::creators::backfill_from_documents(conn)?;
+
+        set_version(conn, 16)?;
+    }
+
+    if version < 17 {
+        // Migration 17: multi-attachment support — document_attachments table.
+        // The primary PDF stays in documents.file_path/file_hash (backward compat);
+        // this table holds ADDITIONAL attachments (EPUB, HTML, supplementary, datasets).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS document_attachments (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id     INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                file_path       TEXT NOT NULL,
+                file_hash       TEXT,
+                attachment_type TEXT NOT NULL DEFAULT 'primary',
+                label           TEXT,
+                mime_type       TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_attachments_doc ON document_attachments(document_id);",
+        )?;
+        set_version(conn, 17)?;
+    }
+
     Ok(())
 }
 
 fn nfc_normalize_existing_documents(conn: &Connection) -> Result<()> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, authors, journal, abstract, keywords FROM documents",
-    )?;
-    let docs: Vec<(i64, String, Option<String>, Option<String>, Option<String>, Option<String>)> = stmt
+    let mut stmt =
+        conn.prepare("SELECT id, title, authors, journal, abstract, keywords FROM documents")?;
+    let docs: Vec<(
+        i64,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = stmt
         .query_map([], |row| {
             Ok((
                 row.get(0)?,
@@ -286,14 +434,7 @@ fn nfc_normalize_existing_documents(conn: &Connection) -> Result<()> {
             conn.execute(
                 "UPDATE documents SET title = ?1, authors = ?2, journal = ?3,
                  abstract = ?4, keywords = ?5 WHERE id = ?6",
-                rusqlite::params![
-                    title_n,
-                    authors_n,
-                    journal_n,
-                    abstract_n,
-                    keywords_n,
-                    id,
-                ],
+                rusqlite::params![title_n, authors_n, journal_n, abstract_n, keywords_n, id,],
             )?;
         }
     }

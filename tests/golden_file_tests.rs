@@ -1,5 +1,5 @@
 use libran::db::documents::Document;
-use libran::export::{export, ExportFormat};
+use libran::export::{ExportFormat, export};
 use std::io::Cursor;
 
 fn standard_test_document() -> Document {
@@ -32,6 +32,8 @@ fn standard_test_document() -> Document {
         file_hash: None,
         reading_status: None,
         reading_progress: None,
+        queue_position: None,
+        item_type: "article".to_string(),
     }
 }
 
@@ -59,7 +61,10 @@ fn test_golden_bibtex() {
         "BibTeX: {out}"
     );
     assert!(out.contains("year      = {2023}"), "BibTeX: {out}");
-    assert!(out.contains("doi       = {10.1234/test.2023.001}"), "BibTeX: {out}");
+    assert!(
+        out.contains("doi       = {10.1234/test.2023.001}"),
+        "BibTeX: {out}"
+    );
     assert!(out.contains("eprint    = {2301.12345}"), "BibTeX: {out}");
     assert!(
         out.contains("keywords  = {machine learning, NLP}"),
@@ -74,22 +79,19 @@ fn test_golden_csl_json() {
     let parsed: serde_json::Value = serde_json::from_str(&out).expect("CSL JSON parses");
     assert!(parsed.is_array(), "CSL JSON should be an array: {out}");
     assert_eq!(parsed[0]["id"], "smith2023deep", "CSL JSON: {out}");
+    assert_eq!(parsed[0]["type"], "article-journal", "CSL JSON: {out}");
     assert_eq!(
-        parsed[0]["type"],
-        "article-journal",
+        parsed[0]["title"], "Deep Learning for Natural Language Processing",
         "CSL JSON: {out}"
     );
     assert_eq!(
-        parsed[0]["title"],
-        "Deep Learning for Natural Language Processing",
+        parsed[0]["container-title"], "Journal of AI Research",
         "CSL JSON: {out}"
     );
     assert_eq!(
-        parsed[0]["container-title"],
-        "Journal of AI Research",
+        parsed[0]["issued"]["date-parts"][0][0], 2023,
         "CSL JSON: {out}"
     );
-    assert_eq!(parsed[0]["issued"]["date-parts"][0][0], 2023, "CSL JSON: {out}");
     assert_eq!(parsed[0]["doi"], "10.1234/test.2023.001", "CSL JSON: {out}");
     assert_eq!(parsed[0]["author"][0]["family"], "Smith", "CSL JSON: {out}");
     assert_eq!(parsed[0]["author"][0]["given"], "John", "CSL JSON: {out}");
@@ -110,6 +112,10 @@ fn test_golden_ris() {
     assert!(out.contains("PY  - 2023"), "RIS: {out}");
     assert!(out.contains("JO  - Journal of AI Research"), "RIS: {out}");
     assert!(out.contains("DO  - 10.1234/test.2023.001"), "RIS: {out}");
+    assert!(out.contains("VL  - 42"), "RIS: {out}");
+    assert!(out.contains("IS  - 7"), "RIS: {out}");
+    assert!(out.contains("SP  - 551"), "RIS: {out}");
+    assert!(out.contains("EP  - 565"), "RIS: {out}");
     assert!(out.contains("ER  - "), "RIS: {out}");
 }
 
@@ -118,11 +124,11 @@ fn test_golden_csv() {
     let doc = standard_test_document();
     let out = run_export(ExportFormat::Csv, &doc);
     let header = "id,title,authors,journal,conference,pub_year,doi,arxiv_id,abstract,keywords,citation_key,source,rating";
+    assert!(out.starts_with(header), "CSV header missing: {out}");
     assert!(
-        out.starts_with(header),
-        "CSV header missing: {out}"
+        out.contains("Deep Learning for Natural Language Processing"),
+        "CSV: {out}"
     );
-    assert!(out.contains("Deep Learning for Natural Language Processing"), "CSV: {out}");
     assert!(out.contains("Smith, John; Lee, Jane"), "CSV: {out}");
     assert!(out.contains("Journal of AI Research"), "CSV: {out}");
     assert!(out.contains("2023"), "CSV: {out}");
@@ -135,16 +141,26 @@ fn test_golden_csv() {
 fn test_golden_mods() {
     let doc = standard_test_document();
     let out = run_export(ExportFormat::Mods, &doc);
-    assert!(out.contains("<modsCollection version=\"3.7\">"), "MODS: {out}");
-    assert!(out.contains("<mods>"), "MODS: {out}");
+    assert!(
+        out.contains("xmlns=\"http://www.loc.gov/mods/v3\""),
+        "MODS namespace: {out}"
+    );
+    assert!(out.contains("version=\"3.7\""), "MODS version attr: {out}");
+    assert!(out.contains("<mods version=\"3.7\">"), "MODS: {out}");
     assert!(out.contains("<titleInfo>"), "MODS: {out}");
     assert!(
         out.contains("<title>Deep Learning for Natural Language Processing</title>"),
         "MODS: {out}"
     );
     assert!(out.contains("<name type=\"personal\">"), "MODS: {out}");
-    assert!(out.contains("<namePart>Smith, John</namePart>"), "MODS: {out}");
-    assert!(out.contains("<namePart>Lee, Jane</namePart>"), "MODS: {out}");
+    assert!(
+        out.contains("<namePart>Smith, John</namePart>"),
+        "MODS: {out}"
+    );
+    assert!(
+        out.contains("<namePart>Lee, Jane</namePart>"),
+        "MODS: {out}"
+    );
     assert!(
         out.contains("<identifier type=\"doi\">10.1234/test.2023.001</identifier>"),
         "MODS: {out}"
@@ -153,6 +169,14 @@ fn test_golden_mods() {
         out.contains("<identifier type=\"arxiv\">2301.12345</identifier>"),
         "MODS: {out}"
     );
+    assert!(out.contains("<dateIssued>2023</dateIssued>"), "MODS: {out}");
+    assert!(out.contains("<detail type=\"volume\">"), "MODS: {out}");
+    assert!(out.contains("<number>42</number>"), "MODS: {out}");
+    assert!(out.contains("<detail type=\"issue\">"), "MODS: {out}");
+    assert!(out.contains("<number>7</number>"), "MODS: {out}");
+    assert!(out.contains("<extent unit=\"pages\">"), "MODS: {out}");
+    assert!(out.contains("<start>551</start>"), "MODS: {out}");
+    assert!(out.contains("<end>565</end>"), "MODS: {out}");
 }
 
 #[test]
@@ -160,11 +184,20 @@ fn test_golden_bibliontology_rdf() {
     let doc = standard_test_document();
     let out = run_export(ExportFormat::BibliontologyRdf, &doc);
     assert!(out.contains("@prefix bibo:"), "Bibliontology RDF: {out}");
-    assert!(out.contains("bibo:AcademicArticle"), "Bibliontology RDF: {out}");
+    assert!(
+        out.contains("bibo:AcademicArticle"),
+        "Bibliontology RDF: {out}"
+    );
     assert!(out.contains("dcterms:title"), "Bibliontology RDF: {out}");
     assert!(out.contains("foaf:Person"), "Bibliontology RDF: {out}");
-    assert!(out.contains("foaf:surname \"Smith\""), "Bibliontology RDF: {out}");
-    assert!(out.contains("foaf:surname \"Lee\""), "Bibliontology RDF: {out}");
+    assert!(
+        out.contains("foaf:surname \"Smith\""),
+        "Bibliontology RDF: {out}"
+    );
+    assert!(
+        out.contains("foaf:surname \"Lee\""),
+        "Bibliontology RDF: {out}"
+    );
     assert!(out.contains("bibo:doi"), "Bibliontology RDF: {out}");
     assert!(out.contains("dcterms:isPartOf"), "Bibliontology RDF: {out}");
     assert!(
@@ -190,8 +223,14 @@ fn test_golden_bookmarks() {
         "Bookmarks: {out}"
     );
     assert!(out.contains("Smith, J., &amp; Lee, J."), "Bookmarks: {out}");
-    assert!(out.contains("ADD_DATE=\"2023-01-01T00:00:00Z\""), "Bookmarks: {out}");
-    assert!(out.contains("<DD>Smith, John; Lee, Jane"), "Bookmarks: {out}");
+    assert!(
+        out.contains("ADD_DATE=\"2023-01-01T00:00:00Z\""),
+        "Bookmarks: {out}"
+    );
+    assert!(
+        out.contains("<DD>Smith, John; Lee, Jane"),
+        "Bookmarks: {out}"
+    );
 }
 
 #[test]
@@ -223,11 +262,23 @@ fn test_golden_cff_references() {
         "CFF References: {out}"
     );
     assert!(out.contains("authors:"), "CFF References: {out}");
-    assert!(out.contains("family-names: \"Smith\""), "CFF References: {out}");
-    assert!(out.contains("given-names: \"John\""), "CFF References: {out}");
-    assert!(out.contains("family-names: \"Lee\""), "CFF References: {out}");
+    assert!(
+        out.contains("family-names: \"Smith\""),
+        "CFF References: {out}"
+    );
+    assert!(
+        out.contains("given-names: \"John\""),
+        "CFF References: {out}"
+    );
+    assert!(
+        out.contains("family-names: \"Lee\""),
+        "CFF References: {out}"
+    );
     assert!(out.contains("year: 2023"), "CFF References: {out}");
-    assert!(out.contains("doi: \"10.1234/test.2023.001\""), "CFF References: {out}");
+    assert!(
+        out.contains("doi: \"10.1234/test.2023.001\""),
+        "CFF References: {out}"
+    );
     assert!(out.contains("volume: \"42\""), "CFF References: {out}");
     assert!(out.contains("pages: \"551-565\""), "CFF References: {out}");
     assert!(
@@ -248,7 +299,10 @@ fn test_golden_coins() {
     assert!(out.contains("rft.aufirst=John"), "COinS: {out}");
     assert!(out.contains("rft.volume=42"), "COinS: {out}");
     assert!(out.contains("rft.issue=7"), "COinS: {out}");
-    assert!(out.contains("rft_id=info:doi/10.1234%2Ftest.2023.001"), "COinS: {out}");
+    assert!(
+        out.contains("rft_id=info:doi/10.1234%2Ftest.2023.001"),
+        "COinS: {out}"
+    );
 }
 
 #[test]
@@ -291,12 +345,18 @@ fn test_golden_refer_bibix() {
         out.contains("%T Deep Learning for Natural Language Processing"),
         "Refer/BibIX: {out}"
     );
-    assert!(out.contains("%J Journal of AI Research"), "Refer/BibIX: {out}");
+    assert!(
+        out.contains("%J Journal of AI Research"),
+        "Refer/BibIX: {out}"
+    );
     assert!(out.contains("%D 2023"), "Refer/BibIX: {out}");
     assert!(out.contains("%V 42"), "Refer/BibIX: {out}");
     assert!(out.contains("%N 7"), "Refer/BibIX: {out}");
     assert!(out.contains("%P 551-565"), "Refer/BibIX: {out}");
-    assert!(out.contains("%R 10.1234/test.2023.001"), "Refer/BibIX: {out}");
+    assert!(
+        out.contains("%R 10.1234/test.2023.001"),
+        "Refer/BibIX: {out}"
+    );
 }
 
 #[test]
@@ -310,13 +370,19 @@ fn test_golden_refworks_tagged() {
         out.contains("T1 Deep Learning for Natural Language Processing"),
         "RefWorks Tagged: {out}"
     );
-    assert!(out.contains("JF Journal of AI Research"), "RefWorks Tagged: {out}");
+    assert!(
+        out.contains("JF Journal of AI Research"),
+        "RefWorks Tagged: {out}"
+    );
     assert!(out.contains("YR 2023"), "RefWorks Tagged: {out}");
     assert!(out.contains("VO 42"), "RefWorks Tagged: {out}");
     assert!(out.contains("IS 7"), "RefWorks Tagged: {out}");
     assert!(out.contains("SP 551"), "RefWorks Tagged: {out}");
     assert!(out.contains("OP 565"), "RefWorks Tagged: {out}");
-    assert!(out.contains("DO 10.1234/test.2023.001"), "RefWorks Tagged: {out}");
+    assert!(
+        out.contains("DO 10.1234/test.2023.001"),
+        "RefWorks Tagged: {out}"
+    );
 }
 
 #[test]
@@ -331,10 +397,7 @@ fn test_golden_evernote_export() {
         out.contains("<title>Deep Learning for Natural Language Processing</title>"),
         "Evernote Export: {out}"
     );
-    assert!(
-        out.contains("<content><![CDATA["),
-        "Evernote Export: {out}"
-    );
+    assert!(out.contains("<content><![CDATA["), "Evernote Export: {out}");
     assert!(out.contains("<en-note>"), "Evernote Export: {out}");
     assert!(
         out.contains("Smith, J., & Lee, J. (2023). Deep Learning for Natural Language Processing."),

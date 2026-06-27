@@ -16,8 +16,7 @@ pub fn handle_toggle_reading_status(state: &mut AppState, doc_id: i64) {
             "reading" => "read",
             _ => "unread",
         };
-        documents::update_reading_status(&conn, doc_id, next)
-            .map_err(|e| e.to_string())?;
+        documents::update_reading_status(&conn, doc_id, next).map_err(|e| e.to_string())?;
         let label = match next {
             "reading" => "읽는 중",
             "read" => "읽음",

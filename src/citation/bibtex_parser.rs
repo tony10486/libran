@@ -124,7 +124,14 @@ fn read_identifier(chars: &[char], pos: &mut usize) -> String {
     let mut result = String::new();
     while *pos < chars.len() {
         let c = chars[*pos];
-        if c.is_alphanumeric() || c == '_' || c == '-' || c == ':' || c == '.' || c == '+' || c == '/' {
+        if c.is_alphanumeric()
+            || c == '_'
+            || c == '-'
+            || c == ':'
+            || c == '.'
+            || c == '+'
+            || c == '/'
+        {
             result.push(c);
             *pos += 1;
         } else {

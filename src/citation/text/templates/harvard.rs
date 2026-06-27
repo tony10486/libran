@@ -3,10 +3,8 @@
 //! CTR Harvard: Smith, J.A., Jones, B.C. and Brown, D.E. (2023) 'Title', Journal, 42(3), pp. 123-145.
 //! Elsevier Harvard: Smith, J.A., Jones, B.C., Brown, D.E., 2023. Title. Journal 42, 123-145.
 
-use crate::citation::text::helpers::{
-    format_pages, get_authors, parse_author_full,
-};
-use crate::citation::text::locale::{term, Term};
+use crate::citation::text::helpers::{format_pages, get_authors, parse_author_full};
+use crate::citation::text::locale::{Term, term};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -37,7 +35,11 @@ fn last_names(authors: &[String]) -> Vec<String> {
     authors.iter().map(|n| parse_author_full(n).0).collect()
 }
 
-pub fn render_ctr_harvard_reference(doc: &Document, lang: CitationLanguage, _mode: DisplayMode) -> String {
+pub fn render_ctr_harvard_reference(
+    doc: &Document,
+    lang: CitationLanguage,
+    _mode: DisplayMode,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     if let Some(authors_str) = &doc.authors {
@@ -113,7 +115,13 @@ pub fn render_ctr_harvard_in_text(doc: &Document, lang: CitationLanguage) -> Str
         format!("{}", year)
     } else {
         let (l, rest) = last.split_last().unwrap();
-        format!("{} {} {} {}", rest.join(", "), term(Term::And, lang), l, year)
+        format!(
+            "{} {} {} {}",
+            rest.join(", "),
+            term(Term::And, lang),
+            l,
+            year
+        )
     };
 
     let pages = format_pages(doc.page_start.as_deref(), doc.page_end.as_deref());
@@ -124,7 +132,11 @@ pub fn render_ctr_harvard_in_text(doc: &Document, lang: CitationLanguage) -> Str
     }
 }
 
-pub fn render_elsevier_harvard_reference(doc: &Document, _lang: CitationLanguage, _mode: DisplayMode) -> String {
+pub fn render_elsevier_harvard_reference(
+    doc: &Document,
+    _lang: CitationLanguage,
+    _mode: DisplayMode,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     if let Some(authors_str) = &doc.authors {
@@ -227,26 +239,49 @@ mod tests {
     #[test]
     fn test_ctr_harvard_reference() {
         let doc = make_doc();
-        let result = render_ctr_harvard_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("and Brown"), "ctr harvard 'and' before last: {result}");
-        assert!(result.contains("(2023)"), "ctr harvard year in parens: {result}");
-        assert!(result.contains("'Research Methods'"), "ctr harvard single quotes: {result}");
-        assert!(result.contains("42(3), pp. 123-145"), "ctr harvard vol/pages: {result}");
+        let result =
+            render_ctr_harvard_reference(&doc, CitationLanguage::English, DisplayMode::InText);
+        assert!(
+            result.contains("and Brown"),
+            "ctr harvard 'and' before last: {result}"
+        );
+        assert!(
+            result.contains("(2023)"),
+            "ctr harvard year in parens: {result}"
+        );
+        assert!(
+            result.contains("'Research Methods'"),
+            "ctr harvard single quotes: {result}"
+        );
+        assert!(
+            result.contains("42(3), pp. 123-145"),
+            "ctr harvard vol/pages: {result}"
+        );
     }
 
     #[test]
     fn test_elsevier_harvard_reference() {
         let doc = make_doc();
-        let result = render_elsevier_harvard_reference(&doc, CitationLanguage::English, DisplayMode::InText);
+        let result =
+            render_elsevier_harvard_reference(&doc, CitationLanguage::English, DisplayMode::InText);
         assert!(!result.contains(" and "), "elsevier no 'and': {result}");
-        assert!(result.contains("2023."), "elsevier year with period: {result}");
-        assert!(result.contains("42, 123-145."), "elsevier vol/pages: {result}");
+        assert!(
+            result.contains("2023."),
+            "elsevier year with period: {result}"
+        );
+        assert!(
+            result.contains("42, 123-145."),
+            "elsevier vol/pages: {result}"
+        );
     }
 
     #[test]
     fn test_elsevier_harvard_three_plus_et_al_in_text() {
         let doc = make_doc();
         let result = render_elsevier_harvard_in_text(&doc, CitationLanguage::English);
-        assert!(result.contains("et al."), "elsevier 3+ et al in-text: {result}");
+        assert!(
+            result.contains("et al."),
+            "elsevier 3+ et al in-text: {result}"
+        );
     }
 }

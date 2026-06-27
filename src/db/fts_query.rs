@@ -118,8 +118,8 @@ pub fn bigrams_cjk(text: &str) -> String {
 }
 
 const CHOSEONG_COMPAT: [char; 19] = [
-    'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ',
-    'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ',
+    'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ',
+    'ㅌ', 'ㅍ', 'ㅎ',
 ];
 
 fn decompose_choseong(c: char) -> Option<char> {
@@ -204,7 +204,10 @@ mod tests {
 
     #[test]
     fn test_3char_latin_uses_fts_match() {
-        assert_eq!(build_search_plan("abc"), SearchPlan::FtsMatch("\"abc\"".to_string()));
+        assert_eq!(
+            build_search_plan("abc"),
+            SearchPlan::FtsMatch("\"abc\"".to_string())
+        );
     }
 
     #[test]

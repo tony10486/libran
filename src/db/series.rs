@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 /// A series bundles multiple issues/volumes of the same publication
@@ -32,7 +32,12 @@ pub struct SeriesProposal {
 
 // ── CRUD ──
 
-pub fn create_series(conn: &Connection, name: &str, publisher: Option<&str>, issn: Option<&str>) -> Result<i64> {
+pub fn create_series(
+    conn: &Connection,
+    name: &str,
+    publisher: Option<&str>,
+    issn: Option<&str>,
+) -> Result<i64> {
     conn.execute(
         "INSERT INTO series (name, publisher, issn) VALUES (?1, ?2, ?3)",
         params![name, publisher, issn],
@@ -196,7 +201,10 @@ pub fn propose_series_by_journal(conn: &Connection) -> Result<Vec<SeriesProposal
     }
     // Stable ordering by doc count descending (most valuable bundling first), then name.
     proposals.sort_by(|a, b| {
-        b.document_ids.len().cmp(&a.document_ids.len()).then(a.name.cmp(&b.name))
+        b.document_ids
+            .len()
+            .cmp(&a.document_ids.len())
+            .then(a.name.cmp(&b.name))
     });
     Ok(proposals)
 }

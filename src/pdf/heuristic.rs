@@ -1,21 +1,50 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static SECTION_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\d+(\.\d+)*\.?\s+\w").unwrap()
-});
+static SECTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(\.\d+)*\.?\s+\w").unwrap());
 
 const SKIP_MARKERS: &[&str] = &[
-    "abstract", "keywords", "university", "institute",
-    "department", "email", "www.", "http", "@", "arxiv:", "received",
-    "accepted", "published", "this article", "this paper", "this work",
-    "journal", "proceedings", "conference", "vol.", "volume", "pp.",
-    "press", "springer", "elsevier", "ieee", "acm", "doi", "figure",
-    "table", "section", "chapter", "max planck", "mit ", "stanford",
-    "harvard", "caltech", "berkeley",
+    "abstract",
+    "keywords",
+    "university",
+    "institute",
+    "department",
+    "email",
+    "www.",
+    "http",
+    "@",
+    "arxiv:",
+    "received",
+    "accepted",
+    "published",
+    "this article",
+    "this paper",
+    "this work",
+    "journal",
+    "proceedings",
+    "conference",
+    "vol.",
+    "volume",
+    "pp.",
+    "press",
+    "springer",
+    "elsevier",
+    "ieee",
+    "acm",
+    "doi",
+    "figure",
+    "table",
+    "section",
+    "chapter",
+    "max planck",
+    "mit ",
+    "stanford",
+    "harvard",
+    "caltech",
+    "berkeley",
 ];
 
-use crate::pdf::authors::{strip_author_from_title, strip_trailing_name_from_text, AUTHOR_MARKERS};
+use crate::pdf::authors::{AUTHOR_MARKERS, strip_author_from_title, strip_trailing_name_from_text};
 
 pub fn guess_title(full_text: &str) -> Option<String> {
     let first_page = extract_first_page(full_text);
@@ -53,16 +82,17 @@ fn guess_title_from_first_page(page: &str) -> Option<String> {
     candidates.sort_by_key(|(idx, line)| {
         let word_count = line.split_whitespace().count();
         let position_score = *idx;
-        let length_score = if (4..=15).contains(&word_count) { 0 } else { 50 };
+        let length_score = if (4..=15).contains(&word_count) {
+            0
+        } else {
+            50
+        };
         position_score + length_score
     });
 
     let (best_idx, best_line) = candidates[0];
 
-    let next_line = lines
-        .get(best_idx + 1)
-        .map(|s| s.trim())
-        .unwrap_or("");
+    let next_line = lines.get(best_idx + 1).map(|s| s.trim()).unwrap_or("");
     let has_author_next = AUTHOR_MARKERS.iter().any(|m| next_line.contains(m));
 
     if has_author_next && best_line.ends_with(',') {
@@ -98,7 +128,11 @@ fn guess_title_from_full_text(text: &str) -> Option<String> {
     candidates.sort_by_key(|(idx, line)| {
         let word_count = line.split_whitespace().count();
         let distance_penalty = *idx;
-        let length_penalty = if (4..=15).contains(&word_count) { 0 } else { 100 };
+        let length_penalty = if (4..=15).contains(&word_count) {
+            0
+        } else {
+            100
+        };
         distance_penalty + length_penalty
     });
 
@@ -119,10 +153,7 @@ fn find_abstract_marker(lines: &[&str]) -> Option<usize> {
         {
             return Some(i);
         }
-        if lower == "keywords"
-            || lower.starts_with("keywords:")
-            || lower.starts_with("keywords ")
-        {
+        if lower == "keywords" || lower.starts_with("keywords:") || lower.starts_with("keywords ") {
             return Some(i);
         }
     }
@@ -167,11 +198,21 @@ fn is_title_candidate(trimmed: &str) -> bool {
         return false;
     }
 
-    if !trimmed.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
+    if !trimmed
+        .chars()
+        .next()
+        .map(|c| c.is_alphabetic())
+        .unwrap_or(false)
+    {
         return false;
     }
 
-    if trimmed.chars().next().map(|c| c.is_lowercase()).unwrap_or(false) {
+    if trimmed
+        .chars()
+        .next()
+        .map(|c| c.is_lowercase())
+        .unwrap_or(false)
+    {
         return false;
     }
 
@@ -262,7 +303,12 @@ mod tests {
 
     #[test]
     fn test_find_abstract_marker_keywords() {
-        let lines = vec!["Title", "Some author line", "Keywords: graph, network", "Body"];
+        let lines = vec![
+            "Title",
+            "Some author line",
+            "Keywords: graph, network",
+            "Body",
+        ];
         assert_eq!(find_abstract_marker(&lines), Some(2));
     }
 
@@ -283,7 +329,10 @@ mod tests {
         let result = guess_title(text);
         assert!(result.is_some());
         let title = result.unwrap();
-        assert!(!title.contains("Li Yang"), "title should not contain author: {title}");
+        assert!(
+            !title.contains("Li Yang"),
+            "title should not contain author: {title}"
+        );
         assert!(title.contains("Distance-Preserving Projection"));
     }
 
@@ -296,7 +345,9 @@ mod tests {
         }
         let meta = super::super::process_file(&path).expect("process_file");
         assert!(
-            meta.title.as_deref().is_some_and(|t| t.contains("Distance-Preserving Projection")),
+            meta.title
+                .as_deref()
+                .is_some_and(|t| t.contains("Distance-Preserving Projection")),
             "title wrong: {meta:?}"
         );
         assert!(
@@ -309,7 +360,9 @@ mod tests {
         );
         assert_eq!(meta.pub_year, Some(2004), "pub_year wrong: {meta:?}");
         assert!(
-            meta.journal.as_deref().is_some_and(|j| j.contains("IEEE TRANSACTIONS")),
+            meta.journal
+                .as_deref()
+                .is_some_and(|j| j.contains("IEEE TRANSACTIONS")),
             "journal wrong: {meta:?}"
         );
     }

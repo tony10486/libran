@@ -3,9 +3,7 @@
 //! Reference format: Smith, J. A.; Lee, B. C. Title. *Journal* **Year**, *Vol*, Pages. DOI: ...
 //! In-text: [1] (numeric, uses doc.id as the number)
 
-use crate::citation::text::helpers::{
-    format_pages, format_year, get_authors,
-};
+use crate::citation::text::helpers::{format_pages, format_year, get_authors};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -18,13 +16,13 @@ pub fn render_reference(doc: &Document, _lang: CitationLanguage, _mode: DisplayM
             let formatted: Vec<String> = authors
                 .iter()
                 .map(|name| {
-                    let (last, first) = crate::citation::text::helpers::parse_author_full(name);
+                    let (last, first) = crate::citation::text::helpers::parse_author_full(name, None);
                     if first.is_empty() {
                         return last;
                     }
                     let initials: String = first
                         .split_whitespace()
-                        .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic()))
+                        .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
                         .map(|c| format!("{}.", c.to_uppercase().collect::<String>()))
                         .collect::<Vec<_>>()
                         .join(" ");
@@ -101,12 +99,27 @@ mod tests {
     fn test_acs_journal_article() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, J. A.; Lee, B. C.;"), "acs authors: {result}");
-        assert!(result.contains("Catalytic Mechanism."), "acs title: {result}");
-        assert!(result.contains("*J. Am. Chem. Soc.*"), "acs journal italic: {result}");
+        assert!(
+            result.contains("Smith, J. A.; Lee, B. C.;"),
+            "acs authors: {result}"
+        );
+        assert!(
+            result.contains("Catalytic Mechanism."),
+            "acs title: {result}"
+        );
+        assert!(
+            result.contains("*J. Am. Chem. Soc.*"),
+            "acs journal italic: {result}"
+        );
         assert!(result.contains("**2023**"), "acs year bold: {result}");
-        assert!(result.contains("*42*, 123-145"), "acs volume+pages: {result}");
-        assert!(result.contains("DOI: 10.1021/jacs.test"), "acs doi: {result}");
+        assert!(
+            result.contains("*42*, 123-145"),
+            "acs volume+pages: {result}"
+        );
+        assert!(
+            result.contains("DOI: 10.1021/jacs.test"),
+            "acs doi: {result}"
+        );
     }
 
     #[test]
@@ -124,7 +137,10 @@ mod tests {
             ..Default::default()
         };
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Einstein, A.;"), "acs single author: {result}");
+        assert!(
+            result.contains("Einstein, A.;"),
+            "acs single author: {result}"
+        );
         assert!(result.contains("Minimal."), "acs title: {result}");
         assert!(!result.contains("DOI:"), "acs no doi: {result}");
     }

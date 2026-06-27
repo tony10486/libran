@@ -1,7 +1,7 @@
+use ratatui::Frame;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use ratatui::Frame;
 
 use crate::app::AppState;
 use crate::ui::theme;
@@ -11,41 +11,54 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
 
     let mut spans = vec![
         Span::raw(" "),
-        Span::styled(&state.status_text, Style::default().fg(theme::fg()).bg(theme::bg())),
+        Span::styled(
+            &state.status_text,
+            Style::default().fg(theme::fg()).bg(theme::bg()),
+        ),
     ];
 
     if sort_active {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled("│", Style::default().fg(theme::divider()).bg(theme::bg())));
-        spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            "▣ 유사도 정렬",
-            Style::default().fg(theme::tag()).add_modifier(Modifier::BOLD).bg(theme::bg()),
+            "│",
+            Style::default().fg(theme::divider()).bg(theme::bg()),
         ));
-    }
-
-    if state.is_processing {
-        spans.push(Span::raw("  "));
-        spans.push(Span::styled("│", Style::default().fg(theme::divider()).bg(theme::bg())));
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
-            "처리 중...",
+            "▸ 유사도 정렬",
             Style::default()
-                .fg(theme::selected())
+                .fg(theme::tag())
                 .add_modifier(Modifier::BOLD)
                 .bg(theme::bg()),
         ));
     }
 
-    // Right-aligned shortcuts
-    let right_keys = [("Tab", "패널"),
+    if state.is_processing {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            "│",
+            Style::default().fg(theme::divider()).bg(theme::bg()),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            "처리 중...",
+            Style::default()
+                .fg(theme::warning())
+                .add_modifier(Modifier::BOLD)
+                .bg(theme::bg()),
+        ));
+    }
+
+    let right_keys = [
+        ("Tab", "패널"),
         ("j/k", "이동"),
         ("t", "태그"),
         ("r", "별점"),
         ("s", "유사도"),
         ("/", "검색"),
         ("?", "도움말"),
-        ("q", "종료")];
+        ("q", "종료"),
+    ];
     let right_len: usize = right_keys
         .iter()
         .map(|(k, l)| k.len() + l.len() + 3)
@@ -73,6 +86,7 @@ pub fn render(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) 
         ));
     }
 
-    let footer = Paragraph::new(Line::from(spans)).style(Style::default().fg(theme::fg()).bg(theme::bg()));
+    let footer =
+        Paragraph::new(Line::from(spans)).style(Style::default().fg(theme::fg()).bg(theme::bg()));
     frame.render_widget(footer, area);
 }

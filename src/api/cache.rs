@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 pub fn get_cached(conn: &Connection, cache_key: &str) -> Result<Option<String>> {
     let now = Utc::now();

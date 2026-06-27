@@ -1,9 +1,246 @@
+use crate::config::ExportFormatConfig;
 use crate::db::documents::Document;
 use anyhow::Result;
+use rusqlite::Connection;
+use serde::Serialize;
+use std::collections::HashMap;
 use std::io::Write;
+use std::sync::Mutex;
 
 pub mod export_dialog_state;
 pub mod preferences;
+
+static CUSTOM_FORMATS: Mutex<Option<HashMap<String, ExportFormatConfig>>> = Mutex::new(None);
+
+// ── User export data (notes, tags, classifications, projects, custom fields) ──
+
+/// Per-document user-created data fetched from the DB for enriched export.
+pub struct UserExportData {
+    pub notes: Vec<String>,
+    pub tags: Vec<String>,
+    /// Each entry is `"scheme_code:notation"` (e.g. `"udc:517.9"`).
+    pub classifications: Vec<String>,
+    pub projects: Vec<String>,
+    pub custom_fields: Vec<(String, String)>,
+}
+
+impl Default for UserExportData {
+    fn default() -> Self {
+        Self {
+            notes: Vec::new(),
+            tags: Vec::new(),
+            classifications: Vec::new(),
+            projects: Vec::new(),
+            custom_fields: Vec::new(),
+        }
+    }
+}
+
+/// Fetch all user-created data for a single document from the DB.
+pub fn fetch_user_export_data(conn: &Connection, doc_id: i64) -> Result<UserExportData> {
+    let notes = crate::db::notes::list(conn, doc_id)?
+        .into_iter()
+        .map(|n| n.content)
+        .collect();
+
+    let tags = crate::db::documents::get_tags(conn, doc_id)?;
+
+    let classifications = fetch_classifications_for_doc(conn, doc_id);
+
+    let projects = fetch_projects_for_doc(conn, doc_id);
+
+    let custom_fields = crate::db::custom_fields::list_fields(conn, doc_id)?
+        .into_iter()
+        .map(|f| (f.key, f.value))
+        .collect();
+
+    Ok(UserExportData {
+        notes,
+        tags,
+        classifications,
+        projects,
+        custom_fields,
+    })
+}
+
+fn fetch_classifications_for_doc(conn: &Connection, doc_id: i64) -> Vec<String> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT cs.code, cn.notation
+         FROM document_classifications dc
+         INNER JOIN classification_nodes cn ON dc.node_id = cn.id
+         INNER JOIN classification_schemes cs ON cn.scheme_id = cs.id
+         WHERE dc.document_id = ?1
+         ORDER BY cs.code, cn.notation",
+    ) else {
+        return Vec::new();
+    };
+    let rows = match stmt.query_map(rusqlite::params![doc_id], |row| {
+        let code: String = row.get(0)?;
+        let notation: String = row.get(1)?;
+        Ok(format!("{code}:{notation}"))
+    }) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    rows.filter_map(|r| r.ok()).collect()
+}
+
+fn fetch_projects_for_doc(conn: &Connection, doc_id: i64) -> Vec<String> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT p.name FROM projects p
+         INNER JOIN project_documents pd ON p.id = pd.project_id
+         WHERE pd.document_id = ?1
+         ORDER BY p.name",
+    ) else {
+        return Vec::new();
+    };
+    let rows = match stmt.query_map(rusqlite::params![doc_id], |row| row.get::<_, String>(0)) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    rows.filter_map(|r| r.ok()).collect()
+}
+
+// ── Full library JSON export ──
+
+#[derive(Serialize)]
+struct FullLibraryExport {
+    documents: Vec<FullDocumentExport>,
+}
+
+#[derive(Serialize)]
+struct FullDocumentExport {
+    #[serde(flatten)]
+    document: Document,
+    notes: Vec<FullNoteExport>,
+    tags: Vec<String>,
+    classifications: Vec<FullClassificationExport>,
+    projects: Vec<String>,
+    custom_fields: Vec<FullCustomFieldExport>,
+}
+
+#[derive(Serialize)]
+struct FullNoteExport {
+    content: String,
+    note_type: String,
+    created_at: Option<String>,
+    updated_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct FullClassificationExport {
+    scheme: String,
+    notation: String,
+    is_primary: bool,
+}
+
+#[derive(Serialize)]
+struct FullCustomFieldExport {
+    key: String,
+    value: String,
+}
+
+/// Export the entire library (all documents + all related user data) as JSON.
+pub fn export_full_library_json(conn: &Connection, writer: &mut impl Write) -> Result<()> {
+    let docs = crate::db::documents::list_all(conn)?;
+
+    let full_docs = docs
+        .into_iter()
+        .map(|doc| {
+            let doc_id = doc.id.unwrap_or(0);
+            let notes = crate::db::notes::list(conn, doc_id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|n| FullNoteExport {
+                    content: n.content,
+                    note_type: n.note_type,
+                    created_at: n.created_at,
+                    updated_at: n.updated_at,
+                })
+                .collect();
+
+            let tags = crate::db::documents::get_tags(conn, doc_id).unwrap_or_default();
+
+            let classifications = fetch_full_classifications(conn, doc_id);
+
+            let projects = fetch_projects_for_doc(conn, doc_id);
+
+            let custom_fields = crate::db::custom_fields::list_fields(conn, doc_id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| FullCustomFieldExport {
+                    key: f.key,
+                    value: f.value,
+                })
+                .collect();
+
+            FullDocumentExport {
+                document: doc,
+                notes,
+                tags,
+                classifications,
+                projects,
+                custom_fields,
+            }
+        })
+        .collect();
+
+    let library = FullLibraryExport {
+        documents: full_docs,
+    };
+    let json = serde_json::to_string_pretty(&library)?;
+    writer.write_all(json.as_bytes())?;
+    Ok(())
+}
+
+fn fetch_full_classifications(conn: &Connection, doc_id: i64) -> Vec<FullClassificationExport> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT cs.code, cn.notation, dc.is_primary
+         FROM document_classifications dc
+         INNER JOIN classification_nodes cn ON dc.node_id = cn.id
+         INNER JOIN classification_schemes cs ON cn.scheme_id = cs.id
+         WHERE dc.document_id = ?1
+         ORDER BY cs.code, cn.notation",
+    ) else {
+        return Vec::new();
+    };
+    let rows = match stmt.query_map(rusqlite::params![doc_id], |row| {
+        Ok(FullClassificationExport {
+            scheme: row.get(0)?,
+            notation: row.get(1)?,
+            is_primary: row.get::<_, i64>(2)? != 0,
+        })
+    }) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    rows.filter_map(|r| r.ok()).collect()
+}
+
+pub fn register_custom_format(config: ExportFormatConfig) {
+    let mut guard = CUSTOM_FORMATS.lock().unwrap();
+    let map = guard.get_or_insert_with(HashMap::new);
+    map.insert(config.name.clone(), config);
+}
+
+pub fn register_custom_formats(configs: &[ExportFormatConfig]) {
+    for c in configs {
+        register_custom_format(c.clone());
+    }
+}
+
+pub fn get_custom_format(name: &str) -> Option<ExportFormatConfig> {
+    let guard = CUSTOM_FORMATS.lock().unwrap();
+    guard.as_ref()?.get(name).cloned()
+}
+
+pub fn custom_format_names() -> Vec<String> {
+    let guard = CUSTOM_FORMATS.lock().unwrap();
+    guard
+        .as_ref()
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default()
+}
 
 pub fn export(documents: &[Document], format: ExportFormat, writer: &mut impl Write) -> Result<()> {
     match format {
@@ -11,7 +248,9 @@ pub fn export(documents: &[Document], format: ExportFormat, writer: &mut impl Wr
             crate::citation::formats::bibliontology_rdf::export_bibliontology_rdf(documents, writer)
         }
         ExportFormat::Bibtex => crate::citation::bibtex::export_bibtex(documents, writer),
-        ExportFormat::Bookmarks => crate::citation::formats::bookmarks::export_bookmarks(documents, writer),
+        ExportFormat::Bookmarks => {
+            crate::citation::formats::bookmarks::export_bookmarks(documents, writer)
+        }
         ExportFormat::Cff => crate::citation::formats::cff::export_cff(documents, writer),
         ExportFormat::CffReferences => {
             crate::citation::formats::cff::export_cff_references(documents, writer)
@@ -37,10 +276,43 @@ pub fn export(documents: &[Document], format: ExportFormat, writer: &mut impl Wr
         ExportFormat::WikidataQuickStatements => {
             crate::citation::formats::wikidata_qs::export_wikidata_qs(documents, writer)
         }
+        ExportFormat::Custom(name) => {
+            let config = get_custom_format(&name)
+                .ok_or_else(|| anyhow::anyhow!("unknown custom format: {}", name))?;
+            export_custom(documents, &config, writer)
+        }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+fn export_custom(
+    documents: &[Document],
+    config: &ExportFormatConfig,
+    writer: &mut impl Write,
+) -> Result<()> {
+    for (i, doc) in documents.iter().enumerate() {
+        if i > 0 {
+            writeln!(writer)?;
+        }
+        let output = substitute_template(&config.template, doc);
+        write!(writer, "{}", output)?;
+    }
+    Ok(())
+}
+
+fn substitute_template(template: &str, doc: &Document) -> String {
+    template
+        .replace("{title}", &doc.title)
+        .replace("{authors}", doc.authors.as_deref().unwrap_or(""))
+        .replace(
+            "{year}",
+            &doc.pub_year.map(|y| y.to_string()).unwrap_or_default(),
+        )
+        .replace("{doi}", doc.doi.as_deref().unwrap_or(""))
+        .replace("{journal}", doc.journal.as_deref().unwrap_or(""))
+        .replace("{abstract}", doc.abstract_text.as_deref().unwrap_or(""))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
     BibliontologyRdf,
     Bibtex,
@@ -58,6 +330,7 @@ pub enum ExportFormat {
     EvernoteExport,
     Tei,
     WikidataQuickStatements,
+    Custom(String),
 }
 
 impl ExportFormat {
@@ -100,6 +373,7 @@ impl ExportFormat {
             ExportFormat::EvernoteExport => "enex",
             ExportFormat::Tei => "xml",
             ExportFormat::WikidataQuickStatements => "tsv",
+            ExportFormat::Custom(_) => "txt",
         }
     }
 
@@ -121,6 +395,7 @@ impl ExportFormat {
             ExportFormat::EvernoteExport => "Simple Evernote Export",
             ExportFormat::Tei => "TEI",
             ExportFormat::WikidataQuickStatements => "Wikidata QuickStatements",
+            ExportFormat::Custom(name) => name.as_str(),
         }
     }
 
@@ -135,7 +410,7 @@ impl ExportFormat {
         true
     }
 
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             ExportFormat::BibliontologyRdf => "bibliontology_rdf",
             ExportFormat::Bibtex => "bibtex",
@@ -153,17 +428,27 @@ impl ExportFormat {
             ExportFormat::EvernoteExport => "evernote_export",
             ExportFormat::Tei => "tei",
             ExportFormat::WikidataQuickStatements => "wikidata_quick_statements",
+            ExportFormat::Custom(name) => name.as_str(),
         }
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
-        Self::all().iter().copied().find(|fmt| fmt.as_str() == s)
+        if let Some(fmt) = Self::all().iter().find(|fmt| fmt.as_str() == s) {
+            return Some(fmt.clone());
+        }
+        if get_custom_format(s).is_some() {
+            return Some(ExportFormat::Custom(s.to_string()));
+        }
+        None
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ExportFormatConfig;
+    use crate::db::documents::Document;
+    use std::io::Cursor;
 
     #[test]
     fn test_all_formats_are_implemented() {
@@ -188,5 +473,56 @@ mod tests {
             names.insert(format.format_name());
         }
         assert_eq!(names.len(), 16, "all format names should be unique");
+    }
+
+    #[test]
+    fn test_custom_format_registered() {
+        let config = ExportFormatConfig {
+            name: "test_registered_fmt".to_string(),
+            file_extension: "txt".to_string(),
+            template: "{title} - {authors} ({year})".to_string(),
+        };
+        register_custom_format(config);
+
+        assert!(get_custom_format("test_registered_fmt").is_some());
+        assert!(ExportFormat::from_str("test_registered_fmt").is_some());
+    }
+
+    #[test]
+    fn test_custom_format_generates() {
+        let config = ExportFormatConfig {
+            name: "test_gen_fmt".to_string(),
+            file_extension: "txt".to_string(),
+            template: "{title} | {authors} | {year} | {doi} | {journal} | {abstract}".to_string(),
+        };
+        register_custom_format(config);
+
+        let doc = Document {
+            title: "Deep Learning".to_string(),
+            authors: Some("Smith, John".to_string()),
+            journal: Some("Nature".to_string()),
+            pub_year: Some(2023),
+            doi: Some("10.1234/test".to_string()),
+            abstract_text: Some("A survey of deep learning methods.".to_string()),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        export(
+            &[doc],
+            ExportFormat::Custom("test_gen_fmt".to_string()),
+            &mut Cursor::new(&mut buf),
+        )
+        .unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("Deep Learning"), "missing title: {out}");
+        assert!(out.contains("Smith, John"), "missing authors: {out}");
+        assert!(out.contains("2023"), "missing year: {out}");
+        assert!(out.contains("10.1234/test"), "missing doi: {out}");
+        assert!(out.contains("Nature"), "missing journal: {out}");
+        assert!(
+            out.contains("A survey of deep learning methods."),
+            "missing abstract: {out}"
+        );
     }
 }

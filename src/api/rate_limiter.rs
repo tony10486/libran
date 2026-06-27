@@ -23,9 +23,10 @@ impl RateLimiter {
 
     pub fn can_do_single_doi(&self) -> bool {
         if let Some(until) = self.backoff_until
-            && Instant::now() < until {
-                return false;
-            }
+            && Instant::now() < until
+        {
+            return false;
+        }
         if let Some(last) = self.last_single_doi {
             return Instant::now().duration_since(last) >= self.single_doi_interval;
         }
@@ -34,9 +35,10 @@ impl RateLimiter {
 
     pub fn can_do_list_query(&self) -> bool {
         if let Some(until) = self.backoff_until
-            && Instant::now() < until {
-                return false;
-            }
+            && Instant::now() < until
+        {
+            return false;
+        }
         if let Some(last) = self.last_list_query {
             return Instant::now().duration_since(last) >= self.list_query_interval;
         }

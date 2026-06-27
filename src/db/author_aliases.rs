@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 #[derive(Clone, Debug)]
 pub struct AuthorAlias {
@@ -59,7 +59,9 @@ pub fn merge_author_in_documents(
 ) -> Result<usize> {
     use crate::db::documents::split_authors;
 
-    let mut stmt = conn.prepare("SELECT id, authors FROM documents WHERE authors IS NOT NULL AND trim(authors) <> ''")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, authors FROM documents WHERE authors IS NOT NULL AND trim(authors) <> ''",
+    )?;
     let docs: Vec<(i64, String)> = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .filter_map(|r| r.ok())

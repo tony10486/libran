@@ -1,19 +1,23 @@
 pub static AUTHOR_MARKERS: &[&str] = &[
-    "Senior Member", "Junior Member", "Member", "Fellow",
-    "Senior, IEEE", "IEEE", "ACM", "AAAI",
+    "Senior Member",
+    "Junior Member",
+    "Member",
+    "Fellow",
+    "Senior, IEEE",
+    "IEEE",
+    "ACM",
+    "AAAI",
 ];
 
 pub const PREPOSITIONS: &[&str] = &[
-    "of", "for", "the", "and", "on", "in", "a", "an", "to", "via", "by",
-    "with", "from", "into", "using", "through", "over", "under",
-    "von", "de", "van", "der", "la", "le", "du", "di", "da", "dos",
-    "das", "el", "bin", "ibn", "y", "al",
+    "of", "for", "the", "and", "on", "in", "a", "an", "to", "via", "by", "with", "from", "into",
+    "using", "through", "over", "under", "von", "de", "van", "der", "la", "le", "du", "di", "da",
+    "dos", "das", "el", "bin", "ibn", "y", "al",
 ];
 
 const JOURNAL_ABBREVS: &[&str] = &[
-    "Proc.", "Soc.", "Trans.", "Vol.", "Ser.", "No.",
-    "J.", "Commun.", "Lett.", "Math.", "Phys.", "Chem.",
-    "Biol.", "Med.", "Rev.", "Ann.", "Acad.",
+    "Proc.", "Soc.", "Trans.", "Vol.", "Ser.", "No.", "J.", "Commun.", "Lett.", "Math.", "Phys.",
+    "Chem.", "Biol.", "Med.", "Rev.", "Ann.", "Acad.",
 ];
 
 pub fn strip_author_from_title(title: &str) -> String {
@@ -98,8 +102,7 @@ pub fn guess_authors(full_text: &str) -> Vec<String> {
 
             if AUTHOR_MARKERS.iter().any(|m| working.contains(m)) {
                 let stripped = strip_member_markers(working);
-                let extraction_text =
-                    try_merge_trailing_and(&stripped, &lines, i, idx);
+                let extraction_text = try_merge_trailing_and(&stripped, &lines, i, idx);
                 if let Some(authors) = try_extract_authors(&extraction_text) {
                     if authors.len() > 1 {
                         return authors;
@@ -218,7 +221,11 @@ fn extract_authors_from_line(trimmed: &str) -> Option<Vec<String>> {
     let has_lowercase_non_prep = trimmed.split_whitespace().any(|w| {
         let clean = w.trim_end_matches([',', '.']);
         !clean.is_empty()
-            && clean.chars().next().map(|c| c.is_lowercase()).unwrap_or(false)
+            && clean
+                .chars()
+                .next()
+                .map(|c| c.is_lowercase())
+                .unwrap_or(false)
             && !PREPOSITIONS.contains(&clean.to_lowercase().as_str())
     });
     if has_lowercase_non_prep {
@@ -335,7 +342,11 @@ fn extract_authors_from_title_line(lines: &[&str], abstract_idx: Option<usize>) 
             .take(3)
             .take_while(|w| {
                 let clean = w.trim_end_matches(',');
-                clean.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                clean
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
                     && !PREPOSITIONS.contains(&clean.to_lowercase().as_str())
                     && clean.len() <= 15
             })
@@ -425,7 +436,12 @@ fn extract_first_name(text: &str) -> Option<String> {
         if JOURNAL_ABBREVS.contains(&clean) {
             break;
         }
-        if !clean.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if !clean
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             break;
         }
         if PREPOSITIONS.contains(&clean.to_lowercase().as_str()) {
@@ -457,7 +473,12 @@ fn is_name_like(s: &str) -> bool {
         if clean.is_empty() || clean.ends_with(':') {
             return false;
         }
-        if !clean.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if !clean
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             return false;
         }
         if PREPOSITIONS.contains(&clean.to_lowercase().as_str()) {
@@ -546,7 +567,11 @@ mod tests {
         let text = "IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, VOL. 26, NO. 9, SEPTEMBER 2004 1243\n\nDistance-Preserving Projection of High-Dimensional Data for Nonlinear Dimensionality Reduction Li Yang,\n\nSenior Member , IEEE\n\nAbstract —A distance-preserving method is presented to map high-dimensional data.\n";
         let authors = guess_authors(text);
         assert!(!authors.is_empty());
-        assert!(authors.iter().any(|a| a.contains("Li Yang") || a.contains("Yang")));
+        assert!(
+            authors
+                .iter()
+                .any(|a| a.contains("Li Yang") || a.contains("Yang"))
+        );
     }
 
     #[test]
@@ -554,11 +579,15 @@ mod tests {
         let text = "Home Search Collections\nA short guide to pure point diffraction in cut-and-project sets\n\n16, 2345,,, Christoph\u{a0}Richard and Nicolae\u{a0}Strungaru\n\n1 Department für Mathematik, Friedrich-Alexander-Universität Erlangen-Nürnberg\n\nAbstract\nWe briefly review the diffraction of quasicrystals.\n";
         let authors = guess_authors(text);
         assert!(
-            authors.iter().any(|a| a.contains("Christoph Richard") || a.contains("Richard")),
+            authors
+                .iter()
+                .any(|a| a.contains("Christoph Richard") || a.contains("Richard")),
             "should find Christoph Richard: {authors:?}"
         );
         assert!(
-            authors.iter().any(|a| a.contains("Nicolae Strungaru") || a.contains("Strungaru")),
+            authors
+                .iter()
+                .any(|a| a.contains("Nicolae Strungaru") || a.contains("Strungaru")),
             "should find Nicolae Strungaru: {authors:?}"
         );
     }
@@ -571,7 +600,11 @@ mod tests {
             !authors.is_empty(),
             "should find authors without abstract marker: {authors:?}"
         );
-        assert!(authors.iter().any(|a| a.contains("Richard") || a.contains("Strungaru")));
+        assert!(
+            authors
+                .iter()
+                .any(|a| a.contains("Richard") || a.contains("Strungaru"))
+        );
     }
 
     #[test]
@@ -582,7 +615,11 @@ mod tests {
             !authors.is_empty(),
             "should find authors from comma-separated list with 'and': {authors:?}"
         );
-        assert!(authors.iter().any(|a| a.contains("Katsura") || a.contains("Morita")));
+        assert!(
+            authors
+                .iter()
+                .any(|a| a.contains("Katsura") || a.contains("Morita"))
+        );
     }
 
     #[test]
@@ -595,7 +632,13 @@ mod tests {
         let mut f = std::fs::File::create("/tmp/richard_diag.txt").unwrap();
         let text = crate::pdf::text::extract_text(&path).expect("extract_text");
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        writeln!(f, "=== {} non-empty lines, {} chars ===", lines.len(), text.len()).unwrap();
+        writeln!(
+            f,
+            "=== {} non-empty lines, {} chars ===",
+            lines.len(),
+            text.len()
+        )
+        .unwrap();
         for (i, line) in lines.iter().take(50).enumerate() {
             writeln!(f, "  L{:02}: {:?}", i, &line[..line.len().min(200)]).unwrap();
         }

@@ -1,5 +1,5 @@
-pub mod app;
 pub mod api;
+pub mod app;
 pub mod citation;
 pub mod classification;
 pub mod config;

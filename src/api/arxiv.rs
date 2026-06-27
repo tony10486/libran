@@ -3,9 +3,7 @@ use reqwest::Client;
 use std::time::Duration;
 
 pub fn create_client() -> Result<Client> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()?;
+    let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
     Ok(client)
 }
 

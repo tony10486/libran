@@ -1,7 +1,6 @@
 use crate::db::documents::Document;
 
-#[derive(Clone, Debug)]
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub enum CitationKeyMode {
     #[default]
     AuthorYear,
@@ -9,7 +8,6 @@ pub enum CitationKeyMode {
     AuthorYearHash,
     Custom(String),
 }
-
 
 pub fn generate_citation_key(
     doc: &Document,
@@ -29,7 +27,10 @@ pub fn generate_citation_key(
 
 fn build_author_year(doc: &Document) -> String {
     let author = first_author_surname(doc).unwrap_or_else(|| "Anon".to_string());
-    let year = doc.pub_year.map(|y| y.to_string()).unwrap_or_else(|| "nd".to_string());
+    let year = doc
+        .pub_year
+        .map(|y| y.to_string())
+        .unwrap_or_else(|| "nd".to_string());
     format!("{}{}", author, year)
 }
 
@@ -51,7 +52,10 @@ fn build_author_year_hash(doc: &Document) -> String {
 
 fn build_custom(doc: &Document, template: &str) -> String {
     let author = first_author_surname(doc).unwrap_or_default();
-    let year = doc.pub_year.map(|y| y.to_string()).unwrap_or_else(|| "nd".to_string());
+    let year = doc
+        .pub_year
+        .map(|y| y.to_string())
+        .unwrap_or_else(|| "nd".to_string());
     let year2 = if year.len() >= 4 { &year[2..] } else { "nd" };
     let title_word = first_title_word(doc).unwrap_or_default();
 
@@ -84,7 +88,9 @@ fn first_author_surname(doc: &Document) -> Option<String> {
 
 fn first_title_word(doc: &Document) -> Option<String> {
     let words: Vec<&str> = doc.title.split_whitespace().collect();
-    let stop_words = ["the", "a", "an", "of", "in", "on", "for", "and", "with", "to", "at", "by"];
+    let stop_words = [
+        "the", "a", "an", "of", "in", "on", "for", "and", "with", "to", "at", "by",
+    ];
     for word in words {
         let lower = word.to_lowercase();
         let clean = lower.trim_matches(|c: char| !c.is_alphanumeric());
@@ -104,7 +110,11 @@ fn capitalize(s: &str) -> String {
 }
 
 fn truncate_title(title: &str) -> String {
-    title.split_whitespace().take(5).collect::<Vec<_>>().join("")
+    title
+        .split_whitespace()
+        .take(5)
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 fn short_hash(s: &str) -> String {

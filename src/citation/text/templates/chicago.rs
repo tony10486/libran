@@ -5,9 +5,7 @@
 //! Notes-Bib (bibliography): Smith, John A., Bob C. Jones, and David E. Brown. "Title." Journal 42, no. 3 (2023): 123-45.
 //! Shortened: same as Notes-Bib for single-doc.
 
-use crate::citation::text::helpers::{
-    format_pages, get_authors, parse_author_full,
-};
+use crate::citation::text::helpers::{format_pages, get_authors, parse_author_full};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -87,7 +85,11 @@ fn vol_issue_year_pages(volume: &str, issue: Option<&str>, year: &str, pages: &s
     s
 }
 
-pub fn render_author_date_reference(doc: &Document, _lang: CitationLanguage, _mode: DisplayMode) -> String {
+pub fn render_author_date_reference(
+    doc: &Document,
+    _lang: CitationLanguage,
+    _mode: DisplayMode,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     if let Some(authors_str) = &doc.authors {
@@ -170,7 +172,11 @@ fn render_note_impl(doc: &Document, mode: DisplayMode) -> String {
         String::new()
     };
 
-    let journal = doc.journal.clone().or(doc.conference.clone()).unwrap_or_default();
+    let journal = doc
+        .journal
+        .clone()
+        .or(doc.conference.clone())
+        .unwrap_or_default();
     let volume = doc.volume.as_deref().unwrap_or("");
     let pages = format_pages(doc.page_start.as_deref(), doc.page_end.as_deref());
     let viyp = vol_issue_year_pages(volume, doc.issue.as_deref(), &year, &pages);
@@ -239,7 +245,11 @@ fn render_bibliography(doc: &Document) -> String {
     parts.join(" ")
 }
 
-pub fn render_notes_bib_reference(doc: &Document, _lang: CitationLanguage, mode: DisplayMode) -> String {
+pub fn render_notes_bib_reference(
+    doc: &Document,
+    _lang: CitationLanguage,
+    mode: DisplayMode,
+) -> String {
     render_note_impl(doc, mode)
 }
 
@@ -248,7 +258,11 @@ pub fn render_notes_bib_in_text(doc: &Document, _lang: CitationLanguage) -> Stri
     format!("[{}]", num)
 }
 
-pub fn render_shortened_notes_reference(doc: &Document, lang: CitationLanguage, mode: DisplayMode) -> String {
+pub fn render_shortened_notes_reference(
+    doc: &Document,
+    lang: CitationLanguage,
+    mode: DisplayMode,
+) -> String {
     render_notes_bib_reference(doc, lang, mode)
 }
 
@@ -286,47 +300,84 @@ mod tests {
     #[test]
     fn test_chicago_ad_reference() {
         let doc = make_doc();
-        let result = render_author_date_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, John A., Bob C. Jones, and David E. Brown."), "chicago ad authors: {result}");
+        let result =
+            render_author_date_reference(&doc, CitationLanguage::English, DisplayMode::InText);
+        assert!(
+            result.contains("Smith, John A., Bob C. Jones, and David E. Brown."),
+            "chicago ad authors: {result}"
+        );
         assert!(result.contains("2023."), "chicago ad year: {result}");
-        assert!(result.contains("\"Historical Analysis.\""), "chicago ad title: {result}");
-        assert!(result.contains("42, no. 3 (2023): 123-145."), "chicago ad vol/issue: {result}");
+        assert!(
+            result.contains("\"Historical Analysis.\""),
+            "chicago ad title: {result}"
+        );
+        assert!(
+            result.contains("42, no. 3 (2023): 123-145."),
+            "chicago ad vol/issue: {result}"
+        );
     }
 
     #[test]
     fn test_chicago_ad_in_text() {
         let doc = make_doc();
         let result = render_author_date_in_text(&doc, CitationLanguage::English);
-        assert!(result.contains("(Smith, Jones, and Brown 2023"), "chicago ad in-text: {result}");
-        assert!(result.contains(", 123-145)"), "chicago ad in-text page: {result}");
+        assert!(
+            result.contains("(Smith, Jones, and Brown 2023"),
+            "chicago ad in-text: {result}"
+        );
+        assert!(
+            result.contains(", 123-145)"),
+            "chicago ad in-text page: {result}"
+        );
     }
 
     #[test]
     fn test_chicago_nb_footnote() {
         let doc = make_doc();
-        let result = render_notes_bib_reference(&doc, CitationLanguage::English, DisplayMode::Footnotes);
-        assert!(result.starts_with("1. "), "chicago nb footnote starts with number: {result}");
-        assert!(result.contains("John A. Smith"), "chicago nb footnote first-name-first: {result}");
-        assert!(result.contains("\"Historical Analysis\""), "chicago nb title: {result}");
+        let result =
+            render_notes_bib_reference(&doc, CitationLanguage::English, DisplayMode::Footnotes);
+        assert!(
+            result.starts_with("1. "),
+            "chicago nb footnote starts with number: {result}"
+        );
+        assert!(
+            result.contains("John A. Smith"),
+            "chicago nb footnote first-name-first: {result}"
+        );
+        assert!(
+            result.contains("\"Historical Analysis\""),
+            "chicago nb title: {result}"
+        );
     }
 
     #[test]
     fn test_chicago_nb_bibliography() {
         let doc = make_doc();
-        let result = render_notes_bib_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith, John A."), "chicago nb bib last-name-first: {result}");
+        let result =
+            render_notes_bib_reference(&doc, CitationLanguage::English, DisplayMode::InText);
+        assert!(
+            result.contains("Smith, John A."),
+            "chicago nb bib last-name-first: {result}"
+        );
     }
 
     #[test]
     fn test_chicago_nb_endnote() {
         let doc = make_doc();
-        let result = render_notes_bib_reference(&doc, CitationLanguage::English, DisplayMode::Endnotes);
-        assert!(result.starts_with("[1] "), "chicago nb endnote bracket: {result}");
+        let result =
+            render_notes_bib_reference(&doc, CitationLanguage::English, DisplayMode::Endnotes);
+        assert!(
+            result.starts_with("[1] "),
+            "chicago nb endnote bracket: {result}"
+        );
     }
 
     #[test]
     fn test_chicago_nb_in_text_marker() {
         let doc = make_doc();
-        assert_eq!(render_notes_bib_in_text(&doc, CitationLanguage::English), "[1]");
+        assert_eq!(
+            render_notes_bib_in_text(&doc, CitationLanguage::English),
+            "[1]"
+        );
     }
 }

@@ -1,11 +1,11 @@
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
-use ratatui::Frame;
 
-use crate::app::state::PanelFocus;
 use crate::app::AppState;
+use crate::app::state::PanelFocus;
 use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -15,12 +15,12 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let highlight = if focused {
         theme::focus_style()
     } else {
-        Style::default().bg(theme::bg()).fg(theme::dim())
+        Style::default().bg(theme::surface()).fg(theme::dim())
     };
 
     let list = List::default()
         .items(items)
-        .style(Style::default().fg(theme::fg()).bg(theme::bg()))
+        .style(Style::default().fg(theme::fg()).bg(theme::surface()))
         .highlight_style(highlight);
 
     let mut list_state = ListState::default();
@@ -37,9 +37,12 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
     // Projects section
     items.push(ListItem::new(Line::from(vec![
         Span::raw("  "),
-        Span::styled("프로젝트", theme::header_style()),
+        Span::styled("프로젝트", theme::dim_style()),
         Span::raw(" "),
-        Span::styled("────────────────────", Style::default().fg(theme::divider())),
+        Span::styled(
+            "────────────────────",
+            Style::default().fg(theme::divider()),
+        ),
     ])));
 
     if state.projects.is_empty() {
@@ -57,13 +60,15 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             let is_active = state.active_project_id == proj.id;
             let (icon, icon_style, name_style) = if is_active {
                 (
-                    "▣",
+                    "▸",
                     Style::default().fg(theme::selected()),
-                    Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme::fg())
+                        .add_modifier(Modifier::BOLD),
                 )
             } else {
                 (
-                    "□",
+                    "·",
                     Style::default().fg(theme::dim()),
                     Style::default().fg(theme::fg()),
                 )
@@ -84,9 +89,12 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
     if state.series_grouping_enabled {
         items.push(ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled("시리즈", theme::header_style()),
+            Span::styled("시리즈", theme::dim_style()),
             Span::raw(" "),
-            Span::styled("────────────────────", Style::default().fg(theme::divider())),
+            Span::styled(
+                "────────────────────",
+                Style::default().fg(theme::divider()),
+            ),
         ])));
 
         if state.series.is_empty() {
@@ -104,13 +112,15 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
                 let is_active = state.active_series_id == ser.id;
                 let (icon, icon_style, name_style) = if is_active {
                     (
-                        "≡",
+                        "▸",
                         Style::default().fg(theme::selected()),
-                        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme::fg())
+                            .add_modifier(Modifier::BOLD),
                     )
                 } else {
                     (
-                        "≡",
+                        "·",
                         Style::default().fg(theme::dim()),
                         Style::default().fg(theme::fg()),
                     )
@@ -134,7 +144,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             Span::raw("  "),
             Span::styled(arrow, Style::default().fg(theme::divider())),
             Span::raw(" "),
-            Span::styled("연구자별 보기", theme::header_style()),
+            Span::styled("연구자별 보기", theme::dim_style()),
             Span::raw(" "),
             Span::styled("────────", Style::default().fg(theme::divider())),
         ])));
@@ -143,8 +153,16 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             if state.author_search_mode {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("    "),
-                    Span::styled("검색: ", Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)),
-                    Span::styled(state.author_search_input.clone(), Style::default().fg(theme::focus_fg())),
+                    Span::styled(
+                        "검색: ",
+                        Style::default()
+                            .fg(theme::selected())
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        state.author_search_input.clone(),
+                        Style::default().fg(theme::focus_fg()),
+                    ),
                     Span::styled("▎", Style::default().fg(theme::accent_primary())),
                 ])));
             }
@@ -159,7 +177,10 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             if filtered.is_empty() && !state.author_search_input.is_empty() {
                 items.push(ListItem::new(Line::from(vec![
                     Span::raw("      "),
-                    Span::styled("일치하는 연구자가 없습니다", Style::default().fg(theme::dim())),
+                    Span::styled(
+                        "일치하는 연구자가 없습니다",
+                        Style::default().fg(theme::dim()),
+                    ),
                 ])));
             }
 
@@ -169,7 +190,9 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
                     (
                         "◆",
                         Style::default().fg(theme::selected()),
-                        Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme::fg())
+                            .add_modifier(Modifier::BOLD),
                     )
                 } else {
                     (
@@ -203,7 +226,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
     // UDC classification section
     items.push(ListItem::new(Line::from(vec![
         Span::raw("  "),
-        Span::styled("UDC 분류", theme::header_style()),
+        Span::styled("UDC 분류", theme::dim_style()),
     ])));
 
     let udc_top = UDC_TOP_LEVEL;
@@ -227,31 +250,28 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
             count_span,
         ])));
 
-        if expanded
-            && let Some(children) = UDC_CHILDREN.get(*notation) {
-                for (child_notation, child_label) in children.iter() {
-                    let child_expanded = state.expanded_nodes.contains(child_notation.as_str());
-                    let child_arrow = if child_expanded { "▾" } else { "▸" };
-                    let child_count = get_facet_count(state, child_notation);
+        if expanded && let Some(children) = UDC_CHILDREN.get(*notation) {
+            for (child_notation, child_label) in children.iter() {
+                let child_expanded = state.expanded_nodes.contains(child_notation.as_str());
+                let child_arrow = if child_expanded { "▾" } else { "▸" };
+                let child_count = get_facet_count(state, child_notation);
 
-                    let child_count_span = if let Some(count) = child_count {
-                        Span::styled(format!(" ({})", count), theme::dim_style())
-                    } else {
-                        Span::raw("")
-                    };
+                let child_count_span = if let Some(count) = child_count {
+                    Span::styled(format!(" ({})", count), theme::dim_style())
+                } else {
+                    Span::raw("")
+                };
 
-                    items.push(ListItem::new(Line::from(vec![
-                        Span::raw("      "),
-                        Span::styled(child_arrow, Style::default().fg(theme::divider())),
-                        Span::raw(" "),
-                        Span::styled(format!("{:<5} ", child_notation), theme::code_style()),
-                        Span::styled(child_notation.as_str(), Style::default().fg(theme::fg())),
-                        Span::raw(" "),
-                        Span::styled(child_label.as_str(), Style::default().fg(theme::fg())),
-                        child_count_span,
-                    ])));
-                }
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("      "),
+                    Span::styled(child_arrow, Style::default().fg(theme::divider())),
+                    Span::raw(" "),
+                    Span::styled(format!("{:<5} ", child_notation), theme::code_style()),
+                    Span::styled(child_label.as_str(), Style::default().fg(theme::fg())),
+                    child_count_span,
+                ])));
             }
+        }
     }
 
     // PhySH section
@@ -263,7 +283,7 @@ fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {
         items.push(ListItem::new(""));
         items.push(ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled("PhySH", theme::header_style()),
+            Span::styled("PhySH", theme::dim_style()),
         ])));
 
         for (notation, label) in PHYSH_TOP {
@@ -326,9 +346,10 @@ pub fn count_visible_nodes(state: &AppState) -> usize {
     count += UDC_TOP_LEVEL.len();
     for (notation, _) in UDC_TOP_LEVEL {
         if state.expanded_nodes.contains(*notation)
-            && let Some(children) = UDC_CHILDREN.get(*notation) {
-                count += children.len();
-            }
+            && let Some(children) = UDC_CHILDREN.get(*notation)
+        {
+            count += children.len();
+        }
     }
 
     let physh_has_docs = PHYSH_TOP
@@ -355,58 +376,59 @@ const UDC_TOP_LEVEL: &[(&str, &str)] = &[
     ("9", "역사·지리"),
 ];
 
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
-pub(crate) static UDC_CHILDREN: Lazy<HashMap<&'static str, Vec<(String, String)>>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    m.insert(
-        "5",
-        vec![
-            ("51".to_string(), "수학".to_string()),
-            ("52".to_string(), "천문학".to_string()),
-            ("53".to_string(), "물리학".to_string()),
-            ("54".to_string(), "화학".to_string()),
-            ("55".to_string(), "지질학".to_string()),
-            ("57".to_string(), "생물학".to_string()),
-        ],
-    );
-    m.insert(
-        "51",
-        vec![
-            ("512".to_string(), "대수학".to_string()),
-            ("514".to_string(), "기하학".to_string()),
-            ("517".to_string(), "해석학".to_string()),
-        ],
-    );
-    m.insert(
-        "53",
-        vec![
-            ("531".to_string(), "역학".to_string()),
-            ("532".to_string(), "유체역학".to_string()),
-            ("535".to_string(), "광학".to_string()),
-            ("537".to_string(), "전자기학".to_string()),
-            ("538.9".to_string(), "응집물질물리학".to_string()),
-        ],
-    );
-    m.insert(
-        "0",
-        vec![
-            ("004".to_string(), "컴퓨터과학".to_string()),
-            ("01".to_string(), "서지학".to_string()),
-            ("02".to_string(), "도서관학".to_string()),
-        ],
-    );
-    m.insert(
-        "6",
-        vec![
-            ("61".to_string(), "의학·보건".to_string()),
-            ("62".to_string(), "공학".to_string()),
-            ("63".to_string(), "농업".to_string()),
-        ],
-    );
-    m
-});
+pub(crate) static UDC_CHILDREN: Lazy<HashMap<&'static str, Vec<(String, String)>>> =
+    Lazy::new(|| {
+        let mut m = HashMap::new();
+        m.insert(
+            "5",
+            vec![
+                ("51".to_string(), "수학".to_string()),
+                ("52".to_string(), "천문학".to_string()),
+                ("53".to_string(), "물리학".to_string()),
+                ("54".to_string(), "화학".to_string()),
+                ("55".to_string(), "지질학".to_string()),
+                ("57".to_string(), "생물학".to_string()),
+            ],
+        );
+        m.insert(
+            "51",
+            vec![
+                ("512".to_string(), "대수학".to_string()),
+                ("514".to_string(), "기하학".to_string()),
+                ("517".to_string(), "해석학".to_string()),
+            ],
+        );
+        m.insert(
+            "53",
+            vec![
+                ("531".to_string(), "역학".to_string()),
+                ("532".to_string(), "유체역학".to_string()),
+                ("535".to_string(), "광학".to_string()),
+                ("537".to_string(), "전자기학".to_string()),
+                ("538.9".to_string(), "응집물질물리학".to_string()),
+            ],
+        );
+        m.insert(
+            "0",
+            vec![
+                ("004".to_string(), "컴퓨터과학".to_string()),
+                ("01".to_string(), "서지학".to_string()),
+                ("02".to_string(), "도서관학".to_string()),
+            ],
+        );
+        m.insert(
+            "6",
+            vec![
+                ("61".to_string(), "의학·보건".to_string()),
+                ("62".to_string(), "공학".to_string()),
+                ("63".to_string(), "농업".to_string()),
+            ],
+        );
+        m
+    });
 
 const PHYSH_TOP: &[(&str, &str)] = &[
     ("Condensed", "응축물질"),

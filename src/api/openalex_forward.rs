@@ -62,13 +62,8 @@ pub async fn fetch_forward_citations(doi: &str) -> Result<(Vec<ForwardCitation>,
                 .into_iter()
                 .filter_map(|a| {
                     a.author.and_then(|au| {
-                        au.display_name.map(|name| {
-                            if name.is_empty() {
-                                name
-                            } else {
-                                name
-                            }
-                        })
+                        au.display_name
+                            .map(|name| if name.is_empty() { name } else { name })
                     })
                 })
                 .collect(),

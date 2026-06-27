@@ -120,7 +120,11 @@ const TOP_LEVEL: &[(&str, &str, Option<&str>)] = &[
     ("514", "Geometry", Some("51")),
     ("515", "Topology", Some("51")),
     ("517", "Analysis", Some("51")),
-    ("517.9", "Differential equations & integral equations", Some("517")),
+    (
+        "517.9",
+        "Differential equations & integral equations",
+        Some("517"),
+    ),
     ("52", "Astronomy & astrophysics", Some("5")),
     ("53", "Physics", Some("5")),
     ("531", "Mechanics", Some("53")),

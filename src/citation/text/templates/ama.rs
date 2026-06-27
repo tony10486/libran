@@ -4,10 +4,8 @@
 //! 7+ authors: first 3 then et al.
 //! In-text: [1]
 
-use crate::citation::text::helpers::{
-    format_pages, format_year, get_authors,
-};
-use crate::citation::text::locale::{term, Term};
+use crate::citation::text::helpers::{format_pages, format_year, get_authors};
+use crate::citation::text::locale::{Term, term};
 use crate::citation::text::styles::{CitationLanguage, DisplayMode};
 use crate::db::documents::Document;
 
@@ -19,13 +17,13 @@ fn format_ama_authors(authors: &[String], lang: CitationLanguage) -> String {
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let (last, first) = crate::citation::text::helpers::parse_author_full(name);
+            let (last, first) = crate::citation::text::helpers::parse_author_full(name, None);
             if first.is_empty() {
                 return last;
             }
             let initials: String = first
                 .split_whitespace()
-                .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic()))
+                .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
                 .map(|c| c.to_uppercase().collect::<String>())
                 .collect::<Vec<_>>()
                 .join("");
@@ -117,11 +115,23 @@ mod tests {
     fn test_ama_journal_article() {
         let doc = make_doc();
         let result = render_reference(&doc, CitationLanguage::English, DisplayMode::InText);
-        assert!(result.contains("Smith JA, Lee BC."), "ama authors no periods: {result}");
-        assert!(result.contains("Clinical Trial Results."), "ama title: {result}");
+        assert!(
+            result.contains("Smith JA, Lee BC."),
+            "ama authors no periods: {result}"
+        );
+        assert!(
+            result.contains("Clinical Trial Results."),
+            "ama title: {result}"
+        );
         assert!(result.contains("JAMA."), "ama journal: {result}");
-        assert!(result.contains("2023;42(3):123-145."), "ama year;vol(issue):pages: {result}");
-        assert!(result.contains("doi: 10.1001/jama.test"), "ama doi lowercase: {result}");
+        assert!(
+            result.contains("2023;42(3):123-145."),
+            "ama year;vol(issue):pages: {result}"
+        );
+        assert!(
+            result.contains("doi: 10.1001/jama.test"),
+            "ama doi lowercase: {result}"
+        );
     }
 
     #[test]

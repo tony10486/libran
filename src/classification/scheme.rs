@@ -68,8 +68,7 @@ pub trait ClassificationScheme {
             .iter()
             .filter(|n| {
                 n.pref_label.to_lowercase().contains(&lower)
-                    || n
-                        .alt_label
+                    || n.alt_label
                         .as_ref()
                         .map(|l| l.to_lowercase().contains(&lower))
                         .unwrap_or(false)

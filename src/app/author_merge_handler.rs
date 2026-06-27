@@ -1,5 +1,5 @@
-use crate::app::action::AppAction;
 use crate::app::AppState;
+use crate::app::action::AppAction;
 use crate::db::author_aliases;
 
 /// Enter author merge mode (phase 1: source author).
@@ -38,8 +38,7 @@ pub fn handle_author_merge_canonical_entered(
     tokio::spawn(async move {
         let result = tokio::task::spawn_blocking(move || -> Result<usize, String> {
             let conn = db.lock().map_err(|e| e.to_string())?;
-            author_aliases::insert(&conn, &source, &canonical, None)
-                .map_err(|e| e.to_string())?;
+            author_aliases::insert(&conn, &source, &canonical, None).map_err(|e| e.to_string())?;
             let count = author_aliases::merge_author_in_documents(&conn, &source, &canonical)
                 .map_err(|e| e.to_string())?;
             Ok(count)
@@ -49,7 +48,10 @@ pub fn handle_author_merge_canonical_entered(
         let action = match result {
             Ok(Ok(count)) => AppAction::AuthorMergeResult {
                 success: true,
-                message: format!("{}건의 저자 병합 완료: {} → {}", count, source_display, canonical_display),
+                message: format!(
+                    "{}건의 저자 병합 완료: {} → {}",
+                    count, source_display, canonical_display
+                ),
             },
             Ok(Err(m)) => AppAction::AuthorMergeResult {
                 success: false,
