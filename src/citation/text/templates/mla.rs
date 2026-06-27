@@ -86,7 +86,10 @@ pub fn render_reference(doc: &Document, lang: CitationLanguage, _mode: DisplayMo
 
 pub fn render_in_text(doc: &Document, lang: CitationLanguage) -> String {
     let authors = get_authors(doc.authors.as_deref());
-    let last: Vec<String> = authors.iter().map(|n| parse_author_full(n, None).0).collect();
+    let last: Vec<String> = authors
+        .iter()
+        .map(|n| parse_author_full(n, None).0)
+        .collect();
     let pages = format_pages(doc.page_start.as_deref(), doc.page_end.as_deref());
 
     let author_part = if last.is_empty() {

@@ -62,7 +62,10 @@ fn format_note_authors(authors: &[String], _and_word: &str) -> String {
 }
 
 fn last_names(authors: &[String]) -> Vec<String> {
-    authors.iter().map(|n| parse_author_full(n, None).0).collect()
+    authors
+        .iter()
+        .map(|n| parse_author_full(n, None).0)
+        .collect()
 }
 
 fn vol_issue_year_pages(volume: &str, issue: Option<&str>, year: &str, pages: &str) -> String {

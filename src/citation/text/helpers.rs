@@ -242,10 +242,11 @@ pub fn format_authors_initials_first(
                     .split_whitespace()
                     .filter_map(|w| {
                         let c = w.chars().next();
-                        c.filter(|c| c.is_alphabetic() && !is_cjk_char(*c)).map(|c| {
-                            let up: String = c.to_uppercase().collect();
-                            format!("{}.", up)
-                        })
+                        c.filter(|c| c.is_alphabetic() && !is_cjk_char(*c))
+                            .map(|c| {
+                                let up: String = c.to_uppercase().collect();
+                                format!("{}.", up)
+                            })
                     })
                     .collect::<Vec<_>>()
                     .join(" ");

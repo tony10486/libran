@@ -38,7 +38,10 @@ fn format_full_authors_first_last(authors: &[String]) -> String {
 }
 
 fn last_names(authors: &[String]) -> Vec<String> {
-    authors.iter().map(|n| parse_author_full(n, None).0).collect()
+    authors
+        .iter()
+        .map(|n| parse_author_full(n, None).0)
+        .collect()
 }
 
 pub fn render_apsa_reference(

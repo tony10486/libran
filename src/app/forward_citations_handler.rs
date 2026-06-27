@@ -2,8 +2,8 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use crate::api::openalex_forward::{self, ForwardCitation};
-use crate::app::action::AppAction;
 use crate::app::AppState;
+use crate::app::action::AppAction;
 use crate::db::documents::{self, Document};
 
 /// Fetch forward citations from OpenAlex (async).
@@ -47,9 +47,7 @@ pub fn handle_fetch_forward_citations(state: &mut AppState, doc_id: i64) {
                 // Lock is taken in a non-async block so the MutexGuard drops before the .await below.
                 match db.lock() {
                     Ok(conn) => {
-                        if let Err(e) =
-                            persist_forward_citations(&conn, doc_id, &citations)
-                        {
+                        if let Err(e) = persist_forward_citations(&conn, doc_id, &citations) {
                             eprintln!("forward citations persist failed: {e}");
                         }
                     }
@@ -95,9 +93,7 @@ pub fn persist_forward_citations(
 ) -> Result<()> {
     for cite in citations {
         let citing_doc_id = match cite.doi.as_deref() {
-            Some(doi) if !doi.is_empty() => {
-                documents::find_by_doi(conn, doi)?.and_then(|d| d.id)
-            }
+            Some(doi) if !doi.is_empty() => documents::find_by_doi(conn, doi)?.and_then(|d| d.id),
             _ => None,
         };
 

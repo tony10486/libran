@@ -15,7 +15,11 @@ fn format_ieee_authors(authors: &[String]) -> String {
         let (last, first) = crate::citation::text::helpers::parse_author_full(&authors[0], None);
         let initials: String = first
             .split_whitespace()
-            .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
+            .filter_map(|w| {
+                w.chars().next().filter(|c| {
+                    c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)
+                })
+            })
             .map(|c| format!("{}.", c.to_uppercase().collect::<String>()))
             .collect::<Vec<_>>()
             .join(" ");
@@ -34,7 +38,11 @@ fn format_ieee_authors(authors: &[String]) -> String {
                 }
                 let initials: String = first
                     .split_whitespace()
-                    .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
+                    .filter_map(|w| {
+                        w.chars().next().filter(|c| {
+                            c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)
+                        })
+                    })
                     .map(|c| format!("{}.", c.to_uppercase().collect::<String>()))
                     .collect::<Vec<_>>()
                     .join(" ");
