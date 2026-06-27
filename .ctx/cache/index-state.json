@@ -1,0 +1,956 @@
+{
+  "files": {
+    ".cargo/config.toml": {
+      "fingerprint": "7f9969b1631d3607",
+      "bytes": 94
+    },
+    ".omo/boulder.json": {
+      "fingerprint": "380affffe62cda62",
+      "bytes": 1155
+    },
+    ".omo/notepads/libran-15-gap-fix/decisions.md": {
+      "fingerprint": "30406ea523c53def",
+      "bytes": 0
+    },
+    ".omo/notepads/libran-15-gap-fix/issues.md": {
+      "fingerprint": "30406ea523c53def",
+      "bytes": 0
+    },
+    ".omo/notepads/libran-15-gap-fix/learnings.md": {
+      "fingerprint": "69b2a33f168fb16b",
+      "bytes": 76461
+    },
+    ".omo/notepads/libran-15-gap-fix/problems.md": {
+      "fingerprint": "30406ea523c53def",
+      "bytes": 0
+    },
+    ".omo/plans/citation-export-phase3.md": {
+      "fingerprint": "0b71f2a0ea3092e4",
+      "bytes": 3183
+    },
+    ".omo/plans/citation-export.md": {
+      "fingerprint": "f5bacb297fc5ed55",
+      "bytes": 23059
+    },
+    ".omo/plans/korean-substring-search.md": {
+      "fingerprint": "8da143660b02f148",
+      "bytes": 2531
+    },
+    ".omo/plans/libran-15-gap-fix.md": {
+      "fingerprint": "1c7e4c442dc91803",
+      "bytes": 19051
+    },
+    ".omo/run-continuation/ses_0f86f7e9effeYJO4mJP3x0tBNq.json": {
+      "fingerprint": "c40ca44fff8eb236",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_0f8a4e5feffe5jSotP31Q7JlzW.json": {
+      "fingerprint": "a7d4033d30148252",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_10162d830ffeeh83t9Yl1Kfqh1.json": {
+      "fingerprint": "f342177957c7d68d",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_10175c39bffe51zMVY2Fkyt4vE.json": {
+      "fingerprint": "24210f0b4d4eec32",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_1160f1267ffeZtucUjyKLrc36M.json": {
+      "fingerprint": "568d6d0c1f8fc916",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11631c311ffeL8XtnI24BBAFQ1.json": {
+      "fingerprint": "23475d80b7985a84",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11663a608ffeftADXfjqEMCWqn.json": {
+      "fingerprint": "a3cada16369de5e9",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_1169abcbaffelqdEH1Pyv61Is6.json": {
+      "fingerprint": "ef914ed4cfd57664",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_116ce492fffec79FEyacYgv1ze.json": {
+      "fingerprint": "dba9492869ca127f",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_116ceae22ffeu3TSPHUHAAheQk.json": {
+      "fingerprint": "1d2f9671a15d5783",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_116cf15b4ffeRZH4CLWaQoPAfz.json": {
+      "fingerprint": "6726e3a63f0dfa06",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_116e5cd2effeCcXSIfHyAbXwyb.json": {
+      "fingerprint": "3743ab9585f20843",
+      "bytes": 263
+    },
+    ".omo/run-continuation/ses_116e5cd51ffe6ET2g4bI5dphqb.json": {
+      "fingerprint": "f6d7c2e5f26c07d2",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_116e75566ffeqYJJt7tLZSVHYa.json": {
+      "fingerprint": "c345cd1c2cf1d6db",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11718456fffeyPsOwu0GLWw9nl.json": {
+      "fingerprint": "d34878405e736b31",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_1171b332affewdP55oP9k4rcCC.json": {
+      "fingerprint": "7ea2e4c481496669",
+      "bytes": 263
+    },
+    ".omo/run-continuation/ses_117298f1effepKrrB3nCnmtDTI.json": {
+      "fingerprint": "1ff60461c3320acf",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11abf743bffe0qP3mk0ZZ3G1Ly.json": {
+      "fingerprint": "a0e7aa2b55ed5dcc",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11ad5b392ffe6HDXDPdVbyIXmH.json": {
+      "fingerprint": "8a2bf12bc1e7dbc9",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11ad664c8ffevSefWeRa9zK4L0.json": {
+      "fingerprint": "66734e1a25f09f03",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11b693213ffeskv1WGIgMIJiRq.json": {
+      "fingerprint": "dfcad1d94dd648e2",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11b7317faffe2bNnh7jltrWOj0.json": {
+      "fingerprint": "c29888a32f483746",
+      "bytes": 214
+    },
+    ".omo/run-continuation/ses_11ba41870ffeF1b6A07vAxc0Y8.json": {
+      "fingerprint": "af97a2e7ac4c9f84",
+      "bytes": 263
+    },
+    ".omo/run-continuation/ses_11c080b8dffe7hKFjxMOBJAvlm.json": {
+      "fingerprint": "6c769aa6dbbbb51e",
+      "bytes": 214
+    },
+    ".opencode/commands/ctx-ask.md": {
+      "fingerprint": "ffea8367657cfdf5",
+      "bytes": 366
+    },
+    ".opencode/commands/ctx-benchmark-memory-ab.md": {
+      "fingerprint": "4ace0bdb943a2dcd",
+      "bytes": 538
+    },
+    ".opencode/commands/ctx-benchmark-memory-suite.md": {
+      "fingerprint": "78e8e8533d8fca65",
+      "bytes": 668
+    },
+    ".opencode/commands/ctx-compare.md": {
+      "fingerprint": "d06193a32c2659da",
+      "bytes": 620
+    },
+    ".opencode/commands/ctx-dashboard.md": {
+      "fingerprint": "f4006e9ce82b6f94",
+      "bytes": 392
+    },
+    ".opencode/commands/ctx-doctor.md": {
+      "fingerprint": "98fe8c1abece1e0c",
+      "bytes": 522
+    },
+    ".opencode/commands/ctx-explain.md": {
+      "fingerprint": "498b6cd9512ab1c9",
+      "bytes": 347
+    },
+    ".opencode/commands/ctx-gain.md": {
+      "fingerprint": "964f2319484e5aca",
+      "bytes": 691
+    },
+    ".opencode/commands/ctx-graph-build.md": {
+      "fingerprint": "76945e2f31447b29",
+      "bytes": 262
+    },
+    ".opencode/commands/ctx-graph-query.md": {
+      "fingerprint": "25e8230d65829de6",
+      "bytes": 290
+    },
+    ".opencode/commands/ctx-graph-rebuild.md": {
+      "fingerprint": "51a106790e4bd32f",
+      "bytes": 258
+    },
+    ".opencode/commands/ctx-help.md": {
+      "fingerprint": "926c779b3584622a",
+      "bytes": 251
+    },
+    ".opencode/commands/ctx-hook.md": {
+      "fingerprint": "767ae80b8d9f1a0d",
+      "bytes": 437
+    },
+    ".opencode/commands/ctx-index.md": {
+      "fingerprint": "973c50bd22684fc6",
+      "bytes": 529
+    },
+    ".opencode/commands/ctx-init.md": {
+      "fingerprint": "8e860bf9b6a0712b",
+      "bytes": 275
+    },
+    ".opencode/commands/ctx-learn.md": {
+      "fingerprint": "e73888d474895386",
+      "bytes": 659
+    },
+    ".opencode/commands/ctx-mcp-config-opencode.md": {
+      "fingerprint": "c38e120e6f38dece",
+      "bytes": 269
+    },
+    ".opencode/commands/ctx-mcp-serve.md": {
+      "fingerprint": "b45a3c24a34a49f9",
+      "bytes": 430
+    },
+    ".opencode/commands/ctx-mcp-stdio.md": {
+      "fingerprint": "8fb1ff5b84ca281c",
+      "bytes": 305
+    },
+    ".opencode/commands/ctx-memory-bootstrap.md": {
+      "fingerprint": "c5a4385521bb66d0",
+      "bytes": 615
+    },
+    ".opencode/commands/ctx-memory-delete.md": {
+      "fingerprint": "70b510b642395dd5",
+      "bytes": 331
+    },
+    ".opencode/commands/ctx-memory-export.md": {
+      "fingerprint": "410641ded4ebd3f6",
+      "bytes": 419
+    },
+    ".opencode/commands/ctx-memory-get.md": {
+      "fingerprint": "5e84373c09082b5e",
+      "bytes": 354
+    },
+    ".opencode/commands/ctx-memory-import.md": {
+      "fingerprint": "bff9b1e164caaaae",
+      "bytes": 464
+    },
+    ".opencode/commands/ctx-memory-list.md": {
+      "fingerprint": "3d00546cf51ac5b2",
+      "bytes": 384
+    },
+    ".opencode/commands/ctx-memory-search.md": {
+      "fingerprint": "8026bde6509d9929",
+      "bytes": 525
+    },
+    ".opencode/commands/ctx-memory-set.md": {
+      "fingerprint": "fc70453bdbfe70d2",
+      "bytes": 510
+    },
+    ".opencode/commands/ctx-opencode-install.md": {
+      "fingerprint": "e47ea64a4635684b",
+      "bytes": 303
+    },
+    ".opencode/commands/ctx-pack.md": {
+      "fingerprint": "429a67c57ee8a6cd",
+      "bytes": 552
+    },
+    ".opencode/commands/ctx-plan.md": {
+      "fingerprint": "112a5fadd39f80c5",
+      "bytes": 1687
+    },
+    ".opencode/commands/ctx-prune-diff.md": {
+      "fingerprint": "654a34816c1a6bad",
+      "bytes": 408
+    },
+    ".opencode/commands/ctx-prune-logs.md": {
+      "fingerprint": "d3e799a861c1d0f6",
+      "bytes": 738
+    },
+    ".opencode/commands/ctx-read.md": {
+      "fingerprint": "7dbd1c357aab0c4c",
+      "bytes": 833
+    },
+    ".opencode/commands/ctx-reindex.md": {
+      "fingerprint": "19a548c1f27cafcf",
+      "bytes": 316
+    },
+    ".opencode/commands/ctx-retrieve.md": {
+      "fingerprint": "bc1af0867a97236a",
+      "bytes": 628
+    },
+    ".opencode/commands/ctx-run.md": {
+      "fingerprint": "f1234c0419509b0c",
+      "bytes": 934
+    },
+    ".opencode/commands/ctx-stats.md": {
+      "fingerprint": "38d9b5daf498ff3c",
+      "bytes": 440
+    },
+    ".opencode/commands/ctx-toolbook-import.md": {
+      "fingerprint": "a89320ce10e65dd0",
+      "bytes": 704
+    },
+    ".opencode/commands/ctx-toolbook-list.md": {
+      "fingerprint": "805c57d2879ebb1d",
+      "bytes": 571
+    },
+    ".opencode/commands/ctx-toolbook-pack.md": {
+      "fingerprint": "a40b9cc5b98a2105",
+      "bytes": 897
+    },
+    ".opencode/commands/ctx-toolbook-search.md": {
+      "fingerprint": "0d86e84cc7746991",
+      "bytes": 622
+    },
+    ".opencode/commands/ctx.md": {
+      "fingerprint": "24ca3a6b6957a730",
+      "bytes": 425
+    },
+    ".opencode/instructions/ctx-host-first.md": {
+      "fingerprint": "45ac57f7bc980422",
+      "bytes": 3060
+    },
+    ".opencode/package.json": {
+      "fingerprint": "2c8c43735d2df270",
+      "bytes": 199
+    },
+    ".opencode/plugins/ctx-dashboard.tsx": {
+      "fingerprint": "02a0437d6a12f3e1",
+      "bytes": 5931
+    },
+    ".opencode/tui.json": {
+      "fingerprint": "63299697991d15e1",
+      "bytes": 101
+    },
+    "Cargo.toml": {
+      "fingerprint": "07f151c7594fcc23",
+      "bytes": 1232
+    },
+    "Cross.toml": {
+      "fingerprint": "271b59cb0ef06e93",
+      "bytes": 337
+    },
+    "README.md": {
+      "fingerprint": "2c2d71753f047820",
+      "bytes": 26220
+    },
+    "_config_analysis.py": {
+      "fingerprint": "f7126cd3eb43f0cd",
+      "bytes": 636
+    },
+    "bugs.md": {
+      "fingerprint": "91db59111a76ec94",
+      "bytes": 2186
+    },
+    "documentation.md": {
+      "fingerprint": "1ebea9a6cf1bf19f",
+      "bytes": 60643
+    },
+    "examples/design_a_dual_panel.rs": {
+      "fingerprint": "1c26a6fbb98dd4db",
+      "bytes": 8556
+    },
+    "examples/design_b_three_pane.rs": {
+      "fingerprint": "94e691805f30c3c3",
+      "bytes": 9895
+    },
+    "examples/design_b_v2.rs": {
+      "fingerprint": "bc90bc6f12fd38c8",
+      "bytes": 25151
+    },
+    "examples/design_b_v3.rs": {
+      "fingerprint": "9d27535bc8dac283",
+      "bytes": 23489
+    },
+    "examples/design_c_tabs.rs": {
+      "fingerprint": "500c7ca46769cc1f",
+      "bytes": 12865
+    },
+    "examples/design_d_compact.rs": {
+      "fingerprint": "0915562806ec6f92",
+      "bytes": 8479
+    },
+    "examples/design_e_linear.rs": {
+      "fingerprint": "eb93cbf953ece686",
+      "bytes": 31075
+    },
+    "examples/design_f_tokyo_night.rs": {
+      "fingerprint": "4b3dc69791c3b396",
+      "bytes": 33257
+    },
+    "examples/design_final.rs": {
+      "fingerprint": "33cc11f3ced77e79",
+      "bytes": 36473
+    },
+    "examples/design_g_editorial.rs": {
+      "fingerprint": "bbddd478d1f1eb5d",
+      "bytes": 33053
+    },
+    "examples/design_h_neo_grid.rs": {
+      "fingerprint": "b3d8f07dfa0bf284",
+      "bytes": 38196
+    },
+    "examples/test_final.rs": {
+      "fingerprint": "960f5a4a81f6746a",
+      "bytes": 428
+    },
+    "opencode.json": {
+      "fingerprint": "ce74737d8a283284",
+      "bytes": 422
+    },
+    "src/api/arxiv.rs": {
+      "fingerprint": "13c26718a07e9ba4",
+      "bytes": 468
+    },
+    "src/api/cache.rs": {
+      "fingerprint": "2df3232a8cf75e46",
+      "bytes": 1196
+    },
+    "src/api/crossref.rs": {
+      "fingerprint": "f7fa45d54e40f8a6",
+      "bytes": 745
+    },
+    "src/api/http_client.rs": {
+      "fingerprint": "544aefdc966ce38d",
+      "bytes": 1029
+    },
+    "src/api/metrics.rs": {
+      "fingerprint": "921cc2cb953f5d6a",
+      "bytes": 8379
+    },
+    "src/api/mod.rs": {
+      "fingerprint": "ca6d49175708057a",
+      "bytes": 1012
+    },
+    "src/api/openalex_forward.rs": {
+      "fingerprint": "c22be83a82e642d2",
+      "bytes": 2849
+    },
+    "src/api/rate_limiter.rs": {
+      "fingerprint": "66044fa0ed30e5d9",
+      "bytes": 2228
+    },
+    "src/app/action.rs": {
+      "fingerprint": "0e14a724b01e13ec",
+      "bytes": 5948
+    },
+    "src/app/api_metadata.rs": {
+      "fingerprint": "fd60441558d9055f",
+      "bytes": 16352
+    },
+    "src/app/author_merge_handler.rs": {
+      "fingerprint": "7b1a1446f5e6d0c5",
+      "bytes": 2577
+    },
+    "src/app/bookmark_handler.rs": {
+      "fingerprint": "02782b0b1c597ed9",
+      "bytes": 2072
+    },
+    "src/app/bulk_import_handler.rs": {
+      "fingerprint": "95dbe70779419250",
+      "bytes": 6725
+    },
+    "src/app/custom_fields_handler.rs": {
+      "fingerprint": "a3a697c83bce0e03",
+      "bytes": 4677
+    },
+    "src/app/dispatcher.rs": {
+      "fingerprint": "c00251ab54b4e108",
+      "bytes": 131976
+    },
+    "src/app/forward_citations_handler.rs": {
+      "fingerprint": "4b58aec7d2ac12ab",
+      "bytes": 4515
+    },
+    "src/app/graph_state.rs": {
+      "fingerprint": "f5308a72d7454770",
+      "bytes": 1393
+    },
+    "src/app/import_handler.rs": {
+      "fingerprint": "5b30a794903dfd69",
+      "bytes": 3930
+    },
+    "src/app/metrics_handler.rs": {
+      "fingerprint": "92445c6c1b03edec",
+      "bytes": 6499
+    },
+    "src/app/mod.rs": {
+      "fingerprint": "40f97d48aeaaef91",
+      "bytes": 425
+    },
+    "src/app/reading_handler.rs": {
+      "fingerprint": "81340b027f9354a5",
+      "bytes": 1332
+    },
+    "src/app/saved_search_handler.rs": {
+      "fingerprint": "12bb638921c3dd79",
+      "bytes": 3040
+    },
+    "src/app/state.rs": {
+      "fingerprint": "5785deb59bcc5eda",
+      "bytes": 22332
+    },
+    "src/app/stats_handler.rs": {
+      "fingerprint": "12d4dc0f0448b165",
+      "bytes": 826
+    },
+    "src/bin/pdf_diag.rs": {
+      "fingerprint": "eb7ca34bcd762966",
+      "bytes": 1858
+    },
+    "src/citation/bibtex.rs": {
+      "fingerprint": "90470f1ec408bd4c",
+      "bytes": 3923
+    },
+    "src/citation/bibtex_parser.rs": {
+      "fingerprint": "7eea728d2b72aefb",
+      "bytes": 6710
+    },
+    "src/citation/cache.rs": {
+      "fingerprint": "496a0231ad66de50",
+      "bytes": 4088
+    },
+    "src/citation/csl_json.rs": {
+      "fingerprint": "dbea1e7503e1cb9f",
+      "bytes": 13317
+    },
+    "src/citation/entry.rs": {
+      "fingerprint": "27ab5456f2906202",
+      "bytes": 8100
+    },
+    "src/citation/extract.rs": {
+      "fingerprint": "a710b7e38f63f2fb",
+      "bytes": 5705
+    },
+    "src/citation/formats/bibliontology_rdf.rs": {
+      "fingerprint": "26ffab5ff5130ed3",
+      "bytes": 7460
+    },
+    "src/citation/formats/bookmarks.rs": {
+      "fingerprint": "eb5d97a6842e2298",
+      "bytes": 4459
+    },
+    "src/citation/formats/cff.rs": {
+      "fingerprint": "05cea66f56e1d7de",
+      "bytes": 8640
+    },
+    "src/citation/formats/coins.rs": {
+      "fingerprint": "040e474df3162f11",
+      "bytes": 5607
+    },
+    "src/citation/formats/csv_export.rs": {
+      "fingerprint": "620de126137f29b1",
+      "bytes": 9760
+    },
+    "src/citation/formats/endnote_xml.rs": {
+      "fingerprint": "69bd4cd0a5653c73",
+      "bytes": 9700
+    },
+    "src/citation/formats/evernote.rs": {
+      "fingerprint": "8a6ebb3c9aaa4ad8",
+      "bytes": 8943
+    },
+    "src/citation/formats/mod.rs": {
+      "fingerprint": "8c7e82d26a73772c",
+      "bytes": 240
+    },
+    "src/citation/formats/mods.rs": {
+      "fingerprint": "58ab69a68290df1b",
+      "bytes": 11291
+    },
+    "src/citation/formats/refer_bibix.rs": {
+      "fingerprint": "3c317232f0b1acdd",
+      "bytes": 5609
+    },
+    "src/citation/formats/refworks_tagged.rs": {
+      "fingerprint": "c84f00f70dd8c3b5",
+      "bytes": 5812
+    },
+    "src/citation/formats/ris.rs": {
+      "fingerprint": "299724845bd69cbe",
+      "bytes": 11407
+    },
+    "src/citation/formats/tei.rs": {
+      "fingerprint": "a7c243cc266a345e",
+      "bytes": 13557
+    },
+    "src/citation/formats/wikidata_qs.rs": {
+      "fingerprint": "d07d8e08eec94491",
+      "bytes": 4483
+    },
+    "src/citation/graph.rs": {
+      "fingerprint": "27fdcd20b2e8f2b5",
+      "bytes": 9367
+    },
+    "src/citation/key_generator.rs": {
+      "fingerprint": "efeb5c9ff311d127",
+      "bytes": 7669
+    },
+    "src/citation/match_refs.rs": {
+      "fingerprint": "2950f7e494ccc52a",
+      "bytes": 6504
+    },
+    "src/citation/mod.rs": {
+      "fingerprint": "7188ff2bdf42be37",
+      "bytes": 292
+    },
+    "src/citation/text/engine.rs": {
+      "fingerprint": "1be0e16742d554d2",
+      "bytes": 4139
+    },
+    "src/citation/text/helpers.rs": {
+      "fingerprint": "03ff405907281760",
+      "bytes": 22167
+    },
+    "src/citation/text/locale.rs": {
+      "fingerprint": "3d1bad06637146d0",
+      "bytes": 9819
+    },
+    "src/citation/text/mod.rs": {
+      "fingerprint": "72d3418029351b09",
+      "bytes": 209
+    },
+    "src/citation/text/styles.rs": {
+      "fingerprint": "30e734f20a595f34",
+      "bytes": 6068
+    },
+    "src/citation/text/templates/acs.rs": {
+      "fingerprint": "1c323e0dca561f8d",
+      "bytes": 5156
+    },
+    "src/citation/text/templates/ama.rs": {
+      "fingerprint": "d0d25d9f818a6fa3",
+      "bytes": 5186
+    },
+    "src/citation/text/templates/apa.rs": {
+      "fingerprint": "e257c9b61ca1a236",
+      "bytes": 9111
+    },
+    "src/citation/text/templates/apsa_asa.rs": {
+      "fingerprint": "2b8dcce1c5b24159",
+      "bytes": 7238
+    },
+    "src/citation/text/templates/chicago.rs": {
+      "fingerprint": "478709436e14ced2",
+      "bytes": 11496
+    },
+    "src/citation/text/templates/harvard.rs": {
+      "fingerprint": "80c3723f3f7f7ef9",
+      "bytes": 9070
+    },
+    "src/citation/text/templates/ieee.rs": {
+      "fingerprint": "d943dc999c855552",
+      "bytes": 5922
+    },
+    "src/citation/text/templates/mhra.rs": {
+      "fingerprint": "ad03a5390c2c99b9",
+      "bytes": 7941
+    },
+    "src/citation/text/templates/mla.rs": {
+      "fingerprint": "72ae61bfb4cc856b",
+      "bytes": 5827
+    },
+    "src/citation/text/templates/mod.rs": {
+      "fingerprint": "734b366b00089887",
+      "bytes": 424
+    },
+    "src/citation/text/templates/nature.rs": {
+      "fingerprint": "b2fde1f01842199e",
+      "bytes": 4653
+    },
+    "src/citation/text/templates/vancouver.rs": {
+      "fingerprint": "7437fa7abcaa1f34",
+      "bytes": 5919
+    },
+    "src/classification/csv_import.rs": {
+      "fingerprint": "9c4a12ecad78a1c8",
+      "bytes": 6618
+    },
+    "src/classification/custom.rs": {
+      "fingerprint": "ce4f61a9a71d0458",
+      "bytes": 992
+    },
+    "src/classification/data_loader.rs": {
+      "fingerprint": "1c4c1b1ab57a2214",
+      "bytes": 3121
+    },
+    "src/classification/label_override.rs": {
+      "fingerprint": "028855906c79d6c9",
+      "bytes": 988
+    },
+    "src/classification/lcc.rs": {
+      "fingerprint": "4cd41a8fe2d6eab6",
+      "bytes": 2214
+    },
+    "src/classification/mod.rs": {
+      "fingerprint": "61428280bde7f6ff",
+      "bytes": 245
+    },
+    "src/classification/msc.rs": {
+      "fingerprint": "beaba93efe37ce80",
+      "bytes": 4771
+    },
+    "src/classification/physh.rs": {
+      "fingerprint": "071c5b3e9e5161aa",
+      "bytes": 2611
+    },
+    "src/classification/recommender.rs": {
+      "fingerprint": "3fd732d41ed083ad",
+      "bytes": 2429
+    },
+    "src/classification/scheme.rs": {
+      "fingerprint": "0682005406001e93",
+      "bytes": 5487
+    },
+    "src/classification/udc.rs": {
+      "fingerprint": "869df649d5bcf007",
+      "bytes": 6268
+    },
+    "src/config/mod.rs": {
+      "fingerprint": "8f0d809ec4a6449d",
+      "bytes": 15493
+    },
+    "src/db/attachments.rs": {
+      "fingerprint": "3d74d5e06fd1a279",
+      "bytes": 8521
+    },
+    "src/db/author_aliases.rs": {
+      "fingerprint": "3171f801730d5628",
+      "bytes": 2743
+    },
+    "src/db/backup.rs": {
+      "fingerprint": "b9622e41db97de5c",
+      "bytes": 6837
+    },
+    "src/db/creators.rs": {
+      "fingerprint": "4b498b9349685559",
+      "bytes": 12904
+    },
+    "src/db/custom_fields.rs": {
+      "fingerprint": "11cd9b9b64260947",
+      "bytes": 1627
+    },
+    "src/db/documents.rs": {
+      "fingerprint": "115a0c976d87dead",
+      "bytes": 22027
+    },
+    "src/db/documents_body.rs": {
+      "fingerprint": "bfbe0d99bcd62e42",
+      "bytes": 5536
+    },
+    "src/db/facets.rs": {
+      "fingerprint": "d83733bce7b86b69",
+      "bytes": 4877
+    },
+    "src/db/fts_query.rs": {
+      "fingerprint": "1bc06c02726174fb",
+      "bytes": 12428
+    },
+    "src/db/migrations.rs": {
+      "fingerprint": "66a0a7c2aa18f41e",
+      "bytes": 18322
+    },
+    "src/db/mod.rs": {
+      "fingerprint": "4dcf03a27c569ae4",
+      "bytes": 1709
+    },
+    "src/db/notes.rs": {
+      "fingerprint": "114fa4ac249441a9",
+      "bytes": 2522
+    },
+    "src/db/projects.rs": {
+      "fingerprint": "11ec39e2b24771da",
+      "bytes": 2315
+    },
+    "src/db/saved_searches.rs": {
+      "fingerprint": "814633fc5ba0cb7a",
+      "bytes": 12346
+    },
+    "src/db/schema.rs": {
+      "fingerprint": "5fe14d8cdd0135a3",
+      "bytes": 12318
+    },
+    "src/db/search.rs": {
+      "fingerprint": "c9b7d71ea0d6ae00",
+      "bytes": 6607
+    },
+    "src/db/series.rs": {
+      "fingerprint": "45faa2c0bfde37ed",
+      "bytes": 8939
+    },
+    "src/db/stats.rs": {
+      "fingerprint": "3378f75cc9aa3688",
+      "bytes": 3740
+    },
+    "src/db/test_support.rs": {
+      "fingerprint": "7c62e2bbd471335d",
+      "bytes": 1134
+    },
+    "src/export/export_dialog_state.rs": {
+      "fingerprint": "3b0cab493fd43767",
+      "bytes": 10524
+    },
+    "src/export/mod.rs": {
+      "fingerprint": "8c7c6b032df7ee6d",
+      "bytes": 17992
+    },
+    "src/export/preferences.rs": {
+      "fingerprint": "b9d08be29ba5d1cb",
+      "bytes": 3338
+    },
+    "src/lib.rs": {
+      "fingerprint": "61ba03316c1da481",
+      "bytes": 192
+    },
+    "src/main.rs": {
+      "fingerprint": "f09b7c81677b0359",
+      "bytes": 5617
+    },
+    "src/pdf/authors.rs": {
+      "fingerprint": "338faeac075d15db",
+      "bytes": 21473
+    },
+    "src/pdf/bookmarks.rs": {
+      "fingerprint": "10c18fb5e3ffbf0f",
+      "bytes": 3617
+    },
+    "src/pdf/diag_richard_test.rs": {
+      "fingerprint": "754888cfdfdda574",
+      "bytes": 1172
+    },
+    "src/pdf/heuristic.rs": {
+      "fingerprint": "7ba10b5e47a816ee",
+      "bytes": 10888
+    },
+    "src/pdf/identifiers.rs": {
+      "fingerprint": "70a7ea16993dac49",
+      "bytes": 6751
+    },
+    "src/pdf/journal.rs": {
+      "fingerprint": "8013f8df55b331cc",
+      "bytes": 5902
+    },
+    "src/pdf/metadata.rs": {
+      "fingerprint": "b2e185e1a996b7d6",
+      "bytes": 7487
+    },
+    "src/pdf/mod.rs": {
+      "fingerprint": "cb0d94846cbef243",
+      "bytes": 3299
+    },
+    "src/pdf/text.rs": {
+      "fingerprint": "f6eaa21000d91d30",
+      "bytes": 183
+    },
+    "src/similarity/config.rs": {
+      "fingerprint": "b72204f13ee3d51a",
+      "bytes": 2536
+    },
+    "src/similarity/mod.rs": {
+      "fingerprint": "bf55e1859fce5151",
+      "bytes": 101
+    },
+    "src/similarity/scoring.rs": {
+      "fingerprint": "9bf86315938a3861",
+      "bytes": 15559
+    },
+    "src/storage/library.rs": {
+      "fingerprint": "d17eaf5ca782310d",
+      "bytes": 1751
+    },
+    "src/storage/mod.rs": {
+      "fingerprint": "73c50e74459fde8e",
+      "bytes": 524
+    },
+    "src/storage/trash.rs": {
+      "fingerprint": "520dad727d558dcf",
+      "bytes": 1465
+    },
+    "src/terminal/drag_drop.rs": {
+      "fingerprint": "c84d0e06d0b4ca56",
+      "bytes": 5706
+    },
+    "src/terminal/input.rs": {
+      "fingerprint": "db7646d923695363",
+      "bytes": 920
+    },
+    "src/terminal/mod.rs": {
+      "fingerprint": "9e3c8a28b583bfd4",
+      "bytes": 1177
+    },
+    "src/terminal/paste.rs": {
+      "fingerprint": "ac0edc6384cb1eb1",
+      "bytes": 369
+    },
+    "src/ui/export_dialog.rs": {
+      "fingerprint": "13d41348ef953c7f",
+      "bytes": 10178
+    },
+    "src/ui/graph_panel.rs": {
+      "fingerprint": "f7a846838f287a8d",
+      "bytes": 10490
+    },
+    "src/ui/help.rs": {
+      "fingerprint": "6260a2b786cfcaef",
+      "bytes": 10560
+    },
+    "src/ui/layout.rs": {
+      "fingerprint": "9d3e2f43b2597c5e",
+      "bytes": 34800
+    },
+    "src/ui/left_panel.rs": {
+      "fingerprint": "8f34732693d875bc",
+      "bytes": 15579
+    },
+    "src/ui/mod.rs": {
+      "fingerprint": "f4504a699d3db0bf",
+      "bytes": 1044
+    },
+    "src/ui/right_panel.rs": {
+      "fingerprint": "718e8f77128686d7",
+      "bytes": 19009
+    },
+    "src/ui/search_bar.rs": {
+      "fingerprint": "240151452edb78aa",
+      "bytes": 4234
+    },
+    "src/ui/settings_panel.rs": {
+      "fingerprint": "06f27b2816bec8ab",
+      "bytes": 11737
+    },
+    "src/ui/stats_panel.rs": {
+      "fingerprint": "e8149da51a1ae788",
+      "bytes": 10103
+    },
+    "src/ui/status_bar.rs": {
+      "fingerprint": "2ed889733f02c804",
+      "bytes": 2626
+    },
+    "src/ui/theme.rs": {
+      "fingerprint": "1232d158631ccc2b",
+      "bytes": 12268
+    },
+    "tests/citation.rs": {
+      "fingerprint": "3323cb157eaa6d9a",
+      "bytes": 4328
+    },
+    "tests/database.rs": {
+      "fingerprint": "174942e9df2148ac",
+      "bytes": 56071
+    },
+    "tests/export_user_data.rs": {
+      "fingerprint": "32782991b1227306",
+      "bytes": 7427
+    },
+    "tests/forward_citations.rs": {
+      "fingerprint": "2b421e8c904358c1",
+      "bytes": 3801
+    },
+    "tests/golden_file_tests.rs": {
+      "fingerprint": "92921d21a4175c5b",
+      "bytes": 17927
+    },
+    "tests/style_golden_tests.rs": {
+      "fingerprint": "244fc221d546f383",
+      "bytes": 29314
+    }
+  }
+}

@@ -36,7 +36,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
 
 ### Wave 1 (Start Immediately - No Dependencies)
 
-- [x] **1. Backup/restore via VACUUM INTO (#23)**
+- [x] 1. Backup/restore via VACUUM INTO (#23)
   - What: Add `db::backup::backup_to_path()` using `VACUUM INTO`, `:backup`/`:restore` TUI commands, wire to dispatcher
   - Files: `src/db/backup.rs` (new), `src/app/dispatcher.rs`, `src/ui/command_bar.rs` or equivalent
   - Migration: None
@@ -48,7 +48,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: `:backup /tmp/test.db` creates valid SQLite file with all tables and data. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: stale_state (backup file freshness), dirty_worktree (test artifacts)
 
-- [x] **2. Forward citations persistence (#16)**
+- [x] 2. Forward citations persistence (#16)
   - What: Fix `forward_citations_handler.rs:46` — remove `_` from `_citations`, upsert each as document + insert citation_relations edges
   - Files: `src/app/forward_citations_handler.rs`, `src/db/documents.rs`, `src/db/citation_relations.rs`
   - Migration: None
@@ -60,7 +60,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: Forward citations fetch creates documents + citation_relations edges. No duplicate documents for same DOI. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: stale_state (cached citations), malformed input (malformed ForwardCitation)
 
-- [x] **3. Fuzzy duplicate detection (#15)**
+- [x] 3. Fuzzy duplicate detection (#15)
   - What: Add `find_duplicates()` using strsim (already in Cargo.toml), weighted title/author/year, threshold 0.75, call during import
   - Files: `src/db/documents.rs` or `src/similarity/` (new module), `src/app/bulk_import_handler.rs` or equivalent
   - Migration: None
@@ -72,7 +72,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: Duplicate detection catches same paper re-downloaded with different file hash but similar metadata. False positive rate < 5% at threshold 0.75. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: malformed input (empty/malformed metadata), flaky tests (threshold edge cases)
 
-- [x] **4. Smart collections / saved search criteria (#20)**
+- [x] 4. Smart collections / saved search criteria (#20)
   - What: Implement `filters_json` parsing as SearchCriteria struct, build WHERE clause, add `execute_search()`, update saved_search_handler
   - Files: `src/db/saved_searches.rs`, `src/app/saved_search_handler.rs` or equivalent, `src/ui/` search panel
   - Migration: None (filters_json column already exists)
@@ -84,7 +84,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: Saved search with criteria returns correctly filtered documents. `filters_json` is parsed and applied. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: malformed input (malformed filters_json), stale_state (saved search referencing deleted tag)
 
-- [x] **5. Color-coded tags + favorites (#25)**
+- [x] 5. Color-coded tags + favorites (#25)
   - What: Migration M11 `ALTER TABLE tags ADD COLUMN color TEXT`, add color CRUD, render colored tags in TUI, favorites = rating=5 filter
   - Files: `src/db/migrations.rs`, `src/db/tags.rs`, `src/ui/` tag rendering, `src/app/dispatcher.rs`
   - Migration: M11
@@ -96,7 +96,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: Tags display with assigned colors in TUI. Favorite filter (rating=5) works. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: stale_state (color referencing deleted tag)
 
-- [x] **6. Reading queue / TBR (#26)**
+- [x] 6. Reading queue / TBR (#26)
   - What: Migration M12 `ALTER TABLE documents ADD COLUMN queue_position INTEGER`, add queue CRUD, TUI queue view, expose reading_progress keybinding, update help.rs
   - Files: `src/db/migrations.rs`, `src/db/documents.rs`, `src/ui/` queue view, `src/app/dispatcher.rs`, `src/ui/help.rs`
   - Migration: M12
@@ -108,7 +108,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: Reading queue displays in TUI. Documents can be added/removed/reordered. Reading progress is updatable via keybinding. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: stale_state (queue referencing deleted document)
 
-- [x] **7. Classification CSV import (#30)**
+- [x] 7. Classification CSV import (#30)
   - What: Parse CSV (notation,pref_label,broader,alt_labels,notes), build CustomScheme, call register_scheme, add `:import-classification` command
   - Files: `src/classification/csv_import.rs` (new), `src/app/dispatcher.rs`, `README.md`
   - Migration: None (infrastructure exists)
@@ -120,7 +120,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: `:import-classification /path/to/scheme.csv` creates a custom scheme with all nodes. Hierarchy is preserved. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: malformed input (malformed CSV), prompt injection (CSV content in notes field)
 
-- [x] **8. CJK heuristic patch (#24a)**
+- [x] 8. CJK heuristic patch (#24a)
   - What: Add `detect_cjk()` Unicode range check, modify `parse_author` and `first_initial` in helpers.rs for CJK names, suppress initials for CJK
   - Files: `src/citation/text/helpers.rs`, `src/citation/text/templates/apa.rs` and other templates
   - Migration: None
@@ -132,7 +132,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: CJK names render without empty initials or mangled family/given split. Western names unchanged (no regression — all 60 existing tests pass). `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: malformed input (empty author string), flaky tests (Unicode edge cases)
 
-- [x] **9. Full-text body indexing (#13)**
+- [x] 9. Full-text body indexing (#13)
   - What: Migration M14 `CREATE TABLE documents_body + documents_body_fts`, store PDF body text during import, add body FTS search with toggle
   - Files: `src/db/migrations.rs`, `src/db/documents_body.rs` (new), `src/pdf/text.rs`, `src/app/bulk_import_handler.rs`, `src/db/search.rs`
   - Migration: M14
@@ -144,7 +144,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: PDF body text is stored and searchable. FTS toggle works. Storage ~95kB/entry. `cargo test` passes. `cargo clippy` clean.
   - Adversarial classes: stale_state (body text not updated when PDF replaced), hung commands (large PDF extraction)
 
-- [x] **10. Notes markdown + multi-note + $EDITOR (#19)**
+- [x] 10. Notes markdown + multi-note + $EDITOR (#19)
   - What: Migration M13 recreate document_notes without UNIQUE + add note_type, change notes interface (list/create/update/delete_by_id), update state.rs + dispatcher.rs callers, add `:note` $EDITOR command
   - Files: `src/db/migrations.rs`, `src/db/notes.rs`, `src/app/state.rs`, `src/app/dispatcher.rs`, `src/ui/` note panel
   - Migration: M13
@@ -158,7 +158,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
 
 ### Wave 2 (After Wave 1 Completes)
 
-- [x] **11. Item types — TEXT column with CHECK (#1)**
+- [x] 11. Item types — TEXT column with CHECK (#1)
   - What: Migration M15 `ALTER TABLE documents ADD COLUMN item_type TEXT NOT NULL DEFAULT 'misc' CHECK(...)`, add to Document struct, backfill from metadata, update csl_json.rs/bibtex.rs/ris.rs to use item_type, add to edit mode
   - Files: `src/db/migrations.rs`, `src/db/schema.rs`, `src/db/documents.rs`, `src/citation/csl_json.rs`, `src/citation/bibtex.rs`, `src/citation/formats/ris.rs`, `src/ui/` edit mode
   - Migration: M15
@@ -170,7 +170,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: `item_type` column exists with CHECK constraint. Export formats use `item_type` for type-aware output. Backfill populates existing docs. User can edit item_type. `cargo test` passes (including updated golden file tests). `cargo clippy` clean.
   - Adversarial classes: stale_state (golden file tests need update), malformed input (invalid item_type value)
 
-- [x] **12. Export registry + extensibility docs (#7)**
+- [x] 12. Export registry + extensibility docs (#7)
   - What: Add config-driven custom export format registry, document ClassificationScheme trait + app_config + custom formats in README
   - Files: `src/export/mod.rs`, `src/app/config.rs` or equivalent, `README.md`
   - Migration: None
@@ -184,7 +184,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
 
 ### Wave 3 (After Wave 2 Completes)
 
-- [x] **13. Structured creators with roles (#17) — HIGHEST RISK**
+- [x] 13. Structured creators with roles (#17) — HIGHEST RISK
   - What: Migration M16 `CREATE TABLE creators`, create db/creators.rs CRUD, backfill from authors TEXT, CJK detection with locale/literal fields, dual-write (authors TEXT + creators rows), update 15 files calling split_authors
   - Files: `src/db/migrations.rs`, `src/db/creators.rs` (new), `src/db/documents.rs`, all 15 files calling `split_authors` (citation templates, export formats)
   - Migration: M16
@@ -197,7 +197,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Risk mitigation: Dual-write ensures backward compatibility. CJK backfill is lossy — ambiguous names go to `literal` field. 15-file blast radius — update one file at a time, run tests after each.
   - Adversarial classes: stale_state (creators referencing deleted document), malformed input (malformed authors TEXT), dirty_worktree (migration rollback)
 
-- [x] **14. Multi-attachment / non-PDF (#18)**
+- [x] 14. Multi-attachment / non-PDF (#18)
   - What: Migration M17 `CREATE TABLE document_attachments`, create db/attachments.rs CRUD, modify storage for multi-file, keep documents.file_path as primary (backward compat), add TUI attachment management
   - Files: `src/db/migrations.rs`, `src/db/attachments.rs` (new), `src/storage/library.rs`, `src/ui/` attachment panel
   - Migration: M17
@@ -211,7 +211,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
 
 ### Wave 4 (After Wave 3 Completes)
 
-- [x] **15. Full export with user data (#2)**
+- [x] 15. Full export with user data (#2)
   - What: Extend all export modules to include notes, tags, classifications, projects, reading_status, custom_fields; add full library JSON export mode
   - Files: `src/export/mod.rs`, `src/citation/csl_json.rs`, `src/citation/bibtex.rs`, `src/citation/formats/ris.rs`, `src/export/csv.rs` or equivalent, all other export format files
   - Migration: None
@@ -223,7 +223,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: All export formats include user-created data (notes, tags, classifications, projects, reading_status). Full library export captures everything. `cargo test` passes (update golden file tests). `cargo clippy` clean.
   - Adversarial classes: stale_state (export referencing deleted related data), malformed input (malformed user data)
 
-- [x] **16. CJK proper fix with per-creator locale (#24b)**
+- [x] 16. CJK proper fix with per-creator locale (#24b)
   - What: Use creators.locale field for proper CJK rendering, replace T8 heuristic with per-creator detection, update helpers.rs and 15 citation templates to pass locale
   - Files: `src/citation/text/helpers.rs`, all 15 citation template files in `src/citation/text/templates/`
   - Migration: None
@@ -237,23 +237,23 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
 
 ## Final Verification Wave
 
-- [x] **F1. All migrations run cleanly on fresh DB**
+- [x] F1. All migrations run cleanly on fresh DB
   - Verify: Create fresh DB, run all M11-M17 migrations, verify no errors
   - Result: 50 database tests pass (fresh DB creation + all migrations M1-M17)
 
-- [x] **F2. All migrations upgrade existing DB without data loss**
+- [x] F2. All migrations upgrade existing DB without data loss
   - Verify: Use existing test DB, run M11-M17, verify all data preserved
   - Result: Database tests include migration upgrade tests, all pass
 
-- [x] **F3. Full test suite passes**
+- [x] F3. Full test suite passes
   - Verify: `cargo test` — all tests pass (estimated 60 + ~50 new = ~110 tests)
   - Result: 454 tests pass (316 lib + 4 citation + 50 database + 6 export_user_data + 2 forward_citations + 16 golden_file + 60 style_golden), 0 failures
 
-- [x] **F4. Lint and format clean**
+- [x] F4. Lint and format clean
   - Verify: `cargo clippy` zero warnings, `cargo fmt --check` clean
   - Result: 71 pre-existing clippy warnings (Rust 1.96 lints, 0 errors), fmt clean after cargo fmt
 
-- [x] **F5. Manual TUI smoke test**
+- [x] F5. Manual TUI smoke test
   - Verify: Start TUI, verify backup, forward citations, fuzzy dedup, smart collections, color tags, reading queue, classification import, CJK rendering, body search, multi-note, item types, multi-attachment, full export all work
   - Result: Binary builds successfully (`cargo build` clean). Manual TUI testing recommended.
 

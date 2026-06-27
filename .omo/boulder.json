@@ -1,14 +1,16 @@
 {
   "schema_version": 2,
-  "active_work_id": "libran-15-gap-fix-2a800db8",
+  "active_work_id": null,
   "works": {
     "libran-15-gap-fix-2a800db8": {
       "work_id": "libran-15-gap-fix-2a800db8",
       "active_plan": "/Users/honey/Documents/libran/libran/.omo/plans/libran-15-gap-fix.md",
       "plan_name": "libran-15-gap-fix",
-      "status": "active",
+      "status": "completed",
       "started_at": "2026-06-27T08:05:58.483Z",
-      "updated_at": "2026-06-27T08:05:58.483Z",
+      "updated_at": "2026-06-27T20:30:00.000Z",
+      "ended_at": "2026-06-27T20:30:00.000Z",
+      "elapsed_ms": 44841517,
       "session_ids": [
         "opencode:ses_0f8a4e5feffe5jSotP31Q7JlzW"
       ],
@@ -21,7 +23,7 @@
   },
   "active_plan": "/Users/honey/Documents/libran/libran/.omo/plans/libran-15-gap-fix.md",
   "started_at": "2026-06-27T08:05:58.483Z",
-  "status": "active",
+  "status": "completed",
   "updated_at": "2026-06-27T08:05:58.483Z",
   "session_ids": [
     "opencode:ses_0f8a4e5feffe5jSotP31Q7JlzW"
