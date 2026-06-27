@@ -1,49 +1,10 @@
-use crate::api::openalex_forward::{self, ForwardCitation};
-use crate::app::AppState;
-use crate::app::action::AppAction;
-use crate::db::documents;
 use anyhow::Result;
 use rusqlite::Connection;
 
-/// Persist forward citations as documents + citation_relations edges.
-///
-/// `cited_doc_id` is the document whose forward citations were fetched.
-/// Each `ForwardCitation` is a paper that cites it. The citing paper is
-/// upserted as a document (deduped by DOI) and a `citation_relations` edge
-/// (citing → cited) is inserted.
-pub fn persist_forward_citations(
-    conn: &Connection,
-    cited_doc_id: i64,
-    citations: &[ForwardCitation],
-) -> Result<()> {
-    for citation in citations {
-        let citing_id = match citation.doi.as_deref() {
-            Some(doi) if !doi.is_empty() => match documents::find_by_doi(conn, doi)? {
-                Some(existing) => existing.id.unwrap(),
-                None => insert_forward_citation_doc(conn, citation)?,
-            },
-            _ => insert_forward_citation_doc(conn, citation)?,
-        };
-        documents::add_citation(conn, citing_id, cited_doc_id)?;
-    }
-    Ok(())
-}
-
-fn insert_forward_citation_doc(conn: &Connection, citation: &ForwardCitation) -> Result<i64> {
-    let doc = documents::Document {
-        title: citation.title.clone(),
-        authors: if citation.authors.is_empty() {
-            None
-        } else {
-            Some(citation.authors.join("; "))
-        },
-        pub_year: citation.year,
-        doi: citation.doi.clone(),
-        source: Some("openalex_forward".to_string()),
-        ..Default::default()
-    };
-    documents::insert(conn, &doc)
-}
+use crate::api::openalex_forward::{self, ForwardCitation};
+use crate::app::action::AppAction;
+use crate::app::AppState;
+use crate::db::documents::{self, Document};
 
 /// Fetch forward citations from OpenAlex (async).
 pub fn handle_fetch_forward_citations(state: &mut AppState, doc_id: i64) {
@@ -83,8 +44,16 @@ pub fn handle_fetch_forward_citations(state: &mut AppState, doc_id: i64) {
 
         match openalex_forward::fetch_forward_citations(&doi).await {
             Ok((citations, cited_by_count)) => {
-                if let Ok(conn) = db.lock() {
-                    let _ = persist_forward_citations(&conn, doc_id, &citations);
+                // Lock is taken in a non-async block so the MutexGuard drops before the .await below.
+                match db.lock() {
+                    Ok(conn) => {
+                        if let Err(e) =
+                            persist_forward_citations(&conn, doc_id, &citations)
+                        {
+                            eprintln!("forward citations persist failed: {e}");
+                        }
+                    }
+                    Err(e) => eprintln!("DB lock failed for forward citations persist: {e}"),
                 }
                 let _ = tx
                     .send(AppAction::ForwardCitationsFetched {
@@ -113,4 +82,48 @@ pub fn handle_forward_citations_fetched(state: &mut AppState, _doc_id: i64, coun
 /// Show forward citations failure.
 pub fn handle_forward_citations_failed(state: &mut AppState, _doc_id: i64, reason: String) {
     state.finish_processing(&format!("전방 인용 조회 실패: {}", reason));
+}
+
+/// Persist forward citations: for each citing work, reuse an existing document
+/// when its DOI is already in the DB (dedup), otherwise insert a new document
+/// with `source = "openalex_forward"`. Then add a `citation_relations` edge
+/// (citing -> cited) per citation. Edge dedup is enforced at the DB layer.
+pub fn persist_forward_citations(
+    conn: &Connection,
+    cited_doc_id: i64,
+    citations: &[ForwardCitation],
+) -> Result<()> {
+    for cite in citations {
+        let citing_doc_id = match cite.doi.as_deref() {
+            Some(doi) if !doi.is_empty() => {
+                documents::find_by_doi(conn, doi)?.and_then(|d| d.id)
+            }
+            _ => None,
+        };
+
+        let citing_doc_id = match citing_doc_id {
+            Some(id) => id,
+            None => {
+                let authors = if cite.authors.is_empty() {
+                    None
+                } else {
+                    Some(cite.authors.join("; "))
+                };
+                let doc = Document {
+                    id: None,
+                    title: cite.title.clone(),
+                    authors,
+                    doi: cite.doi.clone(),
+                    pub_year: cite.year,
+                    citation_key: None,
+                    source: Some("openalex_forward".to_string()),
+                    ..Default::default()
+                };
+                documents::insert(conn, &doc)?
+            }
+        };
+
+        documents::add_citation(conn, citing_doc_id, cited_doc_id)?;
+    }
+    Ok(())
 }

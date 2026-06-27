@@ -643,3 +643,51 @@ Most of the implementation was already present in the worktree (added by a prior
 
 ### Files created
 - `tests/export_user_data.rs` — 6 tests (~220 lines)
+
+---
+
+## Merge Conflict Resolution (T6-T14 vs T2-fix/T15/T16-partial)
+
+### Context
+8 files had merge conflicts between T6-T14 (committed) and T2-fix/T15/T16-partial (applied as patch with --3way). The conflicts arose because both sides independently modified overlapping code areas with different approaches.
+
+### Resolution Strategy
+The key principle: KEEP BOTH sides' changes where they are complementary, choose the correct side where they conflict.
+
+### Per-file resolutions
+
+1. **`src/app/forward_citations_handler.rs`** — Kept T2-fix (theirs) entirely. T6-T14 had an old broken version that discarded the persist error with `let _ =`. T2-fix has proper error handling with `eprintln!`. Also removed the duplicate old `persist_forward_citations` + `insert_forward_citation_doc` that T6-T14 added at the top of the file; kept the T2-fix version at the bottom which handles `Option<i64>` for `id` properly (no `unwrap()`).
+
+2. **`src/citation/bibtex.rs`** — Kept T11's `item_type` match in `guess_entry_type` (ours) + T15's `export_bibtex_with_user_data` using `fetch_user_data`/`DocUserData` (theirs). Import changed to `fetch_user_data`.
+
+3. **`src/citation/csl_json.rs`** — Kept T11's `csl_type_from_item_type`/`item_type_from_csl_type` match functions (ours) + T15's `libran_classification: Option<Vec<String>>` field with `#[serde(rename = "libran-classification")]` (theirs) + T15's `export_csl_json_with_user_data` (theirs). The `export_csl_json` (non-user-data) uses T11's `csl_type_from_item_type` for `item_type` and T15's `libran_classification: None` for the new field. `parse_csl_json` keeps T11's `item_type: item_type_from_csl_type(&item.item_type)`.
+
+4. **`src/citation/formats/csv_export.rs`** — Kept T15's `export_csv_with_user_data` (theirs) with column order: notes, tags, classifications, reading_status, projects. Import changed to `fetch_user_data`.
+
+5. **`src/citation/formats/ris.rs`** — Kept T15's `export_ris_with_user_data` (theirs). T11's `guess_ris_type` item_type match was already outside conflict markers. Import changed to `fetch_user_data`.
+
+6. **`src/citation/text/helpers.rs`** — Most complex file. Kept BOTH `detect_cjk` (T8, returns bool) and `detect_locale` (T16, returns `Option<&'static str>`). Removed duplicate `is_cjk_char` and `detect_locale` definitions that appeared twice (once at top from T8/T16 additions, once further down from original code). Marked `detect_cjk` as `#[cfg(test)]` since it's superseded by `detect_locale` in production code but still used in tests. Kept T16's inline `locale.or_else(|| detect_locale(name)).is_some()` pattern (theirs) over T8's `effective_locale` variable (ours). Kept T16's `first_initial` that skips CJK chars and continues to find Western alphabetic chars (theirs) over T8's version that returns empty on first CJK char (ours). Kept BOTH sets of tests: T8's `detect_cjk` tests + T16's `detect_locale` tests. For `test_detect_locale_japanese`, kept T16's expectation that Kanji-only names → "zh" (ambiguous) rather than T8's "ja".
+
+7. **`src/citation/text/templates/apa.rs`** — Kept T16's `parse_author(name, None)` (theirs) with the locale parameter over T8's `parse_author(name)` (ours) which used the old single-argument signature.
+
+8. **`src/export/mod.rs`** — Kept T12's `Custom(String)` variant + registry (`CUSTOM_FORMATS`, `register_custom_format`, etc.) (ours) + T15's `DocUserData`/`DocClassification`/`fetch_user_data` (theirs). Removed T6-T14's `UserExportData`/`fetch_user_export_data` (ours). Kept T12's `export_full_library_json(conn, writer)` with typed serialization structs (ours) over T15's `export_full_library_json(conn) -> Result<String>` (theirs) for consistency with all other export functions. Kept `fetch_projects_for_doc` and `fetch_full_classifications` helpers (ours) needed by the writer-based `export_full_library_json`.
+
+### Critical fix: `notes::get` does not exist
+T15's `fetch_user_data` called `crate::db::notes::get(conn, doc_id)?` which doesn't exist in the notes module. The notes module only has `list`, `get_by_id`, `create`, `update`, `delete_by_id`. Fixed by replacing with `notes::list` and joining note contents with `"\n\n"` into an `Option<String>`:
+```rust
+let notes: Option<String> = {
+    let notes_vec = crate::db::notes::list(conn, doc_id)?
+        .into_iter()
+        .map(|n| n.content)
+        .collect::<Vec<_>>();
+    if notes_vec.is_empty() { None } else { Some(notes_vec.join("\n\n")) }
+};
+```
+
+### Test file fix: `tests/export_user_data.rs`
+The test file used `db::notes::set(&conn, doc_id, "content")` which doesn't exist. Replaced with `db::notes::create(&conn, doc_id, "content", "general")` (4-arg signature with note_type). Also updated `export_full_library_json(&conn)?` to use the writer-based signature: `export_full_library_json(&conn, &mut Cursor::new(&mut buf))?` followed by `String::from_utf8(buf)?`.
+
+### Verification
+- `cargo build`: clean (0 warnings, 0 errors)
+- `cargo test`: 454 tests pass (316 lib + 4 citation + 50 database + 6 export_user_data + 2 forward_citations + 16 golden_file + 60 style_golden), 0 failures
+- `cargo clippy --lib`: 71 pre-existing warnings (collapsible_if, unnecessary_map_or, etc. from Rust 1.96 new lints), 0 errors, 0 new warnings from merge resolution

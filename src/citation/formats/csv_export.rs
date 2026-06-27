@@ -1,5 +1,5 @@
 use crate::db::documents::Document;
-use crate::export::fetch_user_export_data;
+use crate::export::fetch_user_data;
 use anyhow::Result;
 use rusqlite::Connection;
 use std::io::Write;
@@ -51,6 +51,8 @@ pub fn export_csv(documents: &[Document], writer: &mut impl Write) -> Result<()>
     Ok(())
 }
 
+/// Export documents as CSV with user-created data columns:
+/// notes, tags, classifications, reading_status, projects.
 pub fn export_csv_with_user_data(
     conn: &Connection,
     documents: &[Document],
@@ -71,18 +73,25 @@ pub fn export_csv_with_user_data(
         "citation_key",
         "source",
         "rating",
-        "reading_status",
         "notes",
         "tags",
         "classifications",
+        "reading_status",
         "projects",
     ])?;
 
     for doc in documents {
-        let user_data = doc
-            .id
-            .and_then(|id| fetch_user_export_data(conn, id).ok())
-            .unwrap_or_default();
+        let doc_id = doc.id.unwrap_or(0);
+        let user_data = fetch_user_data(conn, doc_id).unwrap_or_default();
+
+        let tags = user_data.tags.join("; ");
+        let classifications = user_data
+            .classifications
+            .iter()
+            .map(|c| format!("{}:{}", c.scheme, c.notation))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let projects = user_data.projects.join("; ");
 
         wtr.write_record([
             doc.id.map(|i| i.to_string()).unwrap_or_default(),
@@ -98,11 +107,11 @@ pub fn export_csv_with_user_data(
             doc.citation_key.clone().unwrap_or_default(),
             doc.source.clone().unwrap_or_default(),
             doc.rating.map(|r| r.to_string()).unwrap_or_default(),
+            user_data.notes.unwrap_or_default(),
+            tags,
+            classifications,
             doc.reading_status.clone().unwrap_or_default(),
-            user_data.notes.join(" | "),
-            user_data.tags.join("; "),
-            user_data.classifications.join("; "),
-            user_data.projects.join("; "),
+            projects,
         ])?;
     }
 

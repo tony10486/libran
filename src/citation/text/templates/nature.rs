@@ -12,7 +12,7 @@ fn format_nature_authors(authors: &[String]) -> String {
         return String::new();
     }
     if authors.len() >= 6 {
-        let (last, initial) = parse_author(&authors[0]);
+        let (last, initial) = parse_author(&authors[0], None);
         if initial.is_empty() {
             format!("{} et al.", last)
         } else {
@@ -22,7 +22,7 @@ fn format_nature_authors(authors: &[String]) -> String {
         let formatted: Vec<String> = authors
             .iter()
             .map(|name| {
-                let (last, initial) = parse_author(name);
+                let (last, initial) = parse_author(name, None);
                 if initial.is_empty() {
                     last
                 } else {

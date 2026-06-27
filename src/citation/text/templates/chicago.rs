@@ -17,7 +17,7 @@ fn format_bib_authors(authors: &[String], _and_word: &str) -> String {
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let (last, first) = parse_author_full(name);
+            let (last, first) = parse_author_full(name, None);
             if first.is_empty() {
                 return last;
             }
@@ -44,7 +44,7 @@ fn format_note_authors(authors: &[String], _and_word: &str) -> String {
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let (last, first) = parse_author_full(name);
+            let (last, first) = parse_author_full(name, None);
             if first.is_empty() {
                 last
             } else {
@@ -62,7 +62,7 @@ fn format_note_authors(authors: &[String], _and_word: &str) -> String {
 }
 
 fn last_names(authors: &[String]) -> Vec<String> {
-    authors.iter().map(|n| parse_author_full(n).0).collect()
+    authors.iter().map(|n| parse_author_full(n, None).0).collect()
 }
 
 fn vol_issue_year_pages(volume: &str, issue: Option<&str>, year: &str, pages: &str) -> String {

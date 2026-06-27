@@ -1,7 +1,7 @@
 use crate::config::ExportFormatConfig;
 use crate::db::documents::Document;
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Write;
@@ -12,77 +12,84 @@ pub mod preferences;
 
 static CUSTOM_FORMATS: Mutex<Option<HashMap<String, ExportFormatConfig>>> = Mutex::new(None);
 
-// ── User export data (notes, tags, classifications, projects, custom fields) ──
+// ── User data helpers ──
 
-/// Per-document user-created data fetched from the DB for enriched export.
-pub struct UserExportData {
-    pub notes: Vec<String>,
+/// A single classification assigned to a document.
+#[derive(Clone, Debug)]
+pub struct DocClassification {
+    pub scheme: String,
+    pub notation: String,
+    pub label: String,
+}
+
+/// User-created data associated with a document: notes, tags, classifications,
+/// projects, and custom fields. Fetched from the DB and passed to
+/// `_with_user_data` export variants.
+#[derive(Clone, Debug, Default)]
+pub struct DocUserData {
+    pub notes: Option<String>,
     pub tags: Vec<String>,
-    /// Each entry is `"scheme_code:notation"` (e.g. `"udc:517.9"`).
-    pub classifications: Vec<String>,
+    pub classifications: Vec<DocClassification>,
     pub projects: Vec<String>,
     pub custom_fields: Vec<(String, String)>,
 }
 
-impl Default for UserExportData {
-    fn default() -> Self {
-        Self {
-            notes: Vec::new(),
-            tags: Vec::new(),
-            classifications: Vec::new(),
-            projects: Vec::new(),
-            custom_fields: Vec::new(),
+/// Fetch all user-created data for a single document.
+pub fn fetch_user_data(conn: &Connection, doc_id: i64) -> Result<DocUserData> {
+    let notes: Option<String> = {
+        let notes_vec = crate::db::notes::list(conn, doc_id)?
+            .into_iter()
+            .map(|n| n.content)
+            .collect::<Vec<_>>();
+        if notes_vec.is_empty() {
+            None
+        } else {
+            Some(notes_vec.join("\n\n"))
         }
-    }
-}
-
-/// Fetch all user-created data for a single document from the DB.
-pub fn fetch_user_export_data(conn: &Connection, doc_id: i64) -> Result<UserExportData> {
-    let notes = crate::db::notes::list(conn, doc_id)?
-        .into_iter()
-        .map(|n| n.content)
-        .collect();
-
+    };
     let tags = crate::db::documents::get_tags(conn, doc_id)?;
 
-    let classifications = fetch_classifications_for_doc(conn, doc_id);
-
-    let projects = fetch_projects_for_doc(conn, doc_id);
-
-    let custom_fields = crate::db::custom_fields::list_fields(conn, doc_id)?
-        .into_iter()
-        .map(|f| (f.key, f.value))
+    let mut stmt = conn.prepare(
+        "SELECT cs.code, cn.notation, cn.pref_label
+         FROM document_classifications dc
+         INNER JOIN classification_nodes cn ON dc.node_id = cn.id
+         INNER JOIN classification_schemes cs ON cn.scheme_id = cs.id
+         WHERE dc.document_id = ?1
+         ORDER BY cs.code, cn.notation",
+    )?;
+    let classifications: Vec<DocClassification> = stmt
+        .query_map(params![doc_id], |row| {
+            Ok(DocClassification {
+                scheme: row.get(0)?,
+                notation: row.get(1)?,
+                label: row.get(2)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
         .collect();
 
-    Ok(UserExportData {
+    let mut stmt = conn.prepare(
+        "SELECT p.name FROM projects p
+         INNER JOIN project_documents pd ON p.id = pd.project_id
+         WHERE pd.document_id = ?1
+         ORDER BY p.name",
+    )?;
+    let projects: Vec<String> = stmt
+        .query_map(params![doc_id], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let fields = crate::db::custom_fields::list_fields(conn, doc_id)?;
+    let custom_fields: Vec<(String, String)> =
+        fields.into_iter().map(|f| (f.key, f.value)).collect();
+
+    Ok(DocUserData {
         notes,
         tags,
         classifications,
         projects,
         custom_fields,
     })
-}
-
-fn fetch_classifications_for_doc(conn: &Connection, doc_id: i64) -> Vec<String> {
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT cs.code, cn.notation
-         FROM document_classifications dc
-         INNER JOIN classification_nodes cn ON dc.node_id = cn.id
-         INNER JOIN classification_schemes cs ON cn.scheme_id = cs.id
-         WHERE dc.document_id = ?1
-         ORDER BY cs.code, cn.notation",
-    ) else {
-        return Vec::new();
-    };
-    let rows = match stmt.query_map(rusqlite::params![doc_id], |row| {
-        let code: String = row.get(0)?;
-        let notation: String = row.get(1)?;
-        Ok(format!("{code}:{notation}"))
-    }) {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-    rows.filter_map(|r| r.ok()).collect()
 }
 
 fn fetch_projects_for_doc(conn: &Connection, doc_id: i64) -> Vec<String> {

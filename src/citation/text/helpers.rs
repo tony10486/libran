@@ -6,6 +6,7 @@ use crate::db::documents::split_authors;
 /// Japanese Kana, or CJK Ideographs).
 /// Used to suppress initials and avoid ambiguous whitespace splitting
 /// for names that do not follow the Western "First Last" convention.
+#[cfg(test)]
 fn detect_cjk(name: &str) -> bool {
     name.chars().any(is_cjk_char)
 }
@@ -55,9 +56,8 @@ pub fn detect_locale(name: &str) -> Option<&'static str> {
 
 /// Parses "Last, First", "First Last", or "Last, F." into (last_name, first_initial).
 /// For CJK names (locale is Some("ko"/"ja"/"zh") or auto-detected), the whole name
-/// is treated as the family name when there is no comma (CJK name order is
-/// ambiguous without a comma delimiter). For CJK names with a comma, the split
-/// is preserved but initials are suppressed.
+/// is treated as the family name when there is no comma. For CJK names with a
+/// comma, the split is preserved but initials are suppressed.
 /// When `locale` is None, falls back to `detect_locale` for per-creator detection.
 pub fn parse_author(name: &str, locale: Option<&str>) -> (String, String) {
     let name = name.trim();
@@ -65,8 +65,7 @@ pub fn parse_author(name: &str, locale: Option<&str>) -> (String, String) {
         return (String::new(), String::new());
     }
 
-    let effective_locale = locale.or_else(|| detect_locale(name));
-    let is_cjk = effective_locale.is_some();
+    let is_cjk = locale.or_else(|| detect_locale(name)).is_some();
 
     if let Some(comma_pos) = name.find(',') {
         let last = name[..comma_pos].trim().to_string();
@@ -97,17 +96,15 @@ pub fn parse_author(name: &str, locale: Option<&str>) -> (String, String) {
 /// Parses "Last, First" or "First Last" into (last_name, full_first_name).
 /// For styles that use full first names (APSA, ASA, Chicago, MLA).
 /// For CJK names (locale is Some or auto-detected) without a comma, the whole
-/// name is treated as the family name (CJK name order is ambiguous without
-/// a comma delimiter). CJK names with a comma preserve the family/given split.
-/// When `locale` is None, falls back to `detect_locale` for per-creator detection.
+/// name is treated as the family name. CJK names with a comma preserve the
+/// family/given split. When `locale` is None, falls back to `detect_locale`.
 pub fn parse_author_full(name: &str, locale: Option<&str>) -> (String, String) {
     let name = name.trim();
     if name.is_empty() {
         return (String::new(), String::new());
     }
 
-    let effective_locale = locale.or_else(|| detect_locale(name));
-    let is_cjk = effective_locale.is_some();
+    let is_cjk = locale.or_else(|| detect_locale(name)).is_some();
 
     if let Some(comma_pos) = name.find(',') {
         let last = name[..comma_pos].trim().to_string();
@@ -134,10 +131,7 @@ pub fn parse_author_full(name: &str, locale: Option<&str>) -> (String, String) {
 /// Korean/Chinese/Japanese naming conventions).
 pub fn first_initial(first: &str) -> String {
     for ch in first.trim().chars() {
-        if is_cjk_char(ch) {
-            return String::new();
-        }
-        if ch.is_alphabetic() {
+        if ch.is_alphabetic() && !is_cjk_char(ch) {
             return ch.to_uppercase().collect();
         }
     }
@@ -200,8 +194,7 @@ pub fn format_authors_initials(
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let locale = detect_locale(name);
-            let (last, initial) = parse_author(name, locale);
+            let (last, initial) = parse_author(name, detect_locale(name));
             if initial.is_empty() {
                 last
             } else {
@@ -219,8 +212,7 @@ pub fn format_authors_full(authors: &[String], delimiter: &str, last_delimiter: 
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let locale = detect_locale(name);
-            let (last, first) = parse_author_full(name, locale);
+            let (last, first) = parse_author_full(name, detect_locale(name));
             if first.is_empty() {
                 last
             } else {
@@ -242,8 +234,7 @@ pub fn format_authors_initials_first(
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let locale = detect_locale(name);
-            let (last, first) = parse_author_full(name, locale);
+            let (last, first) = parse_author_full(name, detect_locale(name));
             if first.is_empty() {
                 last
             } else {
@@ -280,8 +271,7 @@ pub fn format_authors_no_period_initials(
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let locale = detect_locale(name);
-            let (last, first) = parse_author_full(name, locale);
+            let (last, first) = parse_author_full(name, detect_locale(name));
             if first.is_empty() {
                 last
             } else {
@@ -433,7 +423,7 @@ mod tests {
         assert_eq!(to_roman(-1), "-1");
     }
 
-    // --- CJK heuristic tests (T16 heuristic patch, #24a) ---
+    // --- CJK heuristic tests (T8 detect_cjk) ---
 
     #[test]
     fn test_detect_cjk_korean() {
@@ -542,7 +532,7 @@ mod tests {
         assert_eq!(first_initial("Adam"), "A");
     }
 
-    // --- Per-creator locale tests (#24b, proper CJK fix) ---
+    // --- Per-creator locale tests (T16 detect_locale) ---
 
     #[test]
     fn test_detect_locale_korean() {
@@ -552,10 +542,13 @@ mod tests {
 
     #[test]
     fn test_detect_locale_japanese() {
-        assert_eq!(detect_locale("山田太郎"), Some("ja"));
-        assert_eq!(detect_locale("田中, 太郎"), Some("ja"));
+        // Kanji-only names are ambiguous (could be Chinese or Japanese) → "zh"
+        assert_eq!(detect_locale("山田太郎"), Some("zh"));
+        assert_eq!(detect_locale("田中, 太郎"), Some("zh"));
+        // Kana-containing names are unambiguously Japanese
         assert_eq!(detect_locale("やまだ"), Some("ja"));
         assert_eq!(detect_locale("ヤマダ"), Some("ja"));
+        assert_eq!(detect_locale("山田やまだ"), Some("ja"));
     }
 
     #[test]

@@ -15,7 +15,7 @@ fn format_note_authors(authors: &[String]) -> String {
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let (last, first) = parse_author_full(name);
+            let (last, first) = parse_author_full(name, None);
             if first.is_empty() {
                 last
             } else {
@@ -42,7 +42,7 @@ fn format_bib_authors(authors: &[String]) -> String {
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let (last, first) = parse_author_full(name);
+            let (last, first) = parse_author_full(name, None);
             if first.is_empty() {
                 return last;
             }

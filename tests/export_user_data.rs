@@ -96,7 +96,7 @@ fn test_csv_includes_notes() -> Result<()> {
     // Given a document with a note
     let conn = setup_db()?;
     let doc_id = insert_test_doc(&conn)?;
-    db::notes::set(&conn, doc_id, "This is a test note")?;
+    db::notes::create(&conn, doc_id, "This is a test note", "general")?;
 
     let docs = db::documents::list_all(&conn)?;
 
@@ -123,14 +123,16 @@ fn test_full_library_export() -> Result<()> {
     let conn = setup_db()?;
     let doc_id = insert_test_doc(&conn)?;
     db::documents::add_tag(&conn, doc_id, "physics")?;
-    db::notes::set(&conn, doc_id, "Important note")?;
+    db::notes::create(&conn, doc_id, "Important note", "general")?;
     add_udc_classification(&conn, doc_id, "53", "Physics")?;
 
     let proj_id = db::projects::create_project(&conn, "Research", None)?;
     db::projects::add_document(&conn, proj_id, doc_id)?;
 
     // When exporting the full library as JSON
-    let json = export_full_library_json(&conn)?;
+    let mut buf = Vec::new();
+    export_full_library_json(&conn, &mut Cursor::new(&mut buf))?;
+    let json = String::from_utf8(buf)?;
 
     // Then all user data is included
     assert!(
@@ -184,7 +186,7 @@ fn test_bibtex_includes_notes_and_tags() -> Result<()> {
     let conn = setup_db()?;
     let doc_id = insert_test_doc(&conn)?;
     db::documents::add_tag(&conn, doc_id, "quantum")?;
-    db::notes::set(&conn, doc_id, "Read this carefully")?;
+    db::notes::create(&conn, doc_id, "Read this carefully", "general")?;
 
     let docs = db::documents::list_all(&conn)?;
 
@@ -211,7 +213,7 @@ fn test_ris_includes_notes_and_tags() -> Result<()> {
     let conn = setup_db()?;
     let doc_id = insert_test_doc(&conn)?;
     db::documents::add_tag(&conn, doc_id, "gravity")?;
-    db::notes::set(&conn, doc_id, "Important finding")?;
+    db::notes::create(&conn, doc_id, "Important finding", "general")?;
 
     let docs = db::documents::list_all(&conn)?;
 

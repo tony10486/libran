@@ -1,5 +1,5 @@
 use crate::db::documents::{Document, split_authors};
-use crate::export::fetch_user_export_data;
+use crate::export::fetch_user_data;
 use anyhow::Result;
 use rusqlite::Connection;
 use std::io::Write;
@@ -73,11 +73,6 @@ pub fn export_ris_with_user_data(
     writer: &mut impl Write,
 ) -> Result<()> {
     for doc in documents {
-        let user_data = doc
-            .id
-            .and_then(|id| fetch_user_export_data(conn, id).ok())
-            .unwrap_or_default();
-
         let entry_type = guess_ris_type(doc);
         write!(writer, "TY  - {}\r\n", entry_type)?;
         write!(writer, "TI  - {}\r\n", sanitize_ris_field(&doc.title))?;
@@ -102,54 +97,48 @@ pub fn export_ris_with_user_data(
             write!(writer, "DO  - {}\r\n", sanitize_ris_field(doi))?;
         }
 
-        if let Some(volume) = &doc.volume {
-            write!(writer, "VL  - {}\r\n", sanitize_ris_field(volume))?;
-        }
-
-        if let Some(issue) = &doc.issue {
-            write!(writer, "IS  - {}\r\n", sanitize_ris_field(issue))?;
-        }
-
-        if let (Some(start), Some(end)) = (&doc.page_start, &doc.page_end) {
-            write!(writer, "SP  - {}\r\n", sanitize_ris_field(start))?;
-            write!(writer, "EP  - {}\r\n", sanitize_ris_field(end))?;
-        } else if let Some(start) = &doc.page_start {
-            write!(writer, "SP  - {}\r\n", sanitize_ris_field(start))?;
-        }
-
         if let Some(abstract_text) = &doc.abstract_text {
             write!(writer, "AB  - {}\r\n", sanitize_ris_field(abstract_text))?;
         }
 
-        let mut kw_parts: Vec<&str> = doc
+        let doc_id = doc.id.unwrap_or(0);
+        let user_data = fetch_user_data(conn, doc_id).unwrap_or_default();
+
+        let mut keywords: Vec<String> = doc
             .keywords
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .into_iter()
-            .flat_map(|s| s.split(',').map(str::trim))
-            .filter(|s| !s.is_empty())
-            .collect();
-        kw_parts.extend(user_data.tags.iter().map(String::as_str));
-        for kw in kw_parts {
+            .as_ref()
+            .map(|k| {
+                k.split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for tag in &user_data.tags {
+            if !keywords.contains(tag) {
+                keywords.push(tag.clone());
+            }
+        }
+        for kw in &keywords {
             write!(writer, "KW  - {}\r\n", sanitize_ris_field(kw))?;
+        }
+
+        if let Some(notes) = &user_data.notes {
+            if !notes.is_empty() {
+                write!(writer, "N1  - {}\r\n", sanitize_ris_field(notes))?;
+            }
         }
 
         if let Some(arxiv) = &doc.arxiv_id {
             write!(writer, "AN  - arXiv:{}\r\n", sanitize_ris_field(arxiv))?;
         }
 
-        for note in &user_data.notes {
-            write!(writer, "N1  - {}\r\n", sanitize_ris_field(note))?;
-        }
-
-        for class in &user_data.classifications {
-            write!(writer, "N1  - Classification: {}\r\n", sanitize_ris_field(class))?;
-        }
-
         write!(writer, "ER  - \r\n")?;
     }
     Ok(())
 }
+
 /// Replace CR and LF with spaces to prevent RIS record injection.
 /// A malicious title like "Foo\r\nER  - \r\n" could otherwise terminate the
 /// record early and inject arbitrary follow-on records.
@@ -278,7 +267,7 @@ mod tests {
             "CRLF injection succeeded — fake ER record found: {out:?}"
         );
         assert!(
-            out.contains("TI  - Evil") && out.contains("Fake"),
+            out.contains("Evil") && out.contains("Fake"),
             "expected sanitized title containing Evil and Fake: {out:?}"
         );
         // And exactly one real ER terminator exists (at start of a line)

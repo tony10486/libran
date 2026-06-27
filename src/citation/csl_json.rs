@@ -1,5 +1,5 @@
 use crate::db::documents::Document;
-use crate::export::fetch_user_export_data;
+use crate::export::fetch_user_data;
 use anyhow::Result;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,8 @@ struct CslItem {
     note: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    category: Option<String>,
+    #[serde(rename = "libran-classification")]
+    libran_classification: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -134,7 +135,7 @@ pub fn export_csl_json(documents: &[Document], writer: &mut impl Write) -> Resul
                 arxiv_id: doc.arxiv_id.clone(),
                 keyword: doc.keywords.clone(),
                 note: None,
-                category: None,
+                libran_classification: None,
             }
         })
         .collect();
@@ -152,11 +153,6 @@ pub fn export_csl_json_with_user_data(
     let items: Vec<CslItem> = documents
         .iter()
         .map(|doc| {
-            let user_data = doc
-                .id
-                .and_then(|id| fetch_user_export_data(conn, id).ok())
-                .unwrap_or_default();
-
             let authors = doc
                 .authors
                 .as_ref()
@@ -199,33 +195,40 @@ pub fn export_csl_json_with_user_data(
                 vec![vec![]]
             };
 
-            let keyword = {
-                let mut parts: Vec<&str> = doc
-                    .keywords
-                    .as_deref()
-                    .filter(|s| !s.is_empty())
-                    .into_iter()
-                    .flat_map(|s| s.split(',').map(str::trim))
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                parts.extend(user_data.tags.iter().map(String::as_str));
-                if parts.is_empty() {
-                    None
-                } else {
-                    Some(parts.join(", "))
+            let doc_id = doc.id.unwrap_or(0);
+            let user_data = fetch_user_data(conn, doc_id).unwrap_or_default();
+
+            let mut keywords: Vec<String> = doc
+                .keywords
+                .as_ref()
+                .map(|k| {
+                    k.split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(String::from)
+                        .collect()
+                })
+                .unwrap_or_default();
+            for tag in &user_data.tags {
+                if !keywords.contains(tag) {
+                    keywords.push(tag.clone());
                 }
-            };
-
-            let note = if user_data.notes.is_empty() {
+            }
+            let keyword = if keywords.is_empty() {
                 None
             } else {
-                Some(user_data.notes.join("\n\n"))
+                Some(keywords.join(", "))
             };
 
-            let category = if user_data.classifications.is_empty() {
+            let classifications: Vec<String> = user_data
+                .classifications
+                .iter()
+                .map(|c| format!("{}:{}:{}", c.scheme, c.notation, c.label))
+                .collect();
+            let libran_classification = if classifications.is_empty() {
                 None
             } else {
-                Some(user_data.classifications.join(", "))
+                Some(classifications)
             };
 
             CslItem {
@@ -241,8 +244,8 @@ pub fn export_csl_json_with_user_data(
                 doi: doc.doi.clone(),
                 arxiv_id: doc.arxiv_id.clone(),
                 keyword,
-                note,
-                category,
+                note: user_data.notes,
+                libran_classification,
             }
         })
         .collect();

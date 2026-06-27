@@ -12,13 +12,13 @@ fn format_harvard_initials(authors: &[String]) -> Vec<String> {
     authors
         .iter()
         .map(|name| {
-            let (last, first) = parse_author_full(name);
+            let (last, first) = parse_author_full(name, None);
             if first.is_empty() {
                 return last;
             }
             let initials: String = first
                 .split_whitespace()
-                .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic()))
+                .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
                 .map(|c| format!("{}.", c.to_uppercase().collect::<String>()))
                 .collect::<Vec<_>>()
                 .join("");
@@ -32,7 +32,7 @@ fn format_harvard_initials(authors: &[String]) -> Vec<String> {
 }
 
 fn last_names(authors: &[String]) -> Vec<String> {
-    authors.iter().map(|n| parse_author_full(n).0).collect()
+    authors.iter().map(|n| parse_author_full(n, None).0).collect()
 }
 
 pub fn render_ctr_harvard_reference(

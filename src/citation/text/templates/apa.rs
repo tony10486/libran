@@ -45,7 +45,10 @@ pub fn render_reference(doc: &Document, _lang: CitationLanguage, _mode: DisplayM
 /// Render a short APA 7th in-text citation.
 pub fn render_in_text(doc: &Document, _lang: CitationLanguage) -> String {
     let authors = get_authors(doc.authors.as_deref());
-    let last_names: Vec<String> = authors.iter().map(|name| parse_author(name).0).collect();
+    let last_names: Vec<String> = authors
+        .iter()
+        .map(|name| parse_author(name, None).0)
+        .collect();
 
     let year_part = format_year(doc.pub_year);
 

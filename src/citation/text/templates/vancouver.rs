@@ -14,13 +14,13 @@ fn format_vancouver_authors(authors: &[String]) -> String {
     let formatted: Vec<String> = authors
         .iter()
         .map(|name| {
-            let (last, first) = crate::citation::text::helpers::parse_author_full(name);
+            let (last, first) = crate::citation::text::helpers::parse_author_full(name, None);
             if first.is_empty() {
                 return last;
             }
             let initials: String = first
                 .split_whitespace()
-                .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic()))
+                .filter_map(|w| w.chars().next().filter(|c| c.is_alphabetic() && !crate::citation::text::helpers::is_cjk_char(*c)))
                 .map(|c| c.to_uppercase().collect::<String>())
                 .collect::<Vec<_>>()
                 .join("");

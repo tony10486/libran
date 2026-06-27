@@ -211,7 +211,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
 
 ### Wave 4 (After Wave 3 Completes)
 
-- [ ] **15. Full export with user data (#2)**
+- [x] **15. Full export with user data (#2)**
   - What: Extend all export modules to include notes, tags, classifications, projects, reading_status, custom_fields; add full library JSON export mode
   - Files: `src/export/mod.rs`, `src/citation/csl_json.rs`, `src/citation/bibtex.rs`, `src/citation/formats/ris.rs`, `src/export/csv.rs` or equivalent, all other export format files
   - Migration: None
@@ -223,7 +223,7 @@ The codebase has 10 versioned migrations (M1-M10), 22 tables, a flat `documents`
   - Acceptance: All export formats include user-created data (notes, tags, classifications, projects, reading_status). Full library export captures everything. `cargo test` passes (update golden file tests). `cargo clippy` clean.
   - Adversarial classes: stale_state (export referencing deleted related data), malformed input (malformed user data)
 
-- [ ] **16. CJK proper fix with per-creator locale (#24b)**
+- [x] **16. CJK proper fix with per-creator locale (#24b)**
   - What: Use creators.locale field for proper CJK rendering, replace T8 heuristic with per-creator detection, update helpers.rs and 15 citation templates to pass locale
   - Files: `src/citation/text/helpers.rs`, all 15 citation template files in `src/citation/text/templates/`
   - Migration: None
