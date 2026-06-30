@@ -1,0 +1,21 @@
+[widget]
+name = "시계"
+id = "clock"
+version = "1.0.0"
+description = "현재 시간 표시"
+type = "script"
+refresh_interval = 1
+enabled = true
+show_security_warning = false
+
+[script]
+command = "python3"
+args = ["clock.py"]
+
+[script.env]
+TZ = "Asia/Seoul"
+
+[permissions]
+network = []
+max_execution_time = 3
+max_output_bytes = 4096

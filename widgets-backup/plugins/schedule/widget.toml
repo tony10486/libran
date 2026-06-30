@@ -1,0 +1,18 @@
+[widget]
+name = "일정"
+id = "schedule"
+version = "1.0.0"
+description = "간단한 일정 관리 (표시 전용)"
+type = "script"
+refresh_interval = 60
+enabled = true
+show_security_warning = false
+
+[script]
+command = "python3"
+args = ["schedule.py"]
+
+[permissions]
+network = []
+max_execution_time = 5
+max_output_bytes = 16384

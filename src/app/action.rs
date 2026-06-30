@@ -121,6 +121,10 @@ pub enum AppAction {
         project_id: i64,
         doc_ids: Vec<i64>,
     },
+    RemoveDocsFromProject {
+        project_id: i64,
+        doc_ids: Vec<i64>,
+    },
     DeleteProject(i64),
 
     SelectAuthor(Option<String>),
@@ -249,6 +253,13 @@ pub enum AppAction {
     Restore {
         path: String,
     },
+    ImportDb {
+        path: String,
+    },
+    ProcessFinished {
+        success: bool,
+        message: String,
+    },
 
     // ── Favorite filter (*) ──
     ToggleFavoriteFilter,
@@ -282,6 +293,45 @@ pub enum AppAction {
         doc_id: i64,
         progress: i64,
     },
+
+    // ── Sioyek Auto-Installation ──
+    InstallSioyek {
+        doc_id: i64,
+    },
+    SioyekInstallResult {
+        success: bool,
+        message: String,
+        doc_id: i64,
+    },
+
+    // ── Okular Auto-Installation ──
+    InstallOkular {
+        doc_id: i64,
+    },
+    OkularInstallResult {
+        success: bool,
+        message: String,
+        doc_id: i64,
+    },
+
+    // ── Widget panel (w) ──
+    ToggleWidgetPanel,
+    WidgetTabNext,
+    WidgetTabPrev,
+    WidgetTabSwitch(usize),
+    WidgetRefresh {
+        widget_id: String,
+    },
+    WidgetDataReady {
+        widget_id: String,
+        content: Box<crate::widget::WidgetContent>,
+    },
+    WidgetError {
+        widget_id: String,
+        message: String,
+    },
+    /// 주기적 틱 — 위젯 자동 갱신 트리거
+    WidgetTick,
 }
 
 #[derive(Clone, Debug, PartialEq)]

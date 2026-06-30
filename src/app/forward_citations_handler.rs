@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use tracing::error;
 
 use crate::api::openalex_forward::{self, ForwardCitation};
 use crate::app::AppState;
@@ -48,10 +49,10 @@ pub fn handle_fetch_forward_citations(state: &mut AppState, doc_id: i64) {
                 match db.lock() {
                     Ok(conn) => {
                         if let Err(e) = persist_forward_citations(&conn, doc_id, &citations) {
-                            eprintln!("forward citations persist failed: {e}");
+                            error!("forward citations persist failed: {e}");
                         }
                     }
-                    Err(e) => eprintln!("DB lock failed for forward citations persist: {e}"),
+                    Err(e) => error!("DB lock failed for forward citations persist: {e}"),
                 }
                 let _ = tx
                     .send(AppAction::ForwardCitationsFetched {

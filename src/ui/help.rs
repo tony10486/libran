@@ -52,21 +52,12 @@ fn page_0_lines() -> Vec<Line<'static>> {
         help_line("  0-9", "UDC 분류 번호로 바로 선택 (왼쪽 패널)"),
         help_line("  c", "커스텀 필드 추가 (상세 보기에서)"),
         help_line(
-            "  p",
+            "  o",
             "외부 PDF 뷰어로 열기 (config viewer_command 있으면 그것, 없으면 시스템 기본)",
         ),
-        help_line(
-            "  u",
-            "읽기 상태 토글: 안 읽음 → 읽는 중 → 읽음 → 안 읽음 (순환)",
-        ),
-        help_line("  >", "읽기 진행률 +10% (최대 100%)"),
-        help_line("  <", "읽기 진행률 -10% (최소 0%)"),
-        help_line("  Q", "현재 문헌을 읽기 큐에 추가"),
-        help_line("  R", "현재 문헌을 읽기 큐에서 제거"),
-        help_line(
-            "  Y",
-            "읽기 큐 보기 토글 (큐 내: J/K 순서 변경, R 제거, Enter 상세)",
-        ),
+
+        help_line("  Q", "현재 문헌(들)을 프로젝트에 추가"),
+        help_line("  R", "현재 문헌(들)을 현재 프로젝트에서 제거"),
         help_line("  v", "현재 검색어를 이름과 함께 저장 (스마트 컬렉션)"),
         help_line("  i", "라이브러리 통계 대시보드 (i/Esc/q로 닫기)"),
         help_line(
@@ -104,11 +95,12 @@ fn page_0_lines() -> Vec<Line<'static>> {
         Line::from(""),
         sub_header("내보내기 · 설정"),
         help_line("  x", "내보내기 대화상자 (인용 복사 + 파일 내보내기)"),
-        help_line("  o", "API 모드 토글"),
-        help_line("  + / - / =", "사이드바 너비 조정 (+2 / -2 / 기본값)"),
+        help_line("  p", "설정 화면 토글 (Settings · Appearance)"),
+        help_line("  O", "API 모드 토글"),
+        help_line("+ / - / =", "사이드바 너비 조정 (+2 / -2 / 기본값)"),
         help_line(
             "  :",
-            "명령 모드 (:backup / :restore / :tag-color <태그> <색상>)",
+            "명령 모드 (:backup / :restore / :import-db / :tag-color <태그> <색상>)",
         ),
         help_line("  q / Esc", "종료"),
         Line::from(""),
@@ -137,13 +129,13 @@ fn page_1_lines() -> Vec<Line<'static>> {
         title_line("내보내기 대화상자"),
         Line::from(""),
         sub_header("열기 · 닫기"),
-        help_line("  x", "대화상자 열기 (문헌 선택 후)"),
+        help_line("  x", "대화상자 열기 (문헌 선택 여부와 관계없이 기동)"),
         help_line("  Esc", "대화상자 닫기"),
         Line::from(""),
         sub_header("대화상자 조작"),
         help_line(
             "  Tab / Shift+Tab",
-            "섹션 이동 (형식→스타일→언어→표시→미리보기)",
+            "섹션 이동 (범위→형식→스타일→언어→표시→미리보기)",
         ),
         help_line("  j / ↓", "항목 아래로 (미리보기 자동 업데이트)"),
         help_line("  k / ↑", "항목 위로"),
@@ -168,21 +160,10 @@ fn page_2_lines() -> Vec<Line<'static>> {
         Line::from(""),
         title_line("추가 기능 요약"),
         Line::from(""),
-        help_line(
-            "  u",
-            "읽기 상태 토글 (안 읽음 → 읽는 중 → 읽음, 리스트/상세 양쪽)",
-        ),
-        help_line(
-            "  > / <",
-            "읽기 진행률 ±10% (0~100%, 리스트에서 현재 문헌 기준)",
-        ),
+
         help_line(
             "  Q / R",
-            "읽기 큐 추가 / 제거 — 읽을 순서가 있는 TBR 리스트 관리",
-        ),
-        help_line(
-            "  Y",
-            "읽기 큐 보기 토글 — 큐 내에서 J/K로 순서 변경, Enter로 상세 보기",
+            "프로젝트에 문헌 추가 / 현재 프로젝트에서 제거",
         ),
         help_line(
             "  v",
@@ -217,9 +198,7 @@ fn page_2_lines() -> Vec<Line<'static>> {
 fn title_line(name: &str) -> Line<'static> {
     Line::from(vec![Span::styled(
         format!("  {}", name),
-        Style::default()
-            .fg(theme::accent_primary())
-            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        theme::title_style(),
     )])
 }
 
@@ -241,9 +220,7 @@ fn page_footer(page: usize) -> Line<'static> {
 fn sub_header(name: &str) -> Line<'static> {
     Line::from(vec![Span::styled(
         format!("  ▸ {}", name),
-        Style::default()
-            .fg(theme::accent_primary())
-            .add_modifier(Modifier::UNDERLINED),
+        theme::header_style(),
     )])
 }
 

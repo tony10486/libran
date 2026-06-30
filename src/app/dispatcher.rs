@@ -17,6 +17,7 @@ use crate::pdf;
 use crate::similarity::scoring::{DocumentFeatures, compute_scores};
 use crate::storage::library;
 use crate::ui::help;
+use tracing;
 
 use super::AppState;
 use super::action::{AppAction, GraphDirection};
@@ -191,12 +192,20 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             state.dirty = true;
         }
         AppAction::MouseHover { column, row } => {
-            if !is_modal_active(state) {
+            if state.settings_panel_mode {
+                if crate::ui::settings_panel::handle_mouse_hover(state, column, row) {
+                    state.dirty = true;
+                }
+            } else if !is_modal_active(state) {
                 handle_mouse_hover(state, column, row);
             }
         }
         AppAction::MouseClick { column, row } => {
-            if !is_modal_active(state) && state.graph_state.is_none() {
+            if state.settings_panel_mode {
+                if crate::ui::settings_panel::handle_mouse_click(state, column, row) {
+                    state.dirty = true;
+                }
+            } else if !is_modal_active(state) && state.graph_state.is_none() {
                 handle_mouse_click(state, column, row);
             }
         }
@@ -205,24 +214,44 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             state.dirty = true;
         }
         AppAction::AddTag { doc_id, tag } => {
-            if let Ok(conn) = state.db.lock() {
-                let _ = documents::add_tag(&conn, doc_id, &tag);
+            let err = {
+                state.db.lock().ok().and_then(|conn| {
+                    documents::add_tag(&conn, doc_id, &tag).err()
+                })
+            };
+            if let Some(e) = err {
+                tracing::error!("add_tag 실패 (doc_id={}, tag={}): {}", doc_id, tag, e);
+                state.set_status(&format!("태그 추가 실패: {}", e));
+            } else {
+                state.set_status(&format!("태그 추가: {}", tag));
             }
             state.reload_tags();
-            state.set_status(&format!("태그 추가: {}", tag));
             state.dirty = true;
         }
         AppAction::RemoveTag { doc_id, tag } => {
-            if let Ok(conn) = state.db.lock() {
-                let _ = documents::remove_tag(&conn, doc_id, &tag);
+            let err = {
+                state.db.lock().ok().and_then(|conn| {
+                    documents::remove_tag(&conn, doc_id, &tag).err()
+                })
+            };
+            if let Some(e) = err {
+                tracing::error!("remove_tag 실패 (doc_id={}, tag={}): {}", doc_id, tag, e);
+                state.set_status(&format!("태그 삭제 실패: {}", e));
+            } else {
+                state.set_status(&format!("태그 삭제: {}", tag));
             }
             state.reload_tags();
-            state.set_status(&format!("태그 삭제: {}", tag));
             state.dirty = true;
         }
         AppAction::SetRating { doc_id, rating } => {
-            if let Ok(conn) = state.db.lock() {
-                let _ = documents::update_rating(&conn, doc_id, rating.map(|r| r as i64));
+            let err = {
+                state.db.lock().ok().and_then(|conn| {
+                    documents::update_rating(&conn, doc_id, rating.map(|r| r as i64)).err()
+                })
+            };
+            if let Some(e) = err {
+                tracing::error!("update_rating 실패 (doc_id={}): {}", doc_id, e);
+                state.set_status(&format!("평점 설정 실패: {}", e));
             }
             if let Some(doc) = state.documents.iter_mut().find(|d| d.id == Some(doc_id)) {
                 doc.rating = rating.map(|r| r as i64);
@@ -254,6 +283,10 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             project_id,
             doc_ids,
         } => handle_add_docs_to_project(state, project_id, doc_ids),
+        AppAction::RemoveDocsFromProject {
+            project_id,
+            doc_ids,
+        } => handle_remove_docs_from_project(state, project_id, doc_ids),
         AppAction::DeleteProject(project_id) => handle_delete_project(state, project_id),
         AppAction::SelectAuthor(author) => handle_select_author(state, author),
         AppAction::FetchAuthorMetrics { name } => handle_fetch_author_metrics(state, name),
@@ -304,6 +337,14 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             success: _,
             message,
         } => handle_open_external_result(state, &message),
+        AppAction::InstallSioyek { doc_id } => handle_install_sioyek(state, doc_id),
+        AppAction::SioyekInstallResult { success, message, doc_id } => {
+            handle_sioyek_install_result(state, success, &message, doc_id);
+        }
+        AppAction::InstallOkular { doc_id } => handle_install_okular(state, doc_id),
+        AppAction::OkularInstallResult { success, message, doc_id } => {
+            handle_okular_install_result(state, success, &message, doc_id);
+        }
         AppAction::ToggleReadingStatus { doc_id } => {
             reading_handler::handle_toggle_reading_status(state, doc_id)
         }
@@ -369,6 +410,13 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
         }
         AppAction::Backup { path } => handle_backup(state, path),
         AppAction::Restore { path } => handle_restore(state, path),
+        AppAction::ImportDb { path } => handle_import_db(state, path),
+        AppAction::ProcessFinished { success, message } => {
+            state.finish_processing(&message);
+            if success {
+                state.reload_documents();
+            }
+        }
         AppAction::ToggleFavoriteFilter => handle_toggle_favorite_filter(state),
         AppAction::SetTagColor { tag, color } => handle_set_tag_color(state, &tag, color),
         AppAction::ToggleQueueView => handle_toggle_queue_view(state),
@@ -382,6 +430,51 @@ pub fn handle_action(state: &mut AppState, action: AppAction) -> bool {
             handle_update_reading_progress(state, doc_id, progress)
         }
         AppAction::ImportClassification { path } => handle_import_classification(state, &path),
+
+        // ── Widget Actions ──
+        AppAction::ToggleWidgetPanel => {
+            state.show_widget_panel = !state.show_widget_panel;
+            state.dirty = true;
+        }
+        AppAction::WidgetTabNext => {
+            state.widget_registry.next_tab();
+            state.dirty = true;
+        }
+        AppAction::WidgetTabPrev => {
+            state.widget_registry.prev_tab();
+            state.dirty = true;
+        }
+        AppAction::WidgetTabSwitch(idx) => {
+            state.widget_registry.switch_tab(idx);
+            state.dirty = true;
+        }
+        AppAction::WidgetRefresh { widget_id } => {
+            spawn_widget_fetch(state, &widget_id);
+            state.dirty = true;
+        }
+        AppAction::WidgetDataReady { widget_id, content } => {
+            state.widget_registry.set_content(&widget_id, *content);
+            // API/Script runner의 last_refresh 갱신
+            if let Some(instance) =
+                state.widget_registry.widgets.iter_mut().find(|w| w.id() == widget_id)
+            {
+                match instance {
+                    crate::widget::WidgetInstance::Api(runner) => runner.mark_refreshed(),
+                    crate::widget::WidgetInstance::Script(runner) => runner.mark_refreshed(),
+                }
+            }
+            state.dirty = true;
+        }
+        AppAction::WidgetError { widget_id, message } => {
+            state.widget_registry.set_content(
+                &widget_id,
+                crate::widget::WidgetContent::error(message),
+            );
+            state.dirty = true;
+        }
+        AppAction::WidgetTick => {
+            handle_widget_tick(state);
+        }
     }
     false
 }
@@ -506,6 +599,12 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     if state.confirm_delete_mode {
         return handle_confirm_delete_key(state, key);
     }
+    if state.show_sioyek_install_dialog {
+        return handle_sioyek_install_key(state, key);
+    }
+    if state.show_okular_install_dialog {
+        return handle_okular_install_key(state, key);
+    }
     if state.api_key_input_mode {
         return handle_api_key_input_key(state, key);
     }
@@ -554,6 +653,10 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
     if state.settings_panel_mode {
         let key = normalize_korean_key(key);
         return crate::ui::settings_panel::handle_key(state, key);
+    }
+    if state.show_widget_panel {
+        let key = normalize_korean_key(key);
+        return handle_widget_panel_key(state, key);
     }
     if state.command_mode {
         return handle_command_key(state, key);
@@ -681,11 +784,13 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             let enabled = state.auto_fetch_metrics;
             if let Ok(conn) = state.db.lock() {
                 let val = if enabled { "true" } else { "false" };
-                let _ = conn.execute(
+                if let Err(e) = conn.execute(
                     "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
                      VALUES ('auto_fetch_metrics', ?1, datetime('now'))",
                     rusqlite::params![val],
-                );
+                ) {
+                    tracing::error!("Failed to save auto_fetch_metrics setting: {e}");
+                }
             }
             state.set_status(if enabled {
                 "자동 지표 조회 켜짐 (저자 선택 시 자동 조회, 갱신 주기 7일)"
@@ -694,7 +799,7 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             });
             state.dirty = true;
         }
-        KeyCode::Char('o') => {
+        KeyCode::Char('O') => {
             let _ = state.action_tx.try_send(AppAction::ToggleApiMode);
         }
         KeyCode::Char('+') => {
@@ -706,39 +811,63 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
         KeyCode::Char('=') => {
             state.reset_left_panel();
         }
-        KeyCode::Char(',') => {
+        KeyCode::Char('p') => {
             state.settings_panel_mode = true;
             state.settings_panel = Some(crate::ui::settings_panel::SettingsPanelState {
+                active_tab: 0,
                 cursor: 0,
                 editing: false,
                 edit_input: String::new(),
+                theme_dropdown_open: false,
+                available_themes: Vec::new(),
+                theme_cursor: 0,
+                color_picker_open: false,
+                picker_grid_x: 0,
+                picker_grid_y: 0,
+                picker_hue: 0.0,
+                theme_color_cursor: 0,
             });
+            state.dirty = true;
+        }
+        KeyCode::Char('w') => {
+            state.show_widget_panel = !state.show_widget_panel;
             state.dirty = true;
         }
         KeyCode::Char(':') => {
             state.command_mode = true;
             state.command_input.clear();
             state.set_status(
-                "명령 입력 (:backup / :restore / :tag-color / :import-classification / :note)",
+                "명령 입력 (:backup / :restore / :import-db / :tag-color / :import-classification / :note)",
             );
             state.dirty = true;
         }
         KeyCode::Char('x') => {
+            state.show_export_dialog = true;
+            state.export_dialog_state.focused_section =
+                crate::export::export_dialog_state::DialogSection::Scope;
+
             if !state.selected_doc_ids.is_empty() {
-                state.show_export_dialog = true;
-                state.export_dialog_state.focused_section =
-                    crate::export::export_dialog_state::DialogSection::Format;
-                if let Ok(conn) = state.db.lock() {
-                    if let Some(&id) = state.selected_doc_ids.iter().next() {
-                        if let Ok(Some(doc)) = documents::get_by_id(&conn, id) {
-                            state.export_dialog_state.update_preview(&doc);
-                        }
+                state.export_dialog_state.selected_scope = crate::export::export_dialog_state::ExportScope::SelectedOnly;
+            } else {
+                state.export_dialog_state.selected_scope = crate::export::export_dialog_state::ExportScope::EntireLibrary;
+            }
+
+            if let Ok(conn) = state.db.lock() {
+                let target_id = if let Some(&id) = state.selected_doc_ids.iter().next() {
+                    Some(id)
+                } else if let Some(doc) = state.documents.get(state.list_cursor) {
+                    doc.id
+                } else {
+                    None
+                };
+
+                if let Some(id) = target_id {
+                    if let Ok(Some(doc)) = documents::get_by_id(&conn, id) {
+                        state.export_dialog_state.update_preview(&doc);
                     }
                 }
-                state.dirty = true;
-            } else {
-                state.set_status("선택된 문헌이 없습니다");
             }
+            state.dirty = true;
         }
         KeyCode::Char('s') => {
             if state.active_panel == PanelFocus::Right
@@ -865,7 +994,7 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                 .action_tx
                 .try_send(AppAction::SelectUdc(Some(notation)));
         }
-        KeyCode::Char('p') => {
+        KeyCode::Char('o') => {
             if state.active_panel == PanelFocus::Right
                 && let Some(doc) = state.documents.get(state.list_cursor)
                 && let Some(id) = doc.id
@@ -875,16 +1004,7 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
                     .try_send(AppAction::OpenExternalViewer { doc_id: id });
             }
         }
-        KeyCode::Char('u') => {
-            if state.active_panel == PanelFocus::Right
-                && let Some(doc) = state.documents.get(state.list_cursor)
-                && let Some(id) = doc.id
-            {
-                let _ = state
-                    .action_tx
-                    .try_send(AppAction::ToggleReadingStatus { doc_id: id });
-            }
-        }
+
         KeyCode::Char('v') => {
             let _ = state.action_tx.try_send(AppAction::SaveCurrentSearch);
         }
@@ -892,59 +1012,54 @@ fn handle_key(state: &mut AppState, key: KeyEvent) -> bool {
             let _ = state.action_tx.try_send(AppAction::ToggleFavoriteFilter);
         }
         KeyCode::Char('Q') => {
-            if state.active_panel == PanelFocus::Right
-                && let Some(doc) = state.documents.get(state.list_cursor)
-                && let Some(id) = doc.id
-            {
-                let _ = state
-                    .action_tx
-                    .try_send(AppAction::AddToQueue { doc_id: id });
+            if state.projects.is_empty() {
+                state.set_status("프로젝트가 없습니다 (n 키로 생성)");
+            } else {
+                // 선택된 문서가 없다면, 현재 포커스된 단일 문서를 선택 목록에 추가
+                if state.selected_doc_ids.is_empty() {
+                    if let Some(doc) = state.documents.get(state.list_cursor) {
+                        if let Some(id) = doc.id {
+                            state.selected_doc_ids.insert(id);
+                        }
+                    }
+                }
+
+                if state.selected_doc_ids.is_empty() {
+                    state.set_status("포커스 또는 선택된 문헌이 없습니다");
+                } else {
+                    state.pick_project_mode = true;
+                    state.pick_project_input.clear();
+                    state.pick_project_cursor = 0;
+                    state.set_status("프로젝트를 선택 후 Enter");
+                    state.dirty = true;
+                }
             }
         }
         KeyCode::Char('R') => {
-            if state.active_panel == PanelFocus::Right
-                && let Some(doc) = state.documents.get(state.list_cursor)
-                && let Some(id) = doc.id
-            {
-                let _ = state
-                    .action_tx
-                    .try_send(AppAction::RemoveFromQueue { doc_id: id });
-            }
-        }
-        KeyCode::Char('Y') => {
-            let _ = state.action_tx.try_send(AppAction::ToggleQueueView);
-        }
-        KeyCode::Char('>') => {
-            if state.active_panel == PanelFocus::Right
-                && let Some(doc) = state.documents.get(state.list_cursor)
-                && let Some(id) = doc.id
-            {
-                let current = doc.reading_progress.unwrap_or(0);
-                let new_progress = (current + 10).min(100);
-                let _ = state.action_tx.try_send(AppAction::UpdateReadingProgress {
-                    doc_id: id,
-                    progress: new_progress,
-                });
-            }
-        }
-        KeyCode::Char('<') => {
-            if state.active_panel == PanelFocus::Right
-                && let Some(doc) = state.documents.get(state.list_cursor)
-                && let Some(id) = doc.id
-            {
-                let current = doc.reading_progress.unwrap_or(0);
-                let new_progress = (current - 10).max(0);
-                let _ = state.action_tx.try_send(AppAction::UpdateReadingProgress {
-                    doc_id: id,
-                    progress: new_progress,
-                });
+            if let Some(project_id) = state.active_project_id {
+                let mut doc_ids = Vec::new();
+                if !state.selected_doc_ids.is_empty() {
+                    doc_ids.extend(state.selected_doc_ids.iter().copied());
+                } else if let Some(doc) = state.documents.get(state.list_cursor) {
+                    if let Some(id) = doc.id {
+                        doc_ids.push(id);
+                    }
+                }
+
+                if doc_ids.is_empty() {
+                    state.set_status("제거할 문헌이 없습니다");
+                } else {
+                    let _ = state.action_tx.try_send(AppAction::RemoveDocsFromProject {
+                        project_id,
+                        doc_ids,
+                    });
+                }
+            } else {
+                state.set_status("프로젝트 필터 상태가 아닙니다 (왼쪽 패널에서 프로젝트를 먼저 선택하세요)");
             }
         }
         KeyCode::Char('i') => {
             let _ = state.action_tx.try_send(AppAction::ToggleStatsDashboard);
-        }
-        KeyCode::Char('w') => {
-            let _ = state.action_tx.try_send(AppAction::StartBulkImport);
         }
         KeyCode::Char('I') => {
             let _ = state.action_tx.try_send(AppAction::StartFileImport);
@@ -1106,7 +1221,7 @@ fn handle_detail_key(state: &mut AppState, key: KeyEvent) -> bool {
         }
         KeyCode::Char('j') | KeyCode::Down => move_cursor_down(state),
         KeyCode::Char('k') | KeyCode::Up => move_cursor_up(state),
-        KeyCode::Char('p') => {
+        KeyCode::Char('o') => {
             if let Some(id) = state.detail_doc.as_ref().and_then(|d| d.id) {
                 let _ = state
                     .action_tx
@@ -1145,9 +1260,16 @@ fn handle_note_key(state: &mut AppState, key: KeyEvent) -> bool {
             let doc_id = state.detail_doc.as_ref().and_then(|d| d.id).unwrap_or(0);
             let content = state.note_input.clone();
             if !content.is_empty() {
-                if let Ok(conn) = state.db.lock() {
-                    let _ = crate::db::notes::create(&conn, doc_id, &content, "general");
-                    state.current_notes = crate::db::notes::list(&conn, doc_id).unwrap_or_default();
+                let notes = state.db.lock().ok().and_then(|conn| {
+                    if let Err(e) = crate::db::notes::create(&conn, doc_id, &content, "general") {
+                        tracing::error!(error = %e, doc_id, "note_key: notes::create failed");
+                        return None;
+                    }
+                    crate::db::notes::list(&conn, doc_id).ok()
+                });
+                match notes {
+                    Some(list) => state.current_notes = list,
+                    None => state.set_status("노트 저장 실패"),
                 }
             }
             state.note_mode = false;
@@ -1181,16 +1303,22 @@ fn handle_tag_key(state: &mut AppState, key: KeyEvent) -> bool {
                 .map(|s| s.trim_matches('#').to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if let Ok(conn) = state.db.lock() {
-                let old_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
-                for tag in &old_tags {
-                    if !new_tags.contains(tag) {
-                        let _ = crate::db::documents::remove_tag(&conn, doc_id, tag);
+            {
+                if let Ok(conn) = state.db.lock() {
+                    let old_tags = crate::db::documents::get_tags(&conn, doc_id).unwrap_or_default();
+                    for tag in &old_tags {
+                        if !new_tags.contains(tag) {
+                            if let Err(e) = crate::db::documents::remove_tag(&conn, doc_id, tag) {
+                                tracing::error!(error = %e, doc_id, tag = %tag, "tag_key: remove_tag failed");
+                            }
+                        }
                     }
-                }
-                for tag in &new_tags {
-                    if !old_tags.contains(tag) {
-                        let _ = crate::db::documents::add_tag(&conn, doc_id, tag);
+                    for tag in &new_tags {
+                        if !old_tags.contains(tag) {
+                            if let Err(e) = crate::db::documents::add_tag(&conn, doc_id, tag) {
+                                tracing::error!(error = %e, doc_id, tag = %tag, "tag_key: add_tag failed");
+                            }
+                        }
                     }
                 }
             }
@@ -1637,11 +1765,13 @@ fn handle_confirm_delete_key(state: &mut AppState, key: KeyEvent) -> bool {
         KeyCode::Char('s') => {
             state.skip_delete_confirm = true;
             if let Ok(conn) = state.db.lock() {
-                let _ = conn.execute(
+                if let Err(e) = conn.execute(
                     "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
                      VALUES ('skip_delete_confirm', 'true', datetime('now'))",
                     [],
-                );
+                ) {
+                    tracing::error!("Failed to save skip_delete_confirm setting: {e}");
+                }
             }
             if let Some(id) = state.delete_confirm_doc_id.take() {
                 let _ = state.action_tx.try_send(AppAction::DeleteDocument(id));
@@ -1901,6 +2031,7 @@ fn is_modal_active(state: &AppState) -> bool {
         || state.show_help
         || state.show_export_dialog
         || state.settings_panel_mode
+        || state.show_widget_panel
         || state.queue_view
 }
 
@@ -2339,7 +2470,9 @@ fn handle_add_docs_to_project(state: &mut AppState, project_id: i64, doc_ids: Ve
     let result = {
         if let Ok(conn) = state.db.lock() {
             for doc_id in &doc_ids {
-                let _ = crate::db::projects::add_document(&conn, project_id, *doc_id);
+                if let Err(e) = crate::db::projects::add_document(&conn, project_id, *doc_id) {
+                    tracing::error!("Failed to add doc {doc_id} to project {project_id}: {e}");
+                }
             }
             Ok::<(), anyhow::Error>(())
         } else {
@@ -2363,6 +2496,43 @@ fn handle_add_docs_to_project(state: &mut AppState, project_id: i64, doc_ids: Ve
     }
 }
 
+fn handle_remove_docs_from_project(state: &mut AppState, project_id: i64, doc_ids: Vec<i64>) {
+    let project_name = state
+        .projects
+        .iter()
+        .find(|p| p.id == Some(project_id))
+        .map(|p| p.name.as_str())
+        .unwrap_or("프로젝트")
+        .to_string();
+    let result = {
+        if let Ok(conn) = state.db.lock() {
+            for doc_id in &doc_ids {
+                if let Err(e) = crate::db::projects::remove_document(&conn, project_id, *doc_id) {
+                    tracing::error!("Failed to remove doc {doc_id} from project {project_id}: {e}");
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        } else {
+            Err(anyhow::anyhow!("DB 락 획득 실패"))
+        }
+    };
+    match result {
+        Ok(_) => {
+            state.selected_doc_ids.clear();
+            state.set_status(&format!(
+                "{}건 문헌을 '{}'에서 제거",
+                doc_ids.len(),
+                project_name
+            ));
+            if state.active_project_id == Some(project_id) {
+                handle_select_project(state, Some(project_id));
+            }
+            state.dirty = true;
+        }
+        Err(e) => state.set_status(&format!("제거 실패: {}", e)),
+    }
+}
+
 fn handle_create_series(state: &mut AppState, name: String) {
     let result = {
         if let Ok(conn) = state.db.lock() {
@@ -2375,15 +2545,17 @@ fn handle_create_series(state: &mut AppState, name: String) {
         Ok(_id) => {
             if !state.series_grouping_enabled {
                 state.series_grouping_enabled = true;
-                if let Ok(conn) = state.db.lock() {
-                    let _ = conn.execute(
-                        "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', 'true', datetime('now'))",
-                        [],
-                    );
+                    if let Ok(conn) = state.db.lock() {
+                        if let Err(e) = conn.execute(
+                            "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', 'true', datetime('now'))",
+                            [],
+                        ) {
+                            tracing::error!("Failed to save series_grouping_enabled setting: {e}");
+                        }
+                    }
                 }
-            }
-            state.reload_series();
-            state.set_status(&format!("시리즈 생성: {}", name));
+                state.reload_series();
+                state.set_status(&format!("시리즈 생성: {}", name));
         }
         Err(e) => state.set_status(&format!("시리즈 생성 실패: {}", e)),
     }
@@ -2505,10 +2677,12 @@ fn handle_toggle_series_grouping(state: &mut AppState) {
         "false"
     };
     if let Ok(conn) = state.db.lock() {
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', ?1, datetime('now'))",
             rusqlite::params![value],
-        );
+        ) {
+            tracing::error!("Failed to save series_grouping_enabled setting: {e}");
+        }
     }
     if !state.series_grouping_enabled {
         state.active_series_id = None;
@@ -2566,15 +2740,17 @@ fn handle_auto_group_series(state: &mut AppState) {
             if !ids.is_empty() {
                 if !state.series_grouping_enabled {
                     state.series_grouping_enabled = true;
-                    if let Ok(conn) = state.db.lock() {
-                        let _ = conn.execute(
-                            "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', 'true', datetime('now'))",
-                            [],
-                        );
+                        if let Ok(conn) = state.db.lock() {
+                            if let Err(e) = conn.execute(
+                                "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES ('series_grouping_enabled', 'true', datetime('now'))",
+                                [],
+                            ) {
+                                tracing::error!("Failed to save series_grouping_enabled setting: {e}");
+                            }
+                        }
                     }
-                }
-                state.reload_series();
-                state.set_status(&format!("자동 그룹핑: {}개 시리즈 생성/갱신", ids.len()));
+                    state.reload_series();
+                    state.set_status(&format!("자동 그룹핑: {}개 시리즈 생성/갱신", ids.len()));
             } else {
                 state.set_status("자동 그룹핑: 묶을 수 있는 시리즈 없음");
             }
@@ -2584,38 +2760,91 @@ fn handle_auto_group_series(state: &mut AppState) {
 }
 
 fn handle_export(state: &mut AppState, format: ExportFormat) {
-    if state.selected_doc_ids.is_empty() {
-        state.set_status("선택된 문헌이 없습니다");
-        return;
-    }
+    let scope = state.export_dialog_state.selected_scope;
+    let backup_scope = state.export_dialog_state.selected_backup_scope;
 
     let export_result = {
         if let Ok(conn) = state.db.lock() {
-            let docs: Vec<documents::Document> = state
-                .selected_doc_ids
-                .iter()
-                .filter_map(|id| documents::get_by_id(&conn, *id).ok().flatten())
-                .collect();
+            let home = directories::BaseDirs::new()
+                .map(|d| d.home_dir().to_path_buf())
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
 
-            if docs.is_empty() {
-                Some(Err("내보낼 문헌을 찾을 수 없습니다".to_string()))
+            if scope == crate::export::export_dialog_state::ExportScope::BackupDb {
+                let temp_path = std::env::temp_dir().join("libran_temp_backup.db");
+                let _ = std::fs::remove_file(&temp_path);
+
+                if let Err(e) = crate::db::backup::backup_to_path(&conn, &temp_path) {
+                    Some(Err(format!("임시 백업 파일 생성 실패: {}", e)))
+                } else {
+                    let process_res = (|| -> Result<(), anyhow::Error> {
+                        let temp_conn = rusqlite::Connection::open(&temp_path)?;
+                        match backup_scope {
+                            crate::export::export_dialog_state::BackupScope::FullMigration => {}
+                            crate::export::export_dialog_state::BackupScope::BackupWithoutApiKeys => {
+                                temp_conn.execute("DELETE FROM app_config WHERE key = 'openalex_api_key'", [])?;
+                            }
+                            crate::export::export_dialog_state::BackupScope::DocsOnly => {
+                                temp_conn.execute("DELETE FROM document_notes", [])?;
+                                temp_conn.execute("UPDATE documents SET reading_progress = NULL, reading_status = 'unread'", [])?;
+                            }
+                        }
+                        temp_conn.execute("VACUUM", [])?;
+                        Ok(())
+                    })();
+
+                    if let Err(e) = process_res {
+                        let _ = std::fs::remove_file(&temp_path);
+                        Some(Err(format!("백업 데이터 가공 실패: {}", e)))
+                    } else {
+                        let filename = match backup_scope {
+                            crate::export::export_dialog_state::BackupScope::FullMigration => "libran_migration.db",
+                            crate::export::export_dialog_state::BackupScope::BackupWithoutApiKeys => "libran_shared_backup.db",
+                            crate::export::export_dialog_state::BackupScope::DocsOnly => "libran_docs_only.db",
+                        };
+                        let export_path = home.join(filename);
+                        if let Err(e) = std::fs::copy(&temp_path, &export_path) {
+                            let _ = std::fs::remove_file(&temp_path);
+                            Some(Err(format!("백업 파일 저장 실패: {}", e)))
+                        } else {
+                            let _ = std::fs::remove_file(&temp_path);
+                            Some(Ok(format!(
+                                "DB 백업 내보내기 완료: {}",
+                                export_path.display()
+                            )))
+                        }
+                    }
+                }
             } else {
-                let home = directories::BaseDirs::new()
-                    .map(|d| d.home_dir().to_path_buf())
-                    .unwrap_or_else(|| std::path::PathBuf::from("."));
-                let filename = format!("export.{}", format.file_extension());
-                let export_path = home.join(filename);
+                let docs: Vec<documents::Document> = match scope {
+                    crate::export::export_dialog_state::ExportScope::SelectedOnly => {
+                        state.selected_doc_ids
+                            .iter()
+                            .filter_map(|id| documents::get_by_id(&conn, *id).ok().flatten())
+                            .collect()
+                    }
+                    crate::export::export_dialog_state::ExportScope::EntireLibrary => {
+                        documents::list_all(&conn).unwrap_or_default()
+                    }
+                    _ => Vec::new(),
+                };
 
-                match std::fs::File::create(&export_path) {
-                    Ok(mut file) => match export(&docs, format, &mut file) {
-                        Ok(()) => Some(Ok(format!(
-                            "내보내기 완료: {} ({}건)",
-                            export_path.display(),
-                            docs.len()
-                        ))),
-                        Err(e) => Some(Err(format!("내보내기 실패: {}", e))),
-                    },
-                    Err(e) => Some(Err(format!("파일 생성 실패: {}", e))),
+                if docs.is_empty() {
+                    Some(Err("내보낼 문헌을 찾을 수 없습니다 (선택된 문헌이 비어 있을 수 있습니다)".to_string()))
+                } else {
+                    let filename = format!("export.{}", format.file_extension());
+                    let export_path = home.join(filename);
+
+                    match std::fs::File::create(&export_path) {
+                        Ok(mut file) => match export(&docs, format, &mut file) {
+                            Ok(()) => Some(Ok(format!(
+                                "인용 정보 내보내기 완료: {} ({}건)",
+                                export_path.display(),
+                                docs.len()
+                            ))),
+                            Err(e) => Some(Err(format!("내보내기 실패: {}", e))),
+                        },
+                        Err(e) => Some(Err(format!("파일 생성 실패: {}", e))),
+                    }
                 }
             }
         } else {
@@ -3018,13 +3247,15 @@ fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
                 let refs = extract::extract_references(&text);
 
                 if refs.is_empty() {
-                    let _ = documents::save_reference_extraction(
+                    if let Err(e) = documents::save_reference_extraction(
                         &conn,
                         doc_id,
                         &text,
                         "heuristic_regex",
                         0,
-                    );
+                    ) {
+                        tracing::error!("Failed to save empty reference extraction for doc {doc_id}: {e}");
+                    }
                     return Ok((0, 0));
                 }
 
@@ -3033,13 +3264,15 @@ fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
                     .map(|r| r.raw_text.as_str())
                     .collect::<Vec<_>>()
                     .join("\n");
-                let _ = documents::save_reference_extraction(
+                if let Err(e) = documents::save_reference_extraction(
                     &conn,
                     doc_id,
                     &section_text,
                     "heuristic_regex",
                     2,
-                );
+                ) {
+                    tracing::error!("Failed to save reference extraction for doc {doc_id}: {e}");
+                }
 
                 let fuzzy_threshold = 0.85;
                 let mut edge_count = 0usize;
@@ -3048,14 +3281,16 @@ fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
                 for r in &refs {
                     match match_refs::match_reference_to_doc(&conn, r, fuzzy_threshold) {
                         Ok(Some(mr)) => {
-                            let _ = entry::add_extracted_citation(
+                            if let Err(e) = entry::add_extracted_citation(
                                 &conn,
                                 doc_id,
                                 mr.doc_id,
                                 &mr.match_status,
                                 mr.confidence,
                                 Some(&r.raw_text),
-                            );
+                            ) {
+                                tracing::error!("Failed to save extracted citation for doc {doc_id}: {e}");
+                            }
                             edge_count += 1;
                         }
                         Ok(None) => {
@@ -3099,13 +3334,49 @@ fn handle_start_citation_extraction(state: &mut AppState, doc_id: i64) {
 }
 
 fn handle_open_external(state: &mut AppState, doc_id: i64) {
+    let viewer_command = state.config.viewer_command.clone();
+
+    let is_empty_or_none = viewer_command.as_ref().map_or(true, |v| v.is_empty());
+    let mut is_sioyek_requested = is_empty_or_none;
+    let mut is_okular_requested = false;
+
+    if !is_empty_or_none {
+        if let Some(parts) = &viewer_command {
+            if let Some(first) = parts.first() {
+                let lower = first.to_lowercase();
+                if lower.contains("sioyek") {
+                    is_sioyek_requested = true;
+                } else if lower.contains("okular") {
+                    is_okular_requested = true;
+                }
+            }
+        }
+    }
+
+    // Sioyek이 필요한데 로컬 시스템에 감지되지 않는 경우 설치 질문 다이얼로그 실행
+    if is_sioyek_requested && crate::pdf::sioyek::find_sioyek_executable().is_none() {
+        state.show_sioyek_install_dialog = true;
+        state.sioyek_install_doc_id = Some(doc_id);
+        state.finish_processing("Sioyek 설치 필요");
+        state.dirty = true;
+        return;
+    }
+
+    // Okular가 필요한데 로컬 시스템에 감지되지 않는 경우 설치 질문 다이얼로그 실행
+    if is_okular_requested && crate::pdf::okular::find_okular_executable().is_none() {
+        state.show_okular_install_dialog = true;
+        state.okular_install_doc_id = Some(doc_id);
+        state.finish_processing("Okular 설치 필요");
+        state.dirty = true;
+        return;
+    }
+
     state.start_processing("PDF 여는 중...");
     let db = state.db.clone();
     let tx = state.action_tx.clone();
-    let viewer_command = state.config.viewer_command.clone();
 
     tokio::spawn(async move {
-        let result = tokio::task::spawn_blocking(move || -> std::result::Result<(), String> {
+        let result = tokio::task::spawn_blocking(move || -> std::result::Result<Option<String>, String> {
             let file_path = {
                 let conn = db.lock().map_err(|e| e.to_string())?;
                 documents::get_by_id(&conn, doc_id)
@@ -3119,25 +3390,147 @@ fn handle_open_external(state: &mut AppState, doc_id: i64) {
                 return Err(format!("파일을 찾을 수 없습니다: {}", file_path));
             }
 
+            let mut is_sioyek = false;
+            let mut exe_name = "sioyek".to_string();
+            let mut sioyek_not_found_warning = false;
+
+            let is_empty_or_none = viewer_command.as_ref().map_or(true, |v| v.is_empty());
+
+            if is_empty_or_none {
+                // viewer_command가 지정되지 않았거나 빈 벡터인 경우(기본값), Sioyek 실행 파일을 탐색하여 Sioyek으로 실행합니다.
+                if let Some(sioyek_path) = crate::pdf::sioyek::find_sioyek_executable() {
+                    is_sioyek = true;
+                    exe_name = sioyek_path;
+                } else {
+                    sioyek_not_found_warning = true;
+                }
+            } else if let Some(parts) = &viewer_command {
+                if let Some(first) = parts.first() {
+                    let lower = first.to_lowercase();
+                    if lower.contains("sioyek") {
+                        is_sioyek = true;
+                        exe_name = first.clone();
+                    }
+                }
+            }
+
+            if is_sioyek {
+                let progress = {
+                    let conn = db.lock().map_err(|e| e.to_string())?;
+                    documents::get_by_id(&conn, doc_id)
+                        .map_err(|e| e.to_string())?
+                        .and_then(|d| d.reading_progress)
+                        .unwrap_or(0)
+                };
+
+                let mut cmd = std::process::Command::new(&exe_name);
+                if progress > 0 {
+                    // Sioyek CLI --page 인자는 1-indexed이므로 progress(0-indexed)에 1을 더합니다.
+                    cmd.arg("--page").arg((progress + 1).to_string());
+                }
+                // -- marker prevents argument injection if file_path starts with '-'
+                cmd.arg("--");
+                cmd.arg(&file_path);
+                cmd.stdout(std::process::Stdio::null());
+                cmd.stderr(std::process::Stdio::null());
+
+                let mut child = cmd.spawn().map_err(|e| format!("Sioyek 실행 실패: {}", e))?;
+                let status = child.wait().map_err(|e| format!("Sioyek 대기 오류: {}", e))?;
+
+                if status.success() {
+                    let conn = db.lock().map_err(|e| e.to_string())?;
+                    let sync_msg = crate::pdf::sioyek::sync_sioyek_data(&conn, doc_id)
+                        .map_err(|e| format!("Sioyek 동기화 실패: {}", e))?;
+                    return Ok(Some(sync_msg));
+                } else {
+                    return Err(format!("Sioyek 프로세스가 오류로 종료되었습니다 (코드: {})", status));
+                }
+            }
+
+            let mut is_okular = false;
+            let mut okular_exe = "okular".to_string();
+            let mut okular_not_found_warning = false;
+
+            if is_okular_requested {
+                if let Some(okular_path) = crate::pdf::okular::find_okular_executable() {
+                    is_okular = true;
+                    okular_exe = okular_path;
+                } else {
+                    okular_not_found_warning = true;
+                }
+            }
+
+            if is_okular {
+                let progress = {
+                    let conn = db.lock().map_err(|e| e.to_string())?;
+                    documents::get_by_id(&conn, doc_id)
+                        .map_err(|e| e.to_string())?
+                        .and_then(|d| d.reading_progress)
+                        .unwrap_or(0)
+                };
+
+                let mut cmd = std::process::Command::new(&okular_exe);
+                if progress > 0 {
+                    cmd.arg("--page").arg((progress + 1).to_string());
+                }
+                // -- marker prevents argument injection if file_path starts with '-'
+                cmd.arg("--");
+                cmd.arg(&file_path);
+                cmd.stdout(std::process::Stdio::null());
+                cmd.stderr(std::process::Stdio::null());
+
+                let mut child = cmd.spawn().map_err(|e| format!("Okular 실행 실패: {}", e))?;
+                let status = child.wait().map_err(|e| format!("Okular 대기 오류: {}", e))?;
+
+                if status.success() {
+                    let conn = db.lock().map_err(|e| e.to_string())?;
+                    let sync_msg = crate::pdf::okular::sync_okular_data(&conn, doc_id)
+                        .map_err(|e| format!("Okular 동기화 실패: {}", e))?;
+                    return Ok(Some(sync_msg));
+                } else {
+                    return Err(format!("Okular 프로세스가 오류로 종료되었습니다 (코드: {})", status));
+                }
+            }
+
+            // Sioyek/Okular이 아닌 일반 뷰어 실행 로직
             match &viewer_command {
                 Some(parts) if !parts.is_empty() => {
                     let (exe, args) = parts.split_first().unwrap();
                     let mut cmd = std::process::Command::new(exe);
                     for arg in args {
-                        cmd.arg(arg.replace("%p", &file_path));
+                        if arg == "%p" {
+                            // -- marker prevents argument injection if file_path starts with '-'
+                            cmd.arg("--");
+                            cmd.arg(&file_path);
+                        } else {
+                            cmd.arg(arg.replace("%p", &file_path));
+                        }
                     }
+                    cmd.stdout(std::process::Stdio::null());
+                    cmd.stderr(std::process::Stdio::null());
                     cmd.spawn().map_err(|e| e.to_string())?;
+                    Ok(None)
                 }
                 _ => {
                     open::that(path).map_err(|e| e.to_string())?;
+                    if sioyek_not_found_warning {
+                        Ok(Some("⚠️ Sioyek이 감지되지 않아 기본 뷰어(Preview)로 열었습니다. (brew install --cask sioyek 필요)".to_string()))
+                    } else if okular_not_found_warning {
+                        Ok(Some("⚠️ Okular가 감지되지 않아 기본 뷰어(Preview)로 열었습니다. (brew install --cask okular 필요)".to_string()))
+                    } else {
+                        Ok(None)
+                    }
                 }
             }
-            Ok(())
         })
         .await;
 
         let action = match result {
-            Ok(Ok(())) => AppAction::OpenExternalViewerResult {
+            Ok(Ok(Some(sync_msg))) => AppAction::OpenExternalViewerResult {
+                success: true,
+                message: sync_msg,
+            },
+            Ok(Ok(None)) => AppAction::OpenExternalViewerResult {
                 success: true,
                 message: "PDF 열기 완료".to_string(),
             },
@@ -3156,7 +3549,371 @@ fn handle_open_external(state: &mut AppState, doc_id: i64) {
 
 fn handle_open_external_result(state: &mut AppState, message: &str) {
     state.finish_processing(message);
+    state.reload_documents();
+    state.load_detail();
     state.dirty = true;
+}
+
+fn handle_install_sioyek(state: &mut AppState, doc_id: i64) {
+    state.start_processing("Sioyek 설치 중...");
+    let tx = state.action_tx.clone();
+
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || -> std::result::Result<(), String> {
+            #[cfg(target_os = "macos")]
+            {
+                let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+                    "/opt/homebrew/bin/brew"
+                } else if std::path::Path::new("/usr/local/bin/brew").exists() {
+                    "/usr/local/bin/brew"
+                } else {
+                    "brew"
+                };
+
+                let status = std::process::Command::new(brew_path)
+                    .arg("install")
+                    .arg("--cask")
+                    .arg("sioyek")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map_err(|e| format!("brew 명령 실행 실패: {}", e))?;
+                if !status.success() {
+                    return Err(format!("brew install 실패 (코드: {})", status));
+                }
+
+                // macOS Gatekeeper 격리 차단 해제 (Exit Code 126 방지)
+                let _ = std::process::Command::new("xattr")
+                    .arg("-r")
+                    .arg("-d")
+                    .arg("com.apple.quarantine")
+                    .arg("/opt/homebrew/Caskroom/sioyek")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                let status = std::process::Command::new("winget")
+                    .arg("install")
+                    .arg("-e")
+                    .arg("--id")
+                    .arg("ahrm.sioyek")
+                    .arg("--silent")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map_err(|e| format!("winget 명령 실행 실패: {}", e))?;
+                if !status.success() {
+                    return Err(format!("winget install 실패 (코드: {})", status));
+                }
+            }
+
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))] // Linux
+            {
+                let mut has_snap = false;
+                if let Ok(status) = std::process::Command::new("snap")
+                    .arg("--version")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                {
+                    has_snap = status.success();
+                }
+
+                let status = if has_snap {
+                    std::process::Command::new("sudo")
+                        .arg("snap")
+                        .arg("install")
+                        .arg("sioyek")
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                } else {
+                    std::process::Command::new("sudo")
+                        .arg("apt-get")
+                        .arg("install")
+                        .arg("-y")
+                        .arg("sioyek")
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                };
+
+                let status = status.map_err(|e| format!("설치 프로세스 실행 실패: {}", e))?;
+                if !status.success() {
+                    return Err(format!("패키지 매니저 실행 실패 (코드: {})", status));
+                }
+            }
+
+            Ok(())
+        })
+        .await;
+
+        let action = match result {
+            Ok(Ok(())) => AppAction::SioyekInstallResult {
+                success: true,
+                message: "Sioyek 설치 성공! PDF를 엽니다.".to_string(),
+                doc_id,
+            },
+            Ok(Err(m)) => AppAction::SioyekInstallResult {
+                success: false,
+                message: format!("Sioyek 설치 실패: {}", m),
+                doc_id,
+            },
+            Err(e) => AppAction::SioyekInstallResult {
+                success: false,
+                message: format!("Sioyek 설치 중 태스크 에러: {}", e),
+                doc_id,
+            },
+        };
+        let _ = tx.send(action).await;
+    });
+}
+
+fn handle_sioyek_install_result(state: &mut AppState, success: bool, message: &str, doc_id: i64) {
+    state.finish_processing(message);
+    if success {
+        state.set_status("Sioyek 설치 완료! PDF를 실행합니다.");
+        let _ = state.action_tx.try_send(AppAction::OpenExternalViewer { doc_id });
+    } else {
+        state.set_status(&format!("설치 오류: {}", message));
+    }
+    state.dirty = true;
+}
+
+fn handle_sioyek_install_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            if let Some(doc_id) = state.sioyek_install_doc_id {
+                state.show_sioyek_install_dialog = false;
+                let _ = state.action_tx.try_send(AppAction::InstallSioyek { doc_id });
+            }
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            state.show_sioyek_install_dialog = false;
+            let doc_id = state.sioyek_install_doc_id.take();
+            state.set_status("Sioyek 설치 취소됨. 기본 뷰어로 엽니다.");
+            
+            // "아니오"를 누른 경우, Preview(시스템 기본)로 즉시 대체 실행해 줍니다.
+            if let Some(id) = doc_id {
+                // Sioyek 우회를 위해 is_sioyek 검증 단계를 무시하고 Preview/기본 연결앱으로 바로 열도록 direct trigger 처리
+                let db = state.db.clone();
+                let tx = state.action_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || -> std::result::Result<(), String> {
+                        let file_path = {
+                            let conn = db.lock().map_err(|e| e.to_string())?;
+                            crate::db::documents::get_by_id(&conn, id)
+                                .map_err(|e| e.to_string())?
+                                .and_then(|d| d.file_path)
+                                .ok_or_else(|| "파일 경로가 없습니다".to_string())?
+                        };
+                        let path = std::path::Path::new(&file_path);
+                        open::that(path).map_err(|e| e.to_string())?;
+                        Ok(())
+                    }).await;
+
+                    let action = match result {
+                        Ok(Ok(())) => AppAction::OpenExternalViewerResult {
+                            success: true,
+                            message: "기본 뷰어로 PDF 열기 완료".to_string(),
+                        },
+                        Ok(Err(m)) => AppAction::OpenExternalViewerResult {
+                            success: false,
+                            message: format!("기본 뷰어 열기 실패: {}", m),
+                        },
+                        Err(e) => AppAction::OpenExternalViewerResult {
+                            success: false,
+                            message: format!("기본 뷰어 열기 오류: {}", e),
+                        },
+                    };
+                    let _ = tx.send(action).await;
+                });
+            }
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_install_okular(state: &mut AppState, doc_id: i64) {
+    state.start_processing("Okular 설치 중...");
+    let tx = state.action_tx.clone();
+
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || -> std::result::Result<(), String> {
+            #[cfg(target_os = "macos")]
+            {
+                // macOS용 공식 brew cask okular가 지원되지 않으므로 브라우저 다운로드 페이지를 열어줍니다.
+                let status = std::process::Command::new("open")
+                    .arg("https://okular.kde.org/download/")
+                    .status()
+                    .map_err(|e| format!("open 명령 실행 실패: {}", e))?;
+                if !status.success() {
+                    return Err(format!("브라우저 다운로드 페이지 열기 실패 (코드: {})", status));
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                let status = std::process::Command::new("winget")
+                    .arg("install")
+                    .arg("-e")
+                    .arg("--id")
+                    .arg("KDE.Okular")
+                    .arg("--silent")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map_err(|e| format!("winget 명령 실행 실패: {}", e))?;
+                if !status.success() {
+                    return Err(format!("winget install 실패 (코드: {})", status));
+                }
+            }
+
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))] // Linux
+            {
+                let mut has_snap = false;
+                if let Ok(status) = std::process::Command::new("snap")
+                    .arg("--version")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                {
+                    has_snap = status.success();
+                }
+
+                let status = if has_snap {
+                    std::process::Command::new("sudo")
+                        .arg("snap")
+                        .arg("install")
+                        .arg("okular")
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                } else {
+                    std::process::Command::new("sudo")
+                        .arg("apt-get")
+                        .arg("install")
+                        .arg("-y")
+                        .arg("okular")
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                };
+
+                let status = status.map_err(|e| format!("설치 프로세스 실행 실패: {}", e))?;
+                if !status.success() {
+                    return Err(format!("패키지 매니저 실행 실패 (코드: {})", status));
+                }
+            }
+
+            Ok(())
+        })
+        .await;
+
+        let action = match result {
+            Ok(Ok(())) => {
+                #[cfg(target_os = "macos")]
+                let msg = "Okular 다운로드 페이지를 열었습니다. 설치 후 다시 시도해 주세요.".to_string();
+                #[cfg(not(target_os = "macos"))]
+                let msg = "Okular 설치 성공! PDF를 엽니다.".to_string();
+
+                AppAction::OkularInstallResult {
+                    success: true,
+                    message: msg,
+                    doc_id,
+                }
+            }
+            Ok(Err(m)) => AppAction::OkularInstallResult {
+                success: false,
+                message: format!("Okular 설치 실패: {}", m),
+                doc_id,
+            },
+            Err(e) => AppAction::OkularInstallResult {
+                success: false,
+                message: format!("Okular 설치 중 태스크 에러: {}", e),
+                doc_id,
+            },
+        };
+        let _ = tx.send(action).await;
+    });
+}
+
+fn handle_okular_install_result(state: &mut AppState, success: bool, message: &str, _doc_id: i64) {
+    state.finish_processing(message);
+    if success {
+        #[cfg(target_os = "macos")]
+        {
+            state.set_status("다운로드 완료 후, 앱 권한 승인 후 문서를 다시 열어주세요.");
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            state.set_status("Okular 설치 완료! PDF를 실행합니다.");
+            let _ = state.action_tx.try_send(AppAction::OpenExternalViewer { doc_id });
+        }
+    } else {
+        state.set_status(&format!("설치 오류: {}", message));
+    }
+    state.dirty = true;
+}
+
+fn handle_okular_install_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            if let Some(doc_id) = state.okular_install_doc_id {
+                state.show_okular_install_dialog = false;
+                let _ = state.action_tx.try_send(AppAction::InstallOkular { doc_id });
+            }
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            state.show_okular_install_dialog = false;
+            let doc_id = state.okular_install_doc_id.take();
+            state.set_status("Okular 설치 취소됨. 기본 뷰어로 엽니다.");
+            
+            // "아니오"를 누른 경우, Preview(시스템 기본)로 즉시 대체 실행해 줍니다.
+            if let Some(id) = doc_id {
+                let db = state.db.clone();
+                let tx = state.action_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || -> std::result::Result<(), String> {
+                        let file_path = {
+                            let conn = db.lock().map_err(|e| e.to_string())?;
+                            crate::db::documents::get_by_id(&conn, id)
+                                .map_err(|e| e.to_string())?
+                                .and_then(|d| d.file_path)
+                                .ok_or_else(|| "파일 경로가 없습니다".to_string())?
+                        };
+                        let path = std::path::Path::new(&file_path);
+                        open::that(path).map_err(|e| e.to_string())?;
+                        Ok(())
+                    }).await;
+
+                    let action = match result {
+                        Ok(Ok(())) => AppAction::OpenExternalViewerResult {
+                            success: true,
+                            message: "기본 뷰어로 PDF 열기 완료".to_string(),
+                        },
+                        Ok(Err(m)) => AppAction::OpenExternalViewerResult {
+                            success: false,
+                            message: format!("기본 뷰어 열기 실패: {}", m),
+                        },
+                        Err(e) => AppAction::OpenExternalViewerResult {
+                            success: false,
+                            message: format!("기본 뷰어 열기 오류: {}", e),
+                        },
+                    };
+                    let _ = tx.send(action).await;
+                });
+            }
+            state.dirty = true;
+        }
+        _ => {}
+    }
+    false
 }
 
 fn handle_start_manual_citation_entry(state: &mut AppState, doc_id: i64) {
@@ -3195,7 +3952,9 @@ fn handle_citation_entry_key(state: &mut AppState, key: KeyEvent) -> bool {
             {
                 let db = state.db.clone();
                 if let Ok(conn) = db.lock() {
-                    let _ = entry::add_manual_citation(&conn, source_id, target_id);
+                    if let Err(e) = entry::add_manual_citation(&conn, source_id, target_id) {
+                        tracing::error!("Failed to add manual citation {source_id}→{target_id}: {e}");
+                    }
                     let _ = state.action_tx.try_send(AppAction::ManualCitationSaved {
                         source_id,
                         target_id,
@@ -3265,7 +4024,9 @@ fn handle_bibtex_import(state: &mut AppState, doc_id: i64, path: &str) {
         let mut count = 0usize;
         for bib_entry in &bib_entries {
             if let Ok(Some(target_id)) = entry::match_bibtex_entry(&conn, bib_entry, 0.85) {
-                let _ = entry::add_bibtex_citation(&conn, doc_id, target_id);
+                if let Err(e) = entry::add_bibtex_citation(&conn, doc_id, target_id) {
+                    tracing::error!("Failed to add BibTeX citation for doc {doc_id}→{target_id}: {e}");
+                }
                 count += 1;
             }
         }
@@ -3446,6 +4207,15 @@ fn handle_command_key(state: &mut AppState, key: KeyEvent) -> bool {
                             });
                         }
                     }
+                    "import-db" => {
+                        if arg.is_empty() {
+                            state.set_status("사용법: :import-db <백업파일경로>");
+                        } else {
+                            let _ = state.action_tx.try_send(AppAction::ImportDb {
+                                path: arg.to_string(),
+                            });
+                        }
+                    }
                     "tag-color" => {
                         let parts: Vec<&str> = arg.split_whitespace().collect();
                         if parts.is_empty() {
@@ -3506,29 +4276,93 @@ fn split_command(input: &str) -> Option<(&str, &str)> {
 
 fn handle_backup(state: &mut AppState, path: String) {
     let dest = PathBuf::from(&path);
-    let result = {
-        if let Ok(conn) = state.db.lock() {
-            crate::db::backup::backup_to_path(&conn, &dest)
-        } else {
-            Err(anyhow::anyhow!("DB 락 획득 실패"))
-        }
-    };
-    match result {
-        Ok(_) => state.set_status(&format!("백업 완료: {}", path)),
-        Err(e) => state.set_status(&format!("백업 실패: {}", e)),
-    }
-    state.dirty = true;
+    state.start_processing("데이터베이스 백업 중...");
+
+    let db_conn = state.db.clone();
+    let action_tx = state.action_tx.clone();
+
+    std::thread::spawn(move || {
+        let result = {
+            if let Ok(conn) = db_conn.lock() {
+                crate::db::backup::backup_to_path(&conn, &dest)
+            } else {
+                Err(anyhow::anyhow!("DB 락 획득 실패"))
+            }
+        };
+
+        let success = result.is_ok();
+        let msg = match result {
+            Ok(_) => format!("백업 완료: {}", dest.display()),
+            Err(e) => format!("백업 실패: {}", e),
+        };
+
+        let _ = action_tx.try_send(AppAction::ProcessFinished {
+            success,
+            message: msg,
+        });
+    });
 }
 
 fn handle_restore(state: &mut AppState, path: String) {
     let src = PathBuf::from(&path);
     let dest = state.config.db_path.clone();
+
+    // Close the active DB connection so fs::copy (inside restore_from_path)
+    // does not fail with a "file in use" error on Windows, and to avoid
+    // silently writing through a stale fd on Linux/macOS.
+    if let Ok(mut db_guard) = state.db.lock() {
+        let _old_conn = std::mem::replace(
+            &mut *db_guard,
+            rusqlite::Connection::open_in_memory()
+                .expect("in-memory SQLite open should never fail"),
+        );
+        // db_guard now holds a harmless in-memory connection; the original
+        // connection to `dest` is dropped. The user *must* restart after restore.
+    }
+
     let result = crate::db::backup::restore_from_path(&src, &dest);
     match result {
         Ok(_) => state.set_status(&format!("복원 완료: {} (재시작 필요)", path)),
         Err(e) => state.set_status(&format!("복원 실패: {}", e)),
     }
     state.dirty = true;
+}
+
+fn handle_import_db(state: &mut AppState, path: String) {
+    let src = PathBuf::from(&path);
+    if !src.exists() {
+        state.set_status(&format!("오류: 파일을 찾을 수 없습니다: {}", path));
+        return;
+    }
+    state.start_processing("데이터베이스 불러오기 (Import) 중...");
+    
+    let db_conn = state.db.clone();
+    let action_tx = state.action_tx.clone();
+    
+    std::thread::spawn(move || {
+        let result = {
+            if let Ok(mut conn) = db_conn.lock() {
+                crate::db::backup::import_db_from_path(&mut *conn, &src)
+            } else {
+                Err(anyhow::anyhow!("DB 락 획득 실패"))
+            }
+        };
+        
+        let success = result.is_ok();
+        let msg = match result {
+            Ok((s, skip)) => {
+                format!("불러오기 완료: {}건 병합, {}건 중복 스킵", s, skip)
+            }
+            Err(e) => {
+                format!("불러오기 실패: {}", e)
+            }
+        };
+        
+        let _ = action_tx.try_send(AppAction::ProcessFinished {
+            success,
+            message: msg,
+        });
+    });
 }
 
 fn handle_toggle_favorite_filter(state: &mut AppState) {
@@ -3544,13 +4378,20 @@ fn handle_toggle_favorite_filter(state: &mut AppState) {
 }
 
 fn handle_set_tag_color(state: &mut AppState, tag: &str, color: Option<String>) {
-    if let Ok(conn) = state.db.lock() {
-        let _ = documents::set_tag_color(&conn, tag, color.as_deref());
-    }
-    state.reload_tags();
-    match color {
-        Some(c) => state.set_status(&format!("태그 색상 설정: {} → {}", tag, c)),
-        None => state.set_status(&format!("태그 색상 삭제: {}", tag)),
+    let err = {
+        state.db.lock().ok().and_then(|conn| {
+            documents::set_tag_color(&conn, tag, color.as_deref()).err()
+        })
+    };
+    if let Some(e) = err {
+        tracing::error!("set_tag_color 실패 (tag={}): {}", tag, e);
+        state.set_status(&format!("태그 색상 설정 실패: {}", e));
+    } else {
+        state.reload_tags();
+        match color {
+            Some(c) => state.set_status(&format!("태그 색상 설정: {} → {}", tag, c)),
+            None => state.set_status(&format!("태그 색상 삭제: {}", tag)),
+        }
     }
     state.dirty = true;
 }
@@ -3569,38 +4410,65 @@ fn handle_toggle_queue_view(state: &mut AppState) {
 }
 
 fn handle_add_to_queue(state: &mut AppState, doc_id: i64) {
-    if let Ok(conn) = state.db.lock() {
-        let _ = documents::add_to_queue(&conn, doc_id);
+    let err = {
+        state.db.lock().ok().and_then(|conn| {
+            documents::add_to_queue(&conn, doc_id).err()
+        })
+    };
+    if let Some(e) = err {
+        tracing::error!("add_to_queue 실패 (doc_id={}): {}", doc_id, e);
+        state.set_status(&format!("읽기 큐 추가 실패: {}", e));
+    } else {
+        state.set_status("읽기 큐에 추가됨");
     }
-    state.set_status("읽기 큐에 추가됨");
     state.dirty = true;
 }
 
 fn handle_remove_from_queue(state: &mut AppState, doc_id: i64) {
-    if let Ok(conn) = state.db.lock() {
-        let _ = documents::remove_from_queue(&conn, doc_id);
-    }
-    if state.queue_view {
-        state.reload_queue();
-        if state.list_cursor >= state.queue.len() && !state.queue.is_empty() {
-            state.list_cursor = state.queue.len() - 1;
+    let err = {
+        state.db.lock().ok().and_then(|conn| {
+            documents::remove_from_queue(&conn, doc_id).err()
+        })
+    };
+    if let Some(e) = err {
+        tracing::error!("remove_from_queue 실패 (doc_id={}): {}", doc_id, e);
+        state.set_status(&format!("읽기 큐 제거 실패: {}", e));
+    } else {
+        if state.queue_view {
+            state.reload_queue();
+            if state.list_cursor >= state.queue.len() && !state.queue.is_empty() {
+                state.list_cursor = state.queue.len() - 1;
+            }
         }
+        state.set_status("읽기 큐에서 제거됨");
     }
-    state.set_status("읽기 큐에서 제거됨");
     state.dirty = true;
 }
 
 fn handle_reorder_queue(state: &mut AppState, doc_id: i64, new_position: usize) {
-    if let Ok(conn) = state.db.lock() {
-        let _ = documents::reorder_queue(&conn, doc_id, new_position);
+    let err = {
+        state.db.lock().ok().and_then(|conn| {
+            documents::reorder_queue(&conn, doc_id, new_position).err()
+        })
+    };
+    if let Some(e) = err {
+        tracing::error!("reorder_queue 실패 (doc_id={}, pos={}): {}", doc_id, new_position, e);
+        state.set_status(&format!("읽기 큐 순서 변경 실패: {}", e));
+    } else {
+        state.reload_queue();
     }
-    state.reload_queue();
     state.dirty = true;
 }
 
 fn handle_update_reading_progress(state: &mut AppState, doc_id: i64, progress: i64) {
-    if let Ok(conn) = state.db.lock() {
-        let _ = documents::update_reading_progress(&conn, doc_id, progress);
+    let err = {
+        state.db.lock().ok().and_then(|conn| {
+            documents::update_reading_progress(&conn, doc_id, progress).err()
+        })
+    };
+    if let Some(e) = err {
+        tracing::error!("update_reading_progress 실패 (doc_id={}, progress={}): {}", doc_id, progress, e);
+        state.set_status(&format!("읽기 진행률 업데이트 실패: {}", e));
     }
     if let Some(doc) = state.documents.iter_mut().find(|d| d.id == Some(doc_id)) {
         doc.reading_progress = Some(progress);
@@ -3739,22 +4607,214 @@ fn handle_note_editor(state: &mut AppState) {
             if trimmed.is_empty() {
                 state.set_status("노트가 비어 있어 저장하지 않음");
             } else {
-                let saved = if let Ok(conn) = state.db.lock() {
-                    let _ = crate::db::notes::create(&conn, doc_id, trimmed, "general");
-                    state.current_notes = crate::db::notes::list(&conn, doc_id).unwrap_or_default();
-                    true
-                } else {
-                    false
-                };
-                if saved {
-                    state.set_status("노트 저장됨 ($EDITOR)");
-                } else {
-                    state.set_status("DB 락 획득 실패");
+                let saved = state.db.lock().ok().and_then(|conn| {
+                    if let Err(e) = crate::db::notes::create(&conn, doc_id, trimmed, "general") {
+                        tracing::error!("note_editor: notes::create failed: {} (doc_id={})", e, doc_id);
+                        return None;
+                    }
+                    Some(crate::db::notes::list(&conn, doc_id).unwrap_or_default())
+                });
+                match saved {
+                    Some(notes) => {
+                        state.current_notes = notes;
+                        state.set_status("노트 저장됨 ($EDITOR)");
+                    }
+                    None => state.set_status("노트 저장 실패"),
                 }
             }
         }
         Ok(_) => state.set_status("에디터가 정상 종료되지 않음"),
         Err(e) => state.set_status(&format!("에디터 실행 실패: {}", e)),
+    }
+    state.dirty = true;
+}
+
+// ── Widget Panel Key Handler ───────────────────────────────────────────────────
+
+fn handle_widget_panel_key(state: &mut AppState, key: KeyEvent) -> bool {
+    use crossterm::event::KeyCode;
+
+    if matches!(key.code, KeyCode::Esc | KeyCode::Char('w')) {
+        state.show_widget_panel = false;
+        state.dirty = true;
+        return false;
+    }
+
+    match key.code {
+        KeyCode::Tab => {
+            state.widget_registry.next_tab();
+            state.dirty = true;
+            return false;
+        }
+        KeyCode::BackTab => {
+            state.widget_registry.prev_tab();
+            state.dirty = true;
+            return false;
+        }
+        KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
+            let idx = (c as usize) - ('1' as usize);
+            state.widget_registry.switch_tab(idx);
+            state.dirty = true;
+            return false;
+        }
+        KeyCode::Char('y') => {
+            // 보안 경고 수락: 현재 위젯의 스크립트 실행을 허용
+            if let Some(widget) = state.widget_registry.active_widget() {
+                if matches!(widget, crate::widget::WidgetInstance::Script(_)) {
+                    let id = widget.id().to_string();
+                    state.widget_registry.acknowledge_security_warning(&id);
+                    spawn_widget_fetch(state, &id);
+                    state.dirty = true;
+                }
+            }
+            return false;
+        }
+        KeyCode::Char('r') => {
+            // 수동 새로고침: 현재 위젯의 fetch를 spawn
+            if let Some(widget) = state.widget_registry.active_widget() {
+                let id = widget.id().to_string();
+                spawn_widget_fetch(state, &id);
+            }
+            state.dirty = true;
+            return false;
+        }
+        _ => {}
+    }
+
+    false
+}
+
+// ── Widget Async Fetch Helpers ────────────────────────────────────────────────
+
+/// 특정 위젯의 데이터를 비동기로 fetch합니다 (수동 새로고침용).
+fn spawn_widget_fetch(state: &mut AppState, widget_id: &str) {
+    use crate::widget::WidgetInstance;
+
+    let action_tx = state.action_tx.clone();
+
+    // Check security approval before executing script widgets.
+    if !state.widget_registry.is_security_approved(widget_id) {
+        // If the widget is a Script widget with an unacknowledged security warning,
+        // show the warning instead of executing.
+        state.widget_registry.set_content(
+            widget_id,
+            crate::widget::WidgetContent::error("보안 경고: 이 위젯은 외부 스크립트를 실행합니다. 실행하려면 위젯 패널에서 'y'를 누르세요."),
+        );
+        return;
+    }
+
+    state
+        .widget_registry
+        .set_content(widget_id, crate::widget::WidgetContent::loading());
+
+    if let Some(instance) = state.widget_registry.widgets.iter_mut().find(|w| w.id() == widget_id) {
+        match instance {
+            WidgetInstance::Api(runner) => {
+                spawn_api_fetch(&action_tx, runner);
+            }
+            WidgetInstance::Script(runner) => {
+                spawn_script_fetch(&action_tx, runner);
+            }
+        }
+    }
+}
+
+fn spawn_api_fetch(
+    action_tx: &tokio::sync::mpsc::Sender<AppAction>,
+    runner: &crate::widget::api_runner::ApiWidgetRunner,
+) {
+    let id = runner.id().to_string();
+    let temp = crate::widget::api_runner::ApiWidgetRunner::new(
+        runner.meta.clone(),
+        runner.api_cfg.clone(),
+        runner.display_cfg.clone(),
+        runner.sandbox.clone(),
+    );
+    let tx = action_tx.clone();
+    tokio::spawn(async move {
+        match temp.fetch().await {
+            Ok(content) => {
+                let _ = tx.try_send(AppAction::WidgetDataReady {
+                    widget_id: id,
+                    content: Box::new(content),
+                });
+            }
+            Err(e) => {
+                let _ = tx.try_send(AppAction::WidgetError {
+                    widget_id: id,
+                    message: e.to_string(),
+                });
+            }
+        }
+    });
+}
+
+fn spawn_script_fetch(
+    action_tx: &tokio::sync::mpsc::Sender<AppAction>,
+    runner: &crate::widget::script_runner::ScriptWidgetRunner,
+) {
+    let id = runner.id().to_string();
+    let temp = crate::widget::script_runner::ScriptWidgetRunner::new(
+        runner.meta.clone(),
+        runner.script_cfg.clone(),
+        runner.widget_dir.clone(),
+        runner.permissions.clone(),
+    );
+    let tx = action_tx.clone();
+    tokio::spawn(async move {
+        match temp.run().await {
+            Ok(content) => {
+                let _ = tx.try_send(AppAction::WidgetDataReady {
+                    widget_id: id,
+                    content: Box::new(content),
+                });
+            }
+            Err(e) => {
+                let _ = tx.try_send(AppAction::WidgetError {
+                    widget_id: id,
+                    message: e.to_string(),
+                });
+            }
+        }
+    });
+}
+
+// ── Widget Tick Handler ────────────────────────────────────────────────────────
+
+fn handle_widget_tick(state: &mut AppState) {
+    use crate::widget::WidgetInstance;
+
+    let action_tx = state.action_tx.clone();
+
+    let approved_ids: std::collections::HashSet<String> = state
+        .widget_registry
+        .widgets
+        .iter()
+        .filter(|w| state.widget_registry.is_security_approved(w.id()))
+        .map(|w| w.id().to_string())
+        .collect();
+
+    for (idx, instance) in state.widget_registry.widgets.iter_mut().enumerate() {
+        match instance {
+            WidgetInstance::Api(runner) => {
+                if runner.needs_refresh() {
+                    if idx < state.widget_registry.contents.len() {
+                        state.widget_registry.contents[idx] =
+                            crate::widget::WidgetContent::loading();
+                    }
+                    spawn_api_fetch(&action_tx, runner);
+                }
+            }
+            WidgetInstance::Script(runner) => {
+                if runner.needs_refresh() && approved_ids.contains(runner.id()) {
+                    if idx < state.widget_registry.contents.len() {
+                        state.widget_registry.contents[idx] =
+                            crate::widget::WidgetContent::loading();
+                    }
+                    spawn_script_fetch(&action_tx, runner);
+                }
+            }
+        }
     }
     state.dirty = true;
 }

@@ -98,50 +98,80 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
                     _ => String::new(),
                 };
 
-                let progress_str = match doc.reading_progress {
-                    Some(p) if p > 0 => format!(" {}%", p),
-                    _ => String::new(),
+                let progress_val = doc.reading_progress.unwrap_or(0);
+                let bar_color = if progress_val >= 100 {
+                    Color::Rgb(74, 144, 226) // 완독 시 파스텔 파랑
+                } else if progress_val > 0 {
+                    // 1% ~ 99% 선형 보간 (파스텔 빨강 -> 파스텔 초록)
+                    let t = (progress_val.min(99).max(1) - 1) as f64 / 98.0;
+                    let r = (255.0 + t * (114.0 - 255.0)).round() as u8;
+                    let g = (114.0 + t * (220.0 - 114.0)).round() as u8;
+                    let b = (114.0 + t * (114.0 - 114.0)).round() as u8;
+                    Color::Rgb(r, g, b)
+                } else {
+                    theme::dim()
                 };
 
-                ListItem::new(vec![
-                    Line::from(vec![
-                        Span::styled(
-                            format!("{} ", marker),
-                            Style::default()
-                                .fg(marker_color)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(doc.title.clone(), theme::title_style()),
-                        if !rating_str.is_empty() {
-                            Span::styled(rating_str, Style::default().fg(theme::warning()))
-                        } else {
-                            Span::raw("")
-                        },
-                        if !progress_str.is_empty() {
-                            Span::styled(progress_str, Style::default().fg(theme::accent_primary()))
-                        } else {
-                            Span::raw("")
-                        },
-                        if score_str.starts_with(" [기준]") {
-                            Span::styled(score_str, Style::default().fg(theme::accent_primary()))
-                        } else if score_str.starts_with(" [") {
-                            Span::styled(score_str, Style::default().fg(theme::selected()))
-                        } else {
-                            Span::raw("")
-                        },
-                    ]),
-                    Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(authors.to_string(), theme::meta_style()),
-                        Span::raw("  "),
-                        Span::styled(year.clone(), theme::meta_style()),
-                        Span::raw("  "),
-                        Span::styled(doi.to_string(), theme::meta_style()),
-                        Span::raw("  "),
-                        Span::styled(format!("[{}]", key), theme::key_style()),
-                    ]),
-                    Line::from(""),
-                ])
+                let mut bar_spans = theme::progress_bar_spans(progress_val as u8, 10, bar_color);
+
+                // Line 1: marker + title + rating + score
+                let mut line1_spans = vec![
+                    Span::styled(
+                        format!("{} ", marker),
+                        Style::default()
+                            .fg(marker_color)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(doc.title.clone(), theme::title_style()),
+                ];
+                if !rating_str.is_empty() {
+                    line1_spans.push(Span::styled(rating_str, Style::default().fg(theme::warning())));
+                }
+                if !score_str.is_empty() {
+                    if score_str.starts_with(" [기준]") {
+                        line1_spans.push(Span::styled(score_str, Style::default().fg(theme::accent_primary())));
+                    } else {
+                        line1_spans.push(Span::styled(score_str, Style::default().fg(theme::selected())));
+                    }
+                }
+                let line1 = Line::from(line1_spans);
+
+                // Line 2: metadata row — authors · year · doi · [key] + progress bar
+                let mut line2_spans = vec![
+                    Span::raw("      "),
+                    Span::styled(authors.to_string(), theme::meta_style()),
+                ];
+                line2_spans.push(Span::styled(" · ", Style::default().fg(theme::divider())));
+                line2_spans.push(Span::styled(year.clone(), theme::meta_style()));
+                
+                if !doi.is_empty() {
+                    line2_spans.push(Span::styled(" · ", Style::default().fg(theme::divider())));
+                    line2_spans.push(Span::styled(doi.to_string(), theme::meta_style()));
+                }
+                
+                if !key.is_empty() {
+                    line2_spans.push(Span::styled(" · ", Style::default().fg(theme::divider())));
+                    line2_spans.push(Span::styled(format!("[{}]", key), theme::key_style()));
+                }
+
+                line2_spans.push(Span::raw("   "));
+                line2_spans.append(&mut bar_spans);
+                
+                if progress_val > 0 {
+                    line2_spans.push(Span::styled(
+                        format!(" {}%", progress_val),
+                        Style::default().fg(bar_color),
+                    ));
+                }
+                let line2 = Line::from(line2_spans);
+
+                // Line 3: Thin separator rule (a subtle line separating items)
+                let line3 = Line::from(vec![
+                    Span::raw("      "),
+                    Span::styled("─".repeat(4), Style::default().fg(theme::divider())),
+                ]);
+
+                ListItem::new(vec![line1, line2, line3])
             })
             .collect()
     };
@@ -401,16 +431,7 @@ pub fn render_detail(frame: &mut Frame, area: Rect, state: &AppState) {
 
 fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_focused: bool) {
     if state.note_mode {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme::accent_primary()))
-            .title(Span::styled(
-                " ✎ 노트 (편집 중) ",
-                Style::default()
-                    .fg(theme::accent_primary())
-                    .add_modifier(Modifier::BOLD),
-            ))
-            .style(Style::default().fg(theme::fg()).bg(theme::bg()));
+        let block = theme::create_theme_block("✎ 노트 (편집 중)");
 
         let hint = Line::from(vec![Span::styled(
             " [Enter] 줄바꿈  [Esc] 저장  [Ctrl+D] 삭제",
@@ -457,11 +478,7 @@ fn render_note_section(frame: &mut Frame, area: Rect, state: &AppState, detail_f
         } else {
             " 📝 노트 (없음) ".to_string()
         };
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme::divider()))
-            .title(Span::styled(title, Style::default().fg(theme::fg())))
-            .style(Style::default().fg(theme::fg()).bg(theme::bg()));
+        let block = theme::create_theme_block(&title);
 
         let mut note_lines: Vec<Line> = Vec::new();
         if has_notes {

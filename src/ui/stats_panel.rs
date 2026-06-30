@@ -12,16 +12,7 @@ pub fn render(frame: &mut Frame, area: Rect, _state: &AppState, stats: &LibraryS
     frame.render_widget(Clear, area);
 
     let popup = centered_rect(90, 85, area);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::accent_primary()))
-        .title(Span::styled(
-            " 📊 라이브러리 통계 (i로 닫기) ",
-            Style::default()
-                .fg(theme::accent_primary())
-                .add_modifier(Modifier::BOLD),
-        ))
-        .style(Style::default().bg(theme::bg()));
+    let block = theme::create_theme_block("📊 라이브러리 통계 (i로 닫기)");
 
     frame.render_widget(block, popup);
 

@@ -122,6 +122,14 @@ pub struct AppState {
     pub delete_confirm_title: String,
     pub skip_delete_confirm: bool,
 
+    // ── Sioyek install dialog ──
+    pub show_sioyek_install_dialog: bool,
+    pub sioyek_install_doc_id: Option<i64>,
+
+    // ── Okular install dialog ──
+    pub show_okular_install_dialog: bool,
+    pub okular_install_doc_id: Option<i64>,
+
     // ── Author metrics (h-index, i10-index) ──
     pub metrics_backend: MetricsBackend,
     pub openalex_api_key: Option<String>,
@@ -189,6 +197,11 @@ pub struct AppState {
 
     // ── Tag colors (tag name -> hex color) ──
     pub tag_colors: HashMap<String, String>,
+
+    // ── Widget panel (w) ──
+    pub show_widget_panel: bool,
+    pub widget_registry: crate::widget::WidgetRegistry,
+    pub widget_sandbox: crate::widget::sandbox::Sandbox,
 }
 
 impl AppState {
@@ -205,6 +218,17 @@ impl AppState {
         let auto_fetch_metrics = load_auto_fetch_metrics(&db);
         let metrics_refresh_interval_days = load_metrics_refresh_interval_days(&db);
         let export_dialog_state = load_export_dialog_state(&db);
+
+        // ── Widget 초기화 ──
+        // 코어에는 위젯이 내장되어 있지 않습니다.
+        // 모든 위젯은 ~/.libran/widgets/<name>/widget.toml 플러그인으로 로드됩니다.
+        let widget_sandbox = crate::widget::sandbox::default_sandbox();
+        let mut widget_registry = crate::widget::WidgetRegistry::new();
+        // 플러그인 위젯 자동 탐색
+        crate::widget::discovery::discover_plugin_widgets(&mut widget_registry, &widget_sandbox);
+        // 예시 위젯 파일 생성 (최초 실행 시)
+        crate::widget::discovery::write_example_widgets();
+
         AppState {
             db,
             config,
@@ -275,6 +299,10 @@ impl AppState {
             delete_confirm_doc_id: None,
             delete_confirm_title: String::new(),
             skip_delete_confirm,
+            show_sioyek_install_dialog: false,
+            sioyek_install_doc_id: None,
+            show_okular_install_dialog: false,
+            okular_install_doc_id: None,
             metrics_backend,
             openalex_api_key,
             author_metrics: HashMap::new(),
@@ -314,6 +342,9 @@ impl AppState {
             queue_view: false,
             queue: Vec::new(),
             tag_colors: HashMap::new(),
+            show_widget_panel: false,
+            widget_registry,
+            widget_sandbox,
         }
     }
 
@@ -667,11 +698,15 @@ fn load_export_dialog_state(db: &DbConn) -> crate::export::export_dialog_state::
                 .position(|l| *l == language)
                 .unwrap_or(0);
             return ExportDialogState {
+                selected_scope: crate::export::export_dialog_state::ExportScope::SelectedOnly,
+                selected_backup_scope: crate::export::export_dialog_state::BackupScope::FullMigration,
                 selected_format: format,
                 selected_style: style,
                 selected_language: language,
                 display_mode: DisplayMode::InText,
-                focused_section: DialogSection::Format,
+                focused_section: DialogSection::Scope,
+                scope_cursor: 0,
+                backup_scope_cursor: 0,
                 format_cursor,
                 style_cursor,
                 language_cursor,

@@ -10,3 +10,4 @@ pub mod similarity;
 pub mod storage;
 pub mod terminal;
 pub mod ui;
+pub mod widget;

@@ -4,7 +4,43 @@ use crate::db::documents::Document;
 use crate::export::ExportFormat;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportScope {
+    SelectedOnly,
+    EntireLibrary,
+    BackupDb,
+}
+
+impl ExportScope {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ExportScope::SelectedOnly => "선택된 문헌만 (Selected Documents Only)",
+            ExportScope::EntireLibrary => "전체 문헌 인용 정보 (Entire Library Citations)",
+            ExportScope::BackupDb => "전체 DB 백업/공유 (Full Database Backup & Settings)",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackupScope {
+    FullMigration,
+    BackupWithoutApiKeys,
+    DocsOnly,
+}
+
+impl BackupScope {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            BackupScope::FullMigration => "전체 마이그레이션 (Full Migration - API 키 포함)",
+            BackupScope::BackupWithoutApiKeys => "설정 포함 백업 (API 키 제외 - 안전한 공유)",
+            BackupScope::DocsOnly => "서지만 백업 (노트 및 읽기 현황 제외)",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DialogSection {
+    Scope,
+    BackupScope,
     Format,
     Style,
     Language,
@@ -14,11 +50,15 @@ pub enum DialogSection {
 
 #[derive(Clone, Debug)]
 pub struct ExportDialogState {
+    pub selected_scope: ExportScope,
+    pub selected_backup_scope: BackupScope,
     pub selected_format: ExportFormat,
     pub selected_style: CitationStyle,
     pub selected_language: CitationLanguage,
     pub display_mode: DisplayMode,
     pub focused_section: DialogSection,
+    pub scope_cursor: usize,
+    pub backup_scope_cursor: usize,
     pub format_cursor: usize,
     pub style_cursor: usize,
     pub language_cursor: usize,
@@ -29,11 +69,15 @@ pub struct ExportDialogState {
 impl ExportDialogState {
     pub fn new() -> Self {
         Self {
+            selected_scope: ExportScope::SelectedOnly,
+            selected_backup_scope: BackupScope::FullMigration,
             selected_format: ExportFormat::Bibtex,
             selected_style: CitationStyle::Apa7th,
             selected_language: CitationLanguage::English,
             display_mode: DisplayMode::InText,
-            focused_section: DialogSection::Format,
+            focused_section: DialogSection::Scope,
+            scope_cursor: 0,
+            backup_scope_cursor: 0,
             format_cursor: 0,
             style_cursor: 0,
             language_cursor: 0,
@@ -43,21 +87,23 @@ impl ExportDialogState {
     }
 
     fn active_sections(&self) -> Vec<DialogSection> {
-        if self.is_display_mode_active() {
+        if self.selected_scope == ExportScope::BackupDb {
             vec![
-                DialogSection::Format,
-                DialogSection::Style,
-                DialogSection::Language,
-                DialogSection::DisplayMode,
-                DialogSection::Preview,
+                DialogSection::Scope,
+                DialogSection::BackupScope,
             ]
         } else {
-            vec![
+            let mut sections = vec![
+                DialogSection::Scope,
                 DialogSection::Format,
                 DialogSection::Style,
                 DialogSection::Language,
-                DialogSection::Preview,
-            ]
+            ];
+            if self.is_display_mode_active() {
+                sections.push(DialogSection::DisplayMode);
+            }
+            sections.push(DialogSection::Preview);
+            sections
         }
     }
 
@@ -87,6 +133,8 @@ impl ExportDialogState {
 
     pub fn cursor_down(&mut self) {
         match self.focused_section {
+            DialogSection::Scope => self.toggle_scope(),
+            DialogSection::BackupScope => self.toggle_backup_scope(),
             DialogSection::Format => self.move_format_cursor(1),
             DialogSection::Style => self.move_style_cursor(1),
             DialogSection::Language => self.move_language_cursor(1),
@@ -97,12 +145,30 @@ impl ExportDialogState {
 
     pub fn cursor_up(&mut self) {
         match self.focused_section {
+            DialogSection::Scope => self.toggle_scope(),
+            DialogSection::BackupScope => self.toggle_backup_scope(),
             DialogSection::Format => self.move_format_cursor(-1),
             DialogSection::Style => self.move_style_cursor(-1),
             DialogSection::Language => self.move_language_cursor(-1),
             DialogSection::DisplayMode => self.move_display_mode_cursor(-1),
             DialogSection::Preview => {}
         }
+    }
+
+    fn toggle_scope(&mut self) {
+        self.selected_scope = match self.selected_scope {
+            ExportScope::SelectedOnly => ExportScope::EntireLibrary,
+            ExportScope::EntireLibrary => ExportScope::BackupDb,
+            ExportScope::BackupDb => ExportScope::SelectedOnly,
+        };
+    }
+
+    fn toggle_backup_scope(&mut self) {
+        self.selected_backup_scope = match self.selected_backup_scope {
+            BackupScope::FullMigration => BackupScope::BackupWithoutApiKeys,
+            BackupScope::BackupWithoutApiKeys => BackupScope::DocsOnly,
+            BackupScope::DocsOnly => BackupScope::FullMigration,
+        };
     }
 
     fn move_format_cursor(&mut self, direction: i32) {
@@ -202,14 +268,28 @@ impl ExportDialogState {
     }
 
     pub fn update_preview(&mut self, doc: &Document) {
-        let result = render_citation(
-            doc,
-            self.selected_style,
-            self.selected_language,
-            self.display_mode,
-        );
-        self.preview_text =
-            result.unwrap_or_else(|e| format!("[{}] {}", self.selected_style.display_name(), e));
+        if self.selected_scope == ExportScope::BackupDb {
+            self.preview_text = match self.selected_backup_scope {
+                BackupScope::FullMigration => {
+                    "※ [전체 마이그레이션] 모드로 내보냅니다.\n\n- 전체 문헌 정보 및 노트, 읽기 진행 상태를 포함합니다.\n- 등록된 API 키를 포함한 모든 환경설정을 백업합니다.\n- 다른 본인 기기로 이전할 때 권장합니다.".to_string()
+                }
+                BackupScope::BackupWithoutApiKeys => {
+                    "※ [설정 포함 백업 (API 키 제외)] 모드로 내보냅니다.\n\n- 전체 문헌 정보 및 노트, 읽기 진행 상태를 포함합니다.\n- 오픈소스 협업 및 공유를 위해 OpenAlex API 키는 삭제됩니다.\n- 타인과 데이터베이스를 공유할 때 권장합니다.".to_string()
+                }
+                BackupScope::DocsOnly => {
+                    "※ [서지만 백업] 모드로 내보냅니다.\n\n- 순수 서지/문헌 데이터 정보만 백업합니다.\n- 개인 메모(노트), 읽기 진행도 및 진행 상태는 모두 제외됩니다.\n- 순수 논문 아카이브만 공유하고자 할 때 권장합니다.".to_string()
+                }
+            };
+        } else {
+            let result = render_citation(
+                doc,
+                self.selected_style,
+                self.selected_language,
+                self.display_mode,
+            );
+            self.preview_text =
+                result.unwrap_or_else(|e| format!("[{}] {}", self.selected_style.display_name(), e));
+        }
     }
 }
 
@@ -247,6 +327,8 @@ mod tests {
     #[test]
     fn test_tab_cycles_through_sections() {
         let mut state = ExportDialogState::new();
+        assert_eq!(state.focused_section, DialogSection::Scope);
+        state.tab_next();
         assert_eq!(state.focused_section, DialogSection::Format);
         state.tab_next();
         assert_eq!(state.focused_section, DialogSection::Style);
@@ -255,7 +337,7 @@ mod tests {
         state.tab_next();
         assert_eq!(state.focused_section, DialogSection::Preview);
         state.tab_next();
-        assert_eq!(state.focused_section, DialogSection::Format);
+        assert_eq!(state.focused_section, DialogSection::Scope);
     }
 
     #[test]
@@ -270,6 +352,7 @@ mod tests {
     #[test]
     fn test_format_cursor_cycles_through_all() {
         let mut state = ExportDialogState::new();
+        state.focused_section = DialogSection::Format;
         assert_eq!(state.selected_format, ExportFormat::Bibtex);
         state.cursor_down();
         assert_eq!(state.selected_format, ExportFormat::Bookmarks);

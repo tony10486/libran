@@ -7,45 +7,139 @@ use ratatui::widgets::{Clear, Paragraph, Wrap};
 use crate::app::AppState;
 use crate::citation::text::styles::{CitationLanguage, CitationStyle, DisplayMode};
 use crate::export::ExportFormat;
-use crate::export::export_dialog_state::DialogSection;
+use crate::export::export_dialog_state::{DialogSection, ExportScope};
 use crate::ui::theme;
 
 const VISIBLE_ITEMS: usize = 5;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
-    let popup = centered_rect(70, 70, area);
-    frame.render_widget(Clear, popup);
-
     let dialog = &state.export_dialog_state;
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(2),
-            Constraint::Length(8),
-            Constraint::Length(7),
-            Constraint::Length(5),
-            Constraint::Min(3),
-            Constraint::Length(2),
-        ])
-        .split(popup);
+    if dialog.selected_scope == ExportScope::BackupDb {
+        let popup = centered_rect(70, 30, area);
+        frame.render_widget(Clear, popup);
 
-    render_title(frame, chunks[0]);
-    render_format_section(frame, chunks[1], dialog);
-    render_style_section(frame, chunks[2], dialog);
-    render_language_display_section(frame, chunks[3], dialog);
-    render_preview(frame, chunks[4], dialog);
-    render_footer(frame, chunks[5]);
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2),  // Title
+                Constraint::Length(6),  // Scope
+                Constraint::Length(6),  // Backup Scope
+                Constraint::Length(2),  // Footer
+            ])
+            .split(popup);
+
+        render_title(frame, chunks[0]);
+        render_scope_section(frame, chunks[1], dialog);
+        render_backup_scope_section(frame, chunks[2], dialog);
+        render_footer(frame, chunks[3]);
+    } else {
+        let popup = centered_rect(70, 75, area);
+        frame.render_widget(Clear, popup);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // Title
+                Constraint::Length(6), // Scope
+                Constraint::Length(8), // Format
+                Constraint::Length(7), // Style
+                Constraint::Length(5), // Language / DisplayMode
+                Constraint::Min(3),    // Preview
+                Constraint::Length(2), // Footer
+            ])
+            .split(popup);
+
+        render_title(frame, chunks[0]);
+        render_scope_section(frame, chunks[1], dialog);
+        render_format_section(frame, chunks[2], dialog);
+        render_style_section(frame, chunks[3], dialog);
+        render_language_display_section(frame, chunks[4], dialog);
+        render_preview(frame, chunks[5], dialog);
+        render_footer(frame, chunks[6]);
+    }
 }
 
 fn render_title(frame: &mut Frame, area: Rect) {
     let line = Line::from(vec![Span::styled(
-        "  내보내기 / Export",
-        Style::default()
-            .fg(theme::accent_primary())
-            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        "    내보내기 / Export",
+        theme::title_style(),
     )]);
     frame.render_widget(Paragraph::new(vec![Line::from(""), line]), area);
+}
+
+fn render_scope_section(
+    frame: &mut Frame,
+    area: Rect,
+    dialog: &crate::export::export_dialog_state::ExportDialogState,
+) {
+    let focused = dialog.focused_section == DialogSection::Scope;
+    let mut lines = vec![header_line("대상 범위 (Scope)", focused), Line::from("")];
+
+    for scope in &[ExportScope::SelectedOnly, ExportScope::EntireLibrary, ExportScope::BackupDb] {
+        let is_selected = dialog.selected_scope == *scope;
+        let style = if is_selected {
+            if focused {
+                Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)
+            }
+        } else {
+            Style::default().fg(theme::dim())
+        };
+        let prefix = if is_selected { "● " } else { "○ " };
+        lines.push(Line::from(vec![Span::styled(
+            format!("    {}{}", prefix, scope.display_name()),
+            style,
+        )]));
+    }
+
+    let style = if focused {
+        Style::default().fg(theme::accent_primary()).bg(theme::bg())
+    } else {
+        Style::default().fg(theme::fg()).bg(theme::bg())
+    };
+    frame.render_widget(Paragraph::new(lines).style(style), area);
+}
+
+use crate::export::export_dialog_state::BackupScope;
+
+fn render_backup_scope_section(
+    frame: &mut Frame,
+    area: Rect,
+    dialog: &crate::export::export_dialog_state::ExportDialogState,
+) {
+    let focused = dialog.focused_section == DialogSection::BackupScope;
+    let mut lines = vec![header_line("백업 범위 (Backup Scope)", focused), Line::from("")];
+
+    for scope in &[
+        BackupScope::FullMigration,
+        BackupScope::BackupWithoutApiKeys,
+        BackupScope::DocsOnly,
+    ] {
+        let is_selected = dialog.selected_backup_scope == *scope;
+        let style = if is_selected {
+            if focused {
+                Style::default().fg(theme::accent_primary()).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme::selected()).add_modifier(Modifier::BOLD)
+            }
+        } else {
+            Style::default().fg(theme::dim())
+        };
+        let prefix = if is_selected { "● " } else { "○ " };
+        lines.push(Line::from(vec![Span::styled(
+            format!("    {}{}", prefix, scope.display_name()),
+            style,
+        )]));
+    }
+
+    let style = if focused {
+        Style::default().fg(theme::accent_primary()).bg(theme::bg())
+    } else {
+        Style::default().fg(theme::fg()).bg(theme::bg())
+    };
+    frame.render_widget(Paragraph::new(lines).style(style), area);
 }
 
 fn render_format_section(
@@ -196,14 +290,12 @@ fn render_preview(
 ) {
     let lines = vec![
         Line::from(Span::styled(
-            "  ── 미리보기 (Preview) ──",
-            Style::default()
-                .fg(theme::accent_primary())
-                .add_modifier(Modifier::UNDERLINED),
+            "    ── 미리보기 (Preview) ──",
+            theme::header_style(),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            dialog.preview_text.clone(),
+            format!("    {}", dialog.preview_text),
             Style::default().fg(theme::selected()),
         )),
     ];
@@ -218,7 +310,7 @@ fn render_preview(
 
 fn render_footer(frame: &mut Frame, area: Rect) {
     let line = Line::from(vec![
-        Span::styled("  Enter", Style::default().fg(theme::accent_primary())),
+        Span::styled("    Enter", Style::default().fg(theme::accent_primary())),
         Span::styled(" 복사  ", Style::default().fg(theme::dim())),
         Span::styled("e", Style::default().fg(theme::accent_primary())),
         Span::styled(" 내보내기  ", Style::default().fg(theme::dim())),
@@ -231,16 +323,11 @@ fn render_footer(frame: &mut Frame, area: Rect) {
 }
 
 fn header_line(name: &str, focused: bool) -> Line<'static> {
-    let style = if focused {
-        Style::default()
-            .fg(theme::accent_primary())
-            .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
-    } else {
-        Style::default()
-            .fg(theme::accent_primary())
-            .add_modifier(Modifier::UNDERLINED)
-    };
-    Line::from(Span::styled(format!("  ▸ {}", name), style))
+    let mut style = theme::header_style();
+    if focused {
+        style = style.add_modifier(Modifier::BOLD);
+    }
+    Line::from(Span::styled(format!("    ▸ {}", name), style))
 }
 
 fn build_section_items<T: Clone + PartialEq>(
@@ -270,9 +357,9 @@ fn build_section_items<T: Clone + PartialEq>(
             let is_current = item == selected;
             let implemented = is_implemented(&item);
             let prefix = if focused && is_current {
-                "  ► "
+                "    ► "
             } else {
-                "    "
+                "      "
             };
             let name = display(&item).to_string();
             let marker = if implemented { "" } else { " (미구현)" };

@@ -1,0 +1,18 @@
+[widget]
+name = "날씨"
+id = "weather"
+version = "1.0.0"
+description = "현재 날씨 (Open-Meteo)"
+type = "script"
+refresh_interval = 600
+enabled = true
+show_security_warning = true
+
+[script]
+command = "python3"
+args = ["weather.py"]
+
+[permissions]
+network = ["api.open-meteo.com"]
+max_execution_time = 10
+max_output_bytes = 16384

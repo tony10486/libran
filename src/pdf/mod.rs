@@ -4,6 +4,8 @@ pub mod heuristic;
 pub mod identifiers;
 pub mod journal;
 pub mod metadata;
+pub mod okular;
+pub mod sioyek;
 pub mod text;
 
 use anyhow::Result;

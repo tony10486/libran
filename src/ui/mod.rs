@@ -9,6 +9,8 @@ pub mod settings_panel;
 pub mod stats_panel;
 pub mod status_bar;
 pub mod theme;
+pub mod widget_bar;
+pub mod widget_panel;
 
 use ratatui::Frame;
 
@@ -41,5 +43,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
 
     if state.settings_panel_mode {
         settings_panel::render(frame, frame.area(), state);
+    }
+
+    if state.show_widget_panel {
+        widget_panel::render(frame, frame.area(), state);
     }
 }

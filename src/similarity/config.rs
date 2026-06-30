@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
+use tracing::warn;
 
 /// User-editable similarity scoring parameters.
 /// Stored as a TOML file at `~/.libran/similarity.toml`.
@@ -51,17 +52,17 @@ impl SimilarityConfig {
                 Ok(content) => match toml::from_str::<SimilarityConfig>(&content) {
                     Ok(cfg) => return cfg,
                     Err(e) => {
-                        eprintln!("similarity.toml parse error: {e}, using defaults");
+                        warn!("similarity.toml parse error: {e}, using defaults");
                     }
                 },
                 Err(e) => {
-                    eprintln!("similarity.toml read error: {e}, using defaults");
+                    warn!("similarity.toml read error: {e}, using defaults");
                 }
             }
         }
         let cfg = SimilarityConfig::default();
         if let Err(e) = cfg.save() {
-            eprintln!("Failed to write default similarity.toml: {e}");
+            warn!("Failed to write default similarity.toml: {e}");
         }
         cfg
     }

@@ -15,14 +15,25 @@ struct RightArea {
     list: Rect,
 }
 
-fn split_right_with_search(area: Rect, _state: &AppState) -> RightArea {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1)])
-        .split(area);
-    RightArea {
-        search: chunks[0],
-        list: chunks[1],
+fn split_right_with_search(area: Rect, state: &AppState) -> RightArea {
+    if theme::search_bottom() {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(area);
+        RightArea {
+            list: chunks[0],
+            search: chunks[1],
+        }
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(1)])
+            .split(area);
+        RightArea {
+            search: chunks[0],
+            list: chunks[1],
+        }
     }
 }
 
@@ -48,36 +59,75 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     if state.graph_state.is_some() && state.active_panel == PanelFocus::Graph {
         graph_panel::render(frame, chunks[1], state);
     } else if state.show_detail {
-        let body = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(42),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(chunks[1]);
+        let body = if theme::sidebar_right() {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Min(1),
+                    Constraint::Length(1),
+                    Constraint::Percentage(42),
+                ])
+                .split(chunks[1])
+        } else {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(42),
+                    Constraint::Length(1),
+                    Constraint::Min(1),
+                ])
+                .split(chunks[1])
+        };
 
-        right_panel::render(frame, body[0], state);
-        render_vdivider(frame, body[1]);
-        let right_area = split_right_with_search(body[2], state);
-        right_panel::render(frame, right_area.list, state);
-        search_bar::render_bar(frame, right_area.search, state);
-        right_panel::render_detail(frame, body[2], state);
+        if theme::sidebar_right() {
+            right_panel::render(frame, body[2], state);
+            render_vdivider(frame, body[1]);
+            let left_area = split_right_with_search(body[0], state);
+            right_panel::render(frame, left_area.list, state);
+            search_bar::render_bar(frame, left_area.search, state);
+            right_panel::render_detail(frame, body[0], state);
+        } else {
+            right_panel::render(frame, body[0], state);
+            render_vdivider(frame, body[1]);
+            let right_area = split_right_with_search(body[2], state);
+            right_panel::render(frame, right_area.list, state);
+            search_bar::render_bar(frame, right_area.search, state);
+            right_panel::render_detail(frame, body[2], state);
+        }
     } else {
-        let body = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(state.left_panel_width),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(chunks[1]);
+        let body = if theme::sidebar_right() {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Min(1),
+                    Constraint::Length(1),
+                    Constraint::Length(state.left_panel_width),
+                ])
+                .split(chunks[1])
+        } else {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(state.left_panel_width),
+                    Constraint::Length(1),
+                    Constraint::Min(1),
+                ])
+                .split(chunks[1])
+        };
 
-        left_panel::render(frame, body[0], state);
-        render_vdivider(frame, body[1]);
-        let right_area = split_right_with_search(body[2], state);
-        search_bar::render_bar(frame, right_area.search, state);
-        right_panel::render(frame, right_area.list, state);
+        if theme::sidebar_right() {
+            left_panel::render(frame, body[2], state);
+            render_vdivider(frame, body[1]);
+            let left_area = split_right_with_search(body[0], state);
+            search_bar::render_bar(frame, left_area.search, state);
+            right_panel::render(frame, left_area.list, state);
+        } else {
+            left_panel::render(frame, body[0], state);
+            render_vdivider(frame, body[1]);
+            let right_area = split_right_with_search(body[2], state);
+            search_bar::render_bar(frame, right_area.search, state);
+            right_panel::render(frame, right_area.list, state);
+        }
     }
 
     status_bar::render(frame, chunks[2], state);
@@ -102,6 +152,12 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if state.confirm_delete_mode {
         render_confirm_delete_overlay(frame, area, state);
+    }
+    if state.show_sioyek_install_dialog {
+        render_sioyek_install_overlay(frame, area, state);
+    }
+    if state.show_okular_install_dialog {
+        render_okular_install_overlay(frame, area, state);
     }
     if state.show_metrics_overlay {
         render_author_metrics_overlay(frame, area, state);
@@ -264,16 +320,7 @@ fn render_edit_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         .get(state.edit_field)
         .unwrap_or(&"?");
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::accent_primary()))
-        .title(Span::styled(
-            format!(" 편집: {} ", field_name),
-            Style::default()
-                .fg(theme::accent_primary())
-                .add_modifier(Modifier::BOLD),
-        ))
-        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
+    let block = theme::create_theme_block(&format!("편집: {}", field_name));
 
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
@@ -341,16 +388,7 @@ fn render_new_project_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let popup = centered_rect(50, 35, area);
     frame.render_widget(Clear, popup);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::accent_primary()))
-        .title(Span::styled(
-            " 새 프로젝트 ",
-            Style::default()
-                .fg(theme::accent_primary())
-                .add_modifier(Modifier::BOLD),
-        ))
-        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
+    let block = theme::create_theme_block("새 프로젝트");
 
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
@@ -733,6 +771,150 @@ fn render_confirm_delete_overlay(frame: &mut Frame, area: Rect, state: &AppState
             Span::styled("  S", Style::default().fg(theme::tag()).bg(theme::bg())),
             Span::styled(
                 " 앞으로 확인 없이 삭제",
+                Style::default().fg(theme::dim()).bg(theme::bg()),
+            ),
+        ]),
+    ];
+
+    let para = Paragraph::new(lines).style(Style::default().fg(theme::fg()).bg(theme::bg()));
+    frame.render_widget(para, inner);
+}
+
+fn render_sioyek_install_overlay(frame: &mut Frame, area: Rect, _state: &AppState) {
+    let popup = centered_rect(55, 30, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::accent_primary()))
+        .title(Span::styled(
+            " Sioyek PDF 리더 미감지 ",
+            Style::default()
+                .fg(theme::accent_secondary())
+                .add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
+
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let installer_name = if cfg!(target_os = "macos") {
+        "Homebrew Cask (brew install)"
+    } else if cfg!(target_os = "windows") {
+        "Windows Package Manager (winget)"
+    } else {
+        "패키지 매니저 (snap 또는 apt-get)"
+    };
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Sioyek PDF 리더가 설치되어 있지 않습니다.",
+            Style::default()
+                .fg(theme::title_fg())
+                .add_modifier(Modifier::BOLD)
+                .bg(theme::bg()),
+        )]),
+        Line::from(vec![Span::styled(
+            format!("  자동으로 설치하시겠습니까? (설치 도구: {})", installer_name),
+            Style::default().fg(theme::fg()).bg(theme::bg()),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  Y/Enter",
+                Style::default().fg(theme::key()).bg(theme::bg()),
+            ),
+            Span::styled(" 예 (설치 실행)", Style::default().fg(theme::fg()).bg(theme::bg())),
+            Span::raw("   "),
+            Span::styled(
+                "N/Esc",
+                Style::default().fg(theme::accent_primary()).bg(theme::bg()),
+            ),
+            Span::styled(" 아니오 (기본 뷰어 Preview로 열기)", Style::default().fg(theme::fg()).bg(theme::bg())),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  * 자동 설치를 원치 않으시면 '아니오'를 누르세요.",
+                Style::default().fg(theme::dim()).bg(theme::bg()),
+            ),
+        ]),
+    ];
+
+    let para = Paragraph::new(lines).style(Style::default().fg(theme::fg()).bg(theme::bg()));
+    frame.render_widget(para, inner);
+}
+
+fn render_okular_install_overlay(frame: &mut Frame, area: Rect, _state: &AppState) {
+    let popup = centered_rect(55, 30, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::accent_primary()))
+        .title(Span::styled(
+            " Okular PDF 리더 미감지 ",
+            Style::default()
+                .fg(theme::accent_secondary())
+                .add_modifier(Modifier::BOLD),
+        ))
+        .style(Style::default().fg(theme::fg()).bg(theme::bg()));
+
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let installer_name = if cfg!(target_os = "macos") {
+        "KDE 공식 다운로드 웹페이지"
+    } else if cfg!(target_os = "windows") {
+        "Windows Package Manager (winget)"
+    } else {
+        "패키지 매니저 (snap 또는 apt-get)"
+    };
+
+    let prompt_text = if cfg!(target_os = "macos") {
+        "  KDE 공식 다운로드 웹페이지를 열어 설치를 진행하시겠습니까?"
+    } else {
+        "  자동으로 설치하시겠습니까?"
+    };
+
+    let confirm_action_text = if cfg!(target_os = "macos") {
+        " 예 (다운로드 웹페이지 열기)"
+    } else {
+        " 예 (자동 설치 실행)"
+    };
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Okular PDF 리더가 설치되어 있지 않습니다.",
+            Style::default()
+                .fg(theme::title_fg())
+                .add_modifier(Modifier::BOLD)
+                .bg(theme::bg()),
+        )]),
+        Line::from(vec![Span::styled(
+            format!("{} (도구: {})", prompt_text, installer_name),
+            Style::default().fg(theme::fg()).bg(theme::bg()),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  Y/Enter",
+                Style::default().fg(theme::key()).bg(theme::bg()),
+            ),
+            Span::styled(confirm_action_text, Style::default().fg(theme::fg()).bg(theme::bg())),
+            Span::raw("   "),
+            Span::styled(
+                "N/Esc",
+                Style::default().fg(theme::accent_primary()).bg(theme::bg()),
+            ),
+            Span::styled(" 아니오 (기본 뷰어 Preview로 열기)", Style::default().fg(theme::fg()).bg(theme::bg())),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  * 자동 설치를 원치 않으시면 '아니오'를 누르세요.",
                 Style::default().fg(theme::dim()).bg(theme::bg()),
             ),
         ]),

@@ -1,5 +1,5 @@
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
@@ -7,8 +7,18 @@ use ratatui::widgets::{List, ListItem, ListState};
 use crate::app::AppState;
 use crate::app::state::PanelFocus;
 use crate::ui::theme;
+use crate::ui::widget_bar;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
+    // 사이드바 상단 1줄을 위젯 바에 할당, 나머지를 트리에 할당
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
+        .split(area);
+
+    widget_bar::render(frame, chunks[0], state);
+
+    let tree_area = chunks[1];
     let items = build_tree_items(state);
     let focused = state.active_panel == PanelFocus::Left;
 
@@ -28,7 +38,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         list_state.select(Some(state.tree_cursor));
     }
 
-    frame.render_stateful_widget(list, area, &mut list_state);
+    frame.render_stateful_widget(list, tree_area, &mut list_state);
 }
 
 fn build_tree_items(state: &AppState) -> Vec<ListItem<'static>> {

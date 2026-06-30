@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+use tracing::warn;
 
 use crate::api::ApiMode;
 use crate::citation::CitationKeyMode;
@@ -55,6 +56,79 @@ impl Default for BgConfig {
     }
 }
 
+/// 레이아웃 설정.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LayoutConfig {
+    pub sidebar_position: Option<String>,
+    pub search_position: Option<String>,
+}
+
+/// 테두리 설정.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BorderConfig {
+    pub border_type: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BordersVisibilityConfig {
+    pub show_top: bool,
+    pub show_bottom: bool,
+    pub show_left: bool,
+    pub show_right: bool,
+}
+
+impl Default for BordersVisibilityConfig {
+    fn default() -> Self {
+        BordersVisibilityConfig {
+            show_top: true,
+            show_bottom: true,
+            show_left: true,
+            show_right: true,
+        }
+    }
+}
+
+/// UI 기호 글리프 설정.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GlyphsConfig {
+    pub active_pointer: Option<String>,
+    pub bullet_marker: Option<String>,
+    pub radio_checked: Option<String>,
+    pub radio_unchecked: Option<String>,
+}
+
+/// 진행률 바 설정.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProgressConfig {
+    pub filled: Option<String>,
+    pub unfilled: Option<String>,
+}
+
+/// 스크롤바 설정.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScrollbarConfig {
+    pub thumb: Option<String>,
+    pub track: Option<String>,
+}
+
+/// 읽기 상태 마커 설정.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StatusConfig {
+    pub unread_marker: Option<String>,
+    pub unread_color: Option<ColorConfig>,
+    pub reading_marker: Option<String>,
+    pub reading_color: Option<ColorConfig>,
+    pub read_marker: Option<String>,
+    pub read_color: Option<ColorConfig>,
+}
+
 /// UI 테마 설정. 각 필드는 Option<ColorConfig> 이며,
 /// None 이면 기본 테마값을 사용한다.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -80,6 +154,20 @@ pub struct ThemeConfig {
     pub code: Option<ColorConfig>,
     pub success: Option<ColorConfig>,
     pub search_bg: Option<ColorConfig>,
+
+    // ── 신규 비주얼 커스텀 파라미터 ──
+    pub title_bold: Option<bool>,
+    pub title_underline: Option<bool>,
+    pub header_bold: Option<bool>,
+    pub header_underline: Option<bool>,
+
+    pub layout: Option<LayoutConfig>,
+    pub border: Option<BorderConfig>,
+    pub borders: Option<BordersVisibilityConfig>,
+    pub glyphs: Option<GlyphsConfig>,
+    pub progress: Option<ProgressConfig>,
+    pub scrollbar: Option<ScrollbarConfig>,
+    pub status: Option<StatusConfig>,
 }
 
 /// 커스텀 내보내기 형식 설정.
@@ -89,6 +177,28 @@ pub struct ExportFormatConfig {
     pub name: String,
     pub file_extension: String,
     pub template: String,
+}
+
+/// 위젯 글로벌 설정 ([widgets] 섹션).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WidgetGlobalConfig {
+    /// 위젯 패널 활성화 여부
+    pub enabled: bool,
+    /// 자동 갱신 틱 간격 (초)
+    pub tick_interval_secs: u64,
+    /// 추가 허용 도메인 (sandbox 화이트리스트)
+    pub allowed_domains: Vec<String>,
+}
+
+impl Default for WidgetGlobalConfig {
+    fn default() -> Self {
+        WidgetGlobalConfig {
+            enabled: true,
+            tick_interval_secs: 1,
+            allowed_domains: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -107,7 +217,9 @@ pub struct AppConfig {
     pub viewer_command: Option<Vec<String>>,
     pub glyph_set: String,
     pub theme: ThemeConfig,
+    pub theme_name: String,
     pub custom_export_formats: Vec<ExportFormatConfig>,
+    pub widgets: WidgetGlobalConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -139,7 +251,9 @@ impl Default for AppConfig {
             viewer_command: None,
             glyph_set: "circles".to_string(),
             theme: ThemeConfig::default(),
+            theme_name: "dark".to_string(),
             custom_export_formats: Vec::new(),
+            widgets: WidgetGlobalConfig::default(),
         }
     }
 }
@@ -155,15 +269,24 @@ impl AppConfig {
     pub fn load() -> Self {
         let path = Self::path();
         if path.exists() {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(cfg) = toml::from_str::<AppConfig>(&content) {
-                    return cfg;
+            match fs::read_to_string(&path) {
+                Ok(content) => match toml::from_str::<AppConfig>(&content) {
+                    Ok(cfg) => return cfg,
+                    Err(e) => {
+                        // CRITICAL: never overwrite user's config file on parse error.
+                        warn!("config.toml 파싱 오류: {e}. 기본 설정을 사용합니다 (파일 유지됨).");
+                        return AppConfig::default();
+                    }
+                },
+                Err(e) => {
+                    warn!("config.toml 읽기 오류: {e}. 기본 설정을 사용합니다.");
+                    return AppConfig::default();
                 }
             }
         }
         let cfg = AppConfig::default();
         if let Err(e) = cfg.save() {
-            eprintln!("기본 config.toml 생성 실패: {e}");
+            warn!("기본 config.toml 생성 실패: {e}");
         }
         cfg
     }
@@ -264,6 +387,10 @@ impl AppConfig {
         s.push_str("#   ballot:  ☐ ⊡ ☒  (EAW-N, CJK 터미널에서 안전)\n");
         s.push_str(&format!("glyph_set = \"{}\"\n", self.glyph_set));
 
+        s.push_str("\n# 활성화된 UI 테마 이름: dark | light | 커스텀테마명\n");
+        s.push_str("#   ~/.libran/themes/<테마명>.toml 파일이 존재할 경우 해당 커스텀 테마를 로드합니다.\n");
+        s.push_str(&format!("theme_name = \"{}\"\n", self.theme_name));
+
         s.push_str("\n# 커스텀 내보내기 형식 (선택).\n");
         s.push_str("# 템플릿 플레이스홀더: {title} {authors} {year} {doi} {journal} {abstract}\n");
         if self.custom_export_formats.is_empty() {
@@ -278,6 +405,20 @@ impl AppConfig {
                 s.push_str(&format!("file_extension = \"{}\"\n", fmt.file_extension));
                 s.push_str(&format!("template = \"{}\"\n", fmt.template));
             }
+        }
+
+        s.push_str("\n# 위젯 패널 설정 (w 키로 열기).\n");
+        s.push_str("# 위젯은 ~/.libran/widgets/<name>/widget.toml 플러그인으로 설치합니다.\n\n");
+        s.push_str("[widgets]\n");
+        s.push_str(&format!("enabled = {}\n", self.widgets.enabled));
+        s.push_str(&format!("tick_interval_secs = {}\n", self.widgets.tick_interval_secs));
+        if self.widgets.allowed_domains.is_empty() {
+            s.push_str("# allowed_domains = [\"api.example.com\"]\n");
+        } else {
+            s.push_str(&format!(
+                "allowed_domains = {:?}\n",
+                self.widgets.allowed_domains
+            ));
         }
 
         s.push_str("\n# UI 테마 (선택). 각 색상을 #RRGGBB 형식으로 지정.\n");

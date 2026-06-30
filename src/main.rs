@@ -2,6 +2,7 @@ use anyhow::Result;
 use crossterm::event::{EventStream, KeyEventKind, MouseButton, MouseEventKind};
 use futures::StreamExt;
 use std::sync::atomic::{AtomicU16, Ordering};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -12,6 +13,7 @@ use libran::terminal;
 use libran::ui;
 
 static LAST_HOVER_ROW: AtomicU16 = AtomicU16::new(u16::MAX);
+static LAST_HOVER_COL: AtomicU16 = AtomicU16::new(u16::MAX);
 
 fn init_logging() {
     use tracing_subscriber::fmt;
@@ -55,7 +57,10 @@ async fn main() -> Result<()> {
 
     let (action_tx, mut action_rx) = mpsc::channel::<AppAction>(256);
 
-    ui::theme::init_theme(ui::theme::Theme::from_config(&config.theme));
+    ui::theme::init_theme(ui::theme::load_theme(&config));
+
+    // 위젯 틱 간격을 설정에서 읽어옵니다 (config은 AppState::new로 소비됨)
+    let widget_tick_interval = Duration::from_secs(config.widgets.tick_interval_secs);
 
     let mut state = AppState::new(db_conn, config, action_tx.clone());
     state.init_classification();
@@ -69,8 +74,16 @@ async fn main() -> Result<()> {
 
     let mut event_stream = EventStream::new();
 
+    // 위젯 자동 갱신을 위한 틱 (설정 가능 간격, 기본 1초)
+    let mut widget_tick = tokio::time::interval(widget_tick_interval);
+    widget_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
         if state.dirty {
+            // terminal_size를 frame과 동기화: mouse handler가 올바른 좌표를 사용하도록
+            if let Ok((w, h)) = crossterm::terminal::size() {
+                state.terminal_size = (w, h);
+            }
             terminal.draw(|frame| ui::render(frame, &state))?;
             state.clear_dirty();
         }
@@ -105,6 +118,9 @@ async fn main() -> Result<()> {
                     }
                 }
             }
+            _ = widget_tick.tick() => {
+                let _ = action_tx.try_send(AppAction::WidgetTick);
+            }
         }
     }
 
@@ -135,7 +151,9 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
         }
         crossterm::event::Event::Mouse(mouse) => match mouse.kind {
             MouseEventKind::Moved => {
-                if mouse.row == LAST_HOVER_ROW.swap(mouse.row, Ordering::Relaxed) {
+                let old_row = LAST_HOVER_ROW.swap(mouse.row, Ordering::Relaxed);
+                let old_col = LAST_HOVER_COL.swap(mouse.column, Ordering::Relaxed);
+                if mouse.row == old_row && mouse.column == old_col {
                     None
                 } else {
                     Some(AppAction::MouseHover {
@@ -146,6 +164,7 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 LAST_HOVER_ROW.store(mouse.row, Ordering::Relaxed);
+                LAST_HOVER_COL.store(mouse.column, Ordering::Relaxed);
                 Some(AppAction::MouseClick {
                     column: mouse.column,
                     row: mouse.row,
@@ -167,6 +186,7 @@ fn convert_terminal_event(event: &crossterm::event::Event) -> Option<AppAction> 
         crossterm::event::Event::Resize(w, h) => {
             debug!("리사이즈: {}x{}", w, h);
             LAST_HOVER_ROW.store(u16::MAX, Ordering::Relaxed);
+            LAST_HOVER_COL.store(u16::MAX, Ordering::Relaxed);
             Some(AppAction::TerminalResize {
                 width: *w,
                 height: *h,

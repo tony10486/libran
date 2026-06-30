@@ -165,11 +165,13 @@ pub(crate) fn handle_author_metrics_fetched(
 pub(crate) fn handle_set_metrics_backend(state: &mut AppState, backend: MetricsBackend) {
     state.metrics_backend = backend;
     if let Ok(conn) = state.db.lock() {
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
              VALUES ('metrics_backend', ?1, datetime('now'))",
             rusqlite::params![backend.as_str()],
-        );
+        ) {
+            tracing::error!("Failed to save metrics_backend setting: {e}");
+        }
     }
     state.set_status(&format!("지표 백엔드: {}", backend.display_name()));
 }
@@ -183,11 +185,13 @@ pub(crate) fn handle_register_api_key(state: &mut AppState, key: String) {
     }
     state.openalex_api_key = Some(key_trimmed.clone());
     if let Ok(conn) = state.db.lock() {
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT OR REPLACE INTO app_config (key, value, updated_at) \
              VALUES ('openalex_api_key', ?1, datetime('now'))",
             rusqlite::params![key_trimmed],
-        );
+        ) {
+            tracing::error!("Failed to save openalex_api_key setting: {e}");
+        }
     }
     handle_set_metrics_backend(state, MetricsBackend::OpenAlex);
     state.set_status("OpenAlex API 키 등록 완료");
